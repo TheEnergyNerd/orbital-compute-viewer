@@ -2531,8 +2531,8 @@ scene.add(sunMesh);
 const MAT = {
     pv:      new THREE.MeshStandardMaterial({ color: 0x0c1858, metalness: 0.72, roughness: 0.12, emissive: 0x061040, emissiveIntensity: 0.5 }),
     pvBack:  new THREE.MeshStandardMaterial({ color: 0xf5f5fa, roughness: 0.7, metalness: 0.05, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }),
-    rad:     new THREE.MeshStandardMaterial({ color: 0xfafaff, roughness: 0.5, metalness: 0.08, emissive: 0x1a1a22, emissiveIntensity: 0.35 }),
-    oru:     new THREE.MeshStandardMaterial({ color: 0x404548, roughness: 0.7, metalness: 0.25, emissive: 0x050808, emissiveIntensity: 0.2 }),
+    rad:     new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4, metalness: 0.05, emissive: 0x303040, emissiveIntensity: 0.5 }),
+    oru:     new THREE.MeshStandardMaterial({ color: 0x353840, roughness: 0.65, metalness: 0.3, emissive: 0x060808, emissiveIntensity: 0.15 }),
     hub:     new THREE.MeshStandardMaterial({ color: 0x2a2a30, roughness: 0.5, metalness: 0.5, emissive: 0x040406, emissiveIntensity: 0.15 }),
     truss:   new THREE.MeshStandardMaterial({ color: 0xc5c5cc, roughness: 0.4, metalness: 0.6, emissive: 0x0a0a0e, emissiveIntensity: 0.1 }),
     gold:    new THREE.MeshStandardMaterial({ color: 0xe8b810, roughness: 0.3, metalness: 0.85, emissive: 0x2a2000, emissiveIntensity: 0.25 }),
@@ -2541,9 +2541,9 @@ const MAT = {
     pipe:    new THREE.MeshStandardMaterial({ color: 0x606870, roughness: 0.35, metalness: 0.65 }),
     antenna: new THREE.MeshStandardMaterial({ color: 0xe8e8f0, roughness: 0.25, metalness: 0.6 }),
     seam:    new THREE.MeshStandardMaterial({ color: 0x040430, roughness: 0.5 }),
-    decode:  new THREE.MeshStandardMaterial({ color: 0xe64033, roughness: 0.6, metalness: 0.3 }),
-    prefill: new THREE.MeshStandardMaterial({ color: 0x3373e6, roughness: 0.6, metalness: 0.3 }),
-    context: new THREE.MeshStandardMaterial({ color: 0x33bf4d, roughness: 0.6, metalness: 0.3 }),
+    decode:  new THREE.MeshStandardMaterial({ color: 0xff3020, roughness: 0.5, metalness: 0.2, emissive: 0x440808, emissiveIntensity: 0.4 }),
+    prefill: new THREE.MeshStandardMaterial({ color: 0x2266ff, roughness: 0.5, metalness: 0.2, emissive: 0x081044, emissiveIntensity: 0.4 }),
+    context: new THREE.MeshStandardMaterial({ color: 0x22dd44, roughness: 0.5, metalness: 0.2, emissive: 0x084418, emissiveIntensity: 0.4 }),
     brace:   new THREE.MeshStandardMaterial({ color: 0xa0a8b0, roughness: 0.45, metalness: 0.5 }),
     rcs:     new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.4, metalness: 0.5 }),
     highlight: new THREE.MeshStandardMaterial({ color: 0xffff66, roughness: 0.3, emissive: 0x444400 }),
@@ -2556,12 +2556,12 @@ const MAT = {
 //   Colors scattered via LCG hash so the mix is visible across the panel
 // =====================================================================
 const ORU_ROLES = {
-    decode:  { mat: MAT.decode,  color: '#e64033', label: 'DECODE',  desc: 'Token generation — autoregressive sampling, memory-BW bound. Red ORUs run the decode phase of inference.' },
-    prefill: { mat: MAT.prefill, color: '#3373e6', label: 'PREFILL', desc: 'Prompt processing — parallel KV-cache generation, compute bound. Blue ORUs handle initial prompt ingestion.' },
-    context: { mat: MAT.context, color: '#33bf4d', label: 'CONTEXT', desc: 'KV-cache storage & serving — high-capacity memory nodes. Green ORUs store long-context attention state.' },
-    routing: { mat: new THREE.MeshStandardMaterial({ color: 0xe8a838, roughness: 0.5, metalness: 0.3, emissive: 0x1a1200, emissiveIntensity: 0.25 }),
-               color: '#e8a838', label: 'ROUTING', desc: 'Router/scheduler — request dispatch, load balancing, ground antenna control. Orange ORUs handle network coordination.' },
-    compute: { mat: MAT.oru,     color: '#b0b0b8', label: 'COMPUTE', desc: 'General compute — flexible allocation between prefill/decode as load shifts. Gray ORUs are unbiased.' },
+    decode:  { mat: MAT.decode,  color: '#ff3020', label: 'DECODE',  desc: 'Token generation — autoregressive sampling, memory-BW bound. Red ORUs run the decode phase of inference.' },
+    prefill: { mat: MAT.prefill, color: '#2266ff', label: 'PREFILL', desc: 'Prompt processing — parallel KV-cache generation, compute bound. Blue ORUs handle initial prompt ingestion.' },
+    context: { mat: MAT.context, color: '#22dd44', label: 'CONTEXT', desc: 'KV-cache storage & serving — high-capacity memory nodes. Green ORUs store long-context attention state.' },
+    routing: { mat: new THREE.MeshStandardMaterial({ color: 0xffaa00, roughness: 0.4, metalness: 0.2, emissive: 0x442200, emissiveIntensity: 0.4 }),
+               color: '#ffaa00', label: 'ROUTING', desc: 'Router/scheduler — request dispatch, load balancing, ground antenna control. Orange ORUs handle network coordination.' },
+    compute: { mat: MAT.oru,     color: '#353840', label: 'COMPUTE', desc: 'General compute — flexible allocation between prefill/decode as load shifts. Gray ORUs are unbiased.' },
 };
 
 // Assign role to an ORU by index using LCG hash scatter
