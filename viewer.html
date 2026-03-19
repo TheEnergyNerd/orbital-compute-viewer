@@ -840,13 +840,22 @@ function renderOverview(cfg, m) {
         <div class="metric-row"><span class="metric-label">Deployment mechanism</span><span class="metric-value">${cfg.isDP1 ? 'Accordion fold (Redwire)' : 'Roll-out (Redwire ROSA)'}</span></div>
         <div class="metric-row"><span class="metric-label">Wiring harness</span><span class="metric-value">Kapton-insulated Cu (TE Connectivity)</span></div>
 
-        <div class="section-header">Radiator — ${cfg.radM2.toFixed(0)} m²</div>
-        <div class="metric-row"><span class="metric-label">Radiator panel</span><span class="metric-value">Al 6061 honeycomb (Ultramet)</span></div>
-        <div class="metric-row"><span class="metric-label">Heat pipes</span><span class="metric-value">Ammonia AGHP (ACT / Thermacore)</span></div>
+        <div class="section-header">Radiator — ${cfg.radM2.toFixed(0)} m² (flat-plate)</div>
+        <div class="metric-row"><span class="metric-label">Architecture</span><span class="metric-value accent">Flat-plate direct-conduction (SpaceX heritage)</span></div>
+        <div class="metric-row"><span class="metric-label">Panel material</span><span class="metric-value">Al 6061-T6 flat plate, 3-5mm thick</span></div>
+        <div class="metric-row"><span class="metric-label">Thermal path</span><span class="metric-value">ORU bolts direct to Al plate — no heat pipes</span></div>
         <div class="metric-row"><span class="metric-label">Surface coating</span><span class="metric-value">AZ-93 white paint (AZ Technology)</span></div>
-        <div class="metric-row"><span class="metric-label">ε / α</span><span class="metric-value">0.91–0.93 / 0.14–0.17</span></div>
-        <div class="metric-row"><span class="metric-label">Deployment</span><span class="metric-value">${cfg.isDP3 ? 'Robotic assembly (MDA/Canadarm)' : 'Spring-loaded hinge (Moog)'}</span></div>
-        ${cfg.isPhotonic ? `<div class="metric-row"><span class="metric-label">Cryo radiator</span><span class="metric-value">OSR tiles (SSTL) + MLI (Sheldahl)</span></div>` : ''}
+        <div class="metric-row"><span class="metric-label">ε / α</span><span class="metric-value">0.91–0.93 / 0.14–0.17 (BOL)</span></div>
+        <div class="metric-row"><span class="metric-label">MMOD tolerance</span><span class="metric-value orbital">✓ No pressurized fluid — hole = local hot spot only</span></div>
+        <div class="metric-row"><span class="metric-label">Mass</span><span class="metric-value">${(cfg.radM2 * 2.5).toFixed(0)} kg (2.5 kg/m² Al plate)</span></div>
+        <div class="metric-row"><span class="metric-label">Deployment</span><span class="metric-value">${cfg.isDP3 ? 'Robotic assembly (MDA/Canadarm)' : 'Accordion fold + spring hinge (Moog)'}</span></div>
+        <div class="metric-row"><span class="metric-label">Heritage</span><span class="metric-value">Starlink bus thermal (body = radiator)</span></div>
+        ${cfg.isPhotonic ? `<div class="metric-row"><span class="metric-label">Cryo radiator</span><span class="metric-value">OSR tiles (Qioptiq) + MLI (Sheldahl)</span></div>` : ''}
+        <div style="font-size:9px;color:var(--muted);margin-top:4px;padding:4px;background:rgba(0,0,0,0.2);border-radius:3px">
+            Why flat-plate over honeycomb+heat-pipes: No ammonia working fluid = no single-point MMOD failure.
+            Heat spreads through solid aluminum conduction. Both faces radiate to space.
+            Starlink uses this — the bus bottom IS the radiator. Scale it up.
+        </div>
 
         <div class="section-header">Compute — ${m.oruCount} ORUs</div>
         ${cfg.gpuType.includes('GB300') ? `
@@ -2995,15 +3004,55 @@ function buildDP2(cfg) {
         addPart(hinge, "structure", "PV Deployment Hinge");
     }
 
-    const rC=Math.sqrt(cfg.radM2/2.5),rS=2.5*rC,rY=-(hubY/2+rS/2+0.3);
-    const rad=new THREE.Mesh(box(rC,rS,0.015),MAT.rad); rad.position.set(0,rY,0); addPart(rad,"radiator","Main Radiator");
-    buildRadStiff([0,rY,0],rC,rS,'Z');
+    // Radiator — big flat white panel extending -Y from bus
+    // SMAD 2.5:1 aspect (span along Y : chord along X)
+    // Normal +Z (zenith) — ORUs mounted on +Z face
+    const rC = Math.sqrt(cfg.radM2 / 2.5);   // chord (X dimension)
+    const rS = 2.5 * rC;                       // span (Y dimension)
+    const radThick = 0.04;                      // thicker for visibility (40mm Al honeycomb)
+    const rY = -(hubY / 2 + rS / 2 + 0.5);     // positioned below bus with gap
 
-    // Radiator deployment boom
+    // Main radiator panel — bright white, prominent
+    const rad = new THREE.Mesh(box(rC, rS, radThick), MAT.rad);
+    rad.position.set(0, rY, 0);
+    addPart(rad, "radiator", `Main Radiator — ${cfg.radM2}m² (AZ-93 white)`);
+
+    // Heat pipe channels (visible lines running along Y span)
+    const hpMat = new THREE.MeshStandardMaterial({color: 0xd0d0dd, roughness: 0.35, metalness: 0.4});
+    for (let i = 0; i < 6; i++) {
+        const hpX = -rC / 2 + rC * (i + 1) / 7;
+        const hp = new THREE.Mesh(box(0.012, rS * 0.92, radThick + 0.005), hpMat);
+        hp.position.set(hpX, rY, 0);
+        stationGroup.add(hp);
+    }
+
+    // Radiator edge frame (thin border showing panel extent)
+    const frameMat = new THREE.MeshStandardMaterial({color: 0xaaaabc, roughness: 0.4, metalness: 0.5});
+    for (const [fw, fh, fx, fy] of [
+        [rC + 0.06, 0.03, 0, rS / 2],    // top edge
+        [rC + 0.06, 0.03, 0, -rS / 2],   // bottom edge
+        [0.03, rS, rC / 2, 0],            // right edge
+        [0.03, rS, -rC / 2, 0],           // left edge
+    ]) {
+        const frame = new THREE.Mesh(box(fw, fh, radThick + 0.01), frameMat);
+        frame.position.set(fx, rY + fy, 0);
+        stationGroup.add(frame);
+    }
+
+    // Structural stiffening (longerons behind radiator)
+    buildRadStiff([0, rY, 0], rC, rS, 'Z');
+
+    // Deployment boom connecting bus to radiator
     const boomLen = 0.5;
-    const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, boomLen, 8), MAT.truss);
-    boom.position.set(0, -(hubY/2 + boomLen/2), 0);
-    addPart(boom, "structure", "Radiator Boom");
+    const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, boomLen, 8), MAT.truss);
+    boom.position.set(0, -(hubY / 2 + boomLen / 2), 0);
+    addPart(boom, "structure", "Radiator Deployment Boom");
+
+    // Deployment hinge at boom-radiator joint
+    const radHinge = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.08, 12), MAT.pipe);
+    radHinge.position.set(0, -(hubY / 2 + boomLen), 0);
+    radHinge.rotation.z = Math.PI / 2;
+    addPart(radHinge, "structure", "Radiator Hinge");
 
     if (!cfg.centralized) {
         const oc=Math.min(Math.floor(cfg.computeKw*1000/cfg.gpuPowerW),300);
@@ -3014,7 +3063,7 @@ function buildDP2(cfg) {
             const oruIdx = c * rows + r;
             const role = getORURole(oruIdx, cfg.oruPrimaryRole || 'decode');
             const ox=-rC/2+sw*(c+1),oy=-rS/2+sh*(r+1);
-            const oru=new THREE.Mesh(box(ow,oh,od),role.mat); oru.position.set(ox,rY+oy,0.015/2+od/2);
+            const oru=new THREE.Mesh(box(ow,oh,od),role.mat); oru.position.set(ox,rY+oy,radThick/2+od/2);
             addPart(oru,"oru",`ORU [${c},${r}] — ${role.label}`);
         }
     } else {
