@@ -2114,10 +2114,114 @@ Spine joints: bolted flange (RUAG heritage)` : ''}
         <div class="metric-row"><span class="metric-label">Solar flux</span><span class="metric-value">1,361 W/m²</span></div>
         <div class="metric-row"><span class="metric-label">Background temp</span><span class="metric-value">3 K (deep space)</span></div>
         <div class="metric-row"><span class="metric-label">Radiation (LEO)</span><span class="metric-value warning">~10 krad/yr (SAA peaks)</span></div>
-        <div class="metric-row"><span class="metric-label">MMOD flux</span><span class="metric-value">~0.01 impacts/m²/yr</span></div>
-        <div class="metric-row"><span class="metric-label">Atomic oxygen</span><span class="metric-value ground">~10⁸ atoms/cm²/s</span></div>
+        <div class="metric-row"><span class="metric-label">Atomic oxygen</span><span class="metric-value ground">~10⁸ atoms/cm²/s (5×10⁻¹² g/cm³)</span></div>
         <div class="metric-row"><span class="metric-label">Gravity gradient</span><span class="metric-value">~10⁻⁶ g</span></div>
         <div class="metric-row"><span class="metric-label">Eclipse (DD-SSO)</span><span class="metric-value orbital">~0 min/orbit</span></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">MMOD Risk Assessment</span>
+            <span class="card-badge" style="background:rgba(224,85,85,0.2);color:#e05555">${((cfg.solarM2 + cfg.radM2) * (cfg.satLife||5) * 1e-5 * 100).toFixed(1)}% P(hit)</span>
+        </div>
+        <div class="calc-block"><span class="comment">// MMOD flux at ${cfg.altitude} km (NASA ORDEM 3.1 model, 2025 epoch)</span>
+<span class="comment">// Particles >1mm: ~1×10⁻⁵ impacts/m²/yr (penetrate 1.5mm Al face sheet)</span>
+<span class="comment">// Particles >1cm: ~1×10⁻⁷ impacts/m²/yr (catastrophic to any panel)</span>
+<span class="comment">// Particles >10cm: trackable (SSN), maneuverable (~3/yr conjunction)</span>
+
+<span class="w">Exposed area:</span>
+  Radiator:  <span class="highlight">${cfg.radM2} m²</span>
+  Solar PV:  <span class="highlight">${cfg.solarM2} m²</span>
+  Structure: ~${Math.max(10, Math.round(cfg.radM2*0.05))} m² (bus, spine, comms)
+  Total:     <span class="highlight">${(cfg.solarM2 + cfg.radM2 + Math.max(10, Math.round(cfg.radM2*0.05))).toFixed(0)} m²</span>
+
+<span class="w">Mission probability (${cfg.satLife || 5} year):</span>
+  ${(() => {
+    const totalArea = cfg.solarM2 + cfg.radM2 + Math.max(10, Math.round(cfg.radM2*0.05));
+    const life = cfg.satLife || 5;
+    const p1mm = 1 - Math.exp(-totalArea * life * 1e-5);
+    const p1cm = 1 - Math.exp(-totalArea * life * 1e-7);
+    const pRad1mm = 1 - Math.exp(-cfg.radM2 * life * 1e-5);
+    const pPV1mm = 1 - Math.exp(-cfg.solarM2 * life * 1e-5);
+    return `P(>1mm hit, any panel): <span class="${p1mm > 0.1 ? 'error' : p1mm > 0.03 ? 'warning' : 'highlight'}">${(p1mm*100).toFixed(1)}%</span>  ${p1mm > 0.1 ? '⚠ SIGNIFICANT' : p1mm > 0.03 ? '⚠ notable' : '✓ low'}
+  P(>1mm hit, radiator): <span class="${pRad1mm > 0.05 ? 'error' : 'highlight'}">${(pRad1mm*100).toFixed(2)}%</span>
+  P(>1mm hit, PV array): <span class="${pPV1mm > 0.05 ? 'warning' : 'highlight'}">${(pPV1mm*100).toFixed(2)}%</span>
+  P(>1cm catastrophic):  <span class="highlight">${(p1cm*100).toFixed(3)}%</span>  (${p1cm < 0.001 ? '✓ negligible' : '⚠ review'})`;
+  })()}
+
+<span class="w">Impact energy (1mm Al sphere @ 10 km/s):</span>
+  KE = ½mv² = ½ × ${(4/3*Math.PI*0.0005*0.0005*0.0005*2700).toExponential(1)} kg × (10⁴)²
+     = <span class="highlight">${(0.5 * (4/3*Math.PI*Math.pow(0.0005,3)*2700) * Math.pow(10000,2)).toFixed(1)} J</span>
+  Penetrates: ~1.5mm Al (ballistic limit, NASA JSC BLE)
+  Effect: severs heat pipe → ammonia leak → thermal segment lost</div>
+
+        <div class="section-header">Radiator MMOD Vulnerability</div>
+        <div class="calc-block"><span class="comment">// Why Al honeycomb + ammonia heat pipes is the WRONG choice for large stations</span>
+
+<span class="r">Problem:</span> Honeycomb radiator with embedded ammonia heat pipes is a
+<span class="r">pressurized single-point-of-failure</span>. One 1mm MMOD puncture:
+  1. Punctures 1.5mm Al face sheet
+  2. Severs heat pipe tube wall (0.8mm Al)
+  3. Ammonia vents to vacuum (boiling point: −33°C)
+  4. That thermal loop is DEAD — no repair possible
+  5. Cascade: adjacent ORUs overheat → derate or fail
+
+For small stations (DP1: 22m², 1% risk): acceptable.
+For DP3 (832m², ~4% risk on radiator alone): <span class="r">NOT acceptable</span>.
+
+<span class="g">Better approaches:</span>
+
+<span class="w">1. Segmented loop heat pipes (LHP) with isolation valves</span>
+   Each 4m² segment has its own evaporator/condenser
+   MMOD hits one segment → valve isolates → rest of radiator OK
+   Mass penalty: +15% vs monolithic panel
+   Heritage: ISS EETCS (External Early Thermal Control System)
+
+<span class="w">2. Pyrolytic graphite sheet (PGS) radiators</span>
+   No pressurized fluid at all — solid conduction only
+   In-plane k = 1500 W/m·K (5× copper)
+   MMOD makes a hole → small hot spot, graceful degradation
+   No catastrophic leak mode
+   Vendor: Panasonic (PGS), Momentive (TPG)
+   Mass: ~2.5 kg/m² (vs 3.0 for honeycomb+HP)
+
+<span class="w">3. Carbon-carbon composite panels</span>
+   k = 400-600 W/m·K in-plane
+   MMOD-tolerant: no pressurized working fluid
+   Self-sealing with embedded polymer layer
+   Vendor: Safran (SEPCARB), C-CAT
+   Heritage: X-37B thermal tiles
+
+<span class="w">4. Droplet radiators (DP3 2030+ timeline)</span>
+   Liquid metal or silicone oil droplets emitted into space
+   Radiate during free-flight, collected by electromagnetic funnel
+   NO solid panel = ZERO MMOD cross-section for radiator
+   10× mass reduction (no structure, just emitter/collector)
+   TRL 3-4 — AFRL demos planned
+   Risk: droplet loss rate, contamination
+
+<span class="comment">// Recommendation per platform:</span>
+${cfg.isDP1 ? `DP1 (22m²): Al honeycomb + heat pipes ✓ (heritage, low risk)` :
+  !cfg.isDP3 ? `DP2 (102m²): Segmented LHP with isolation valves
+  4 independent loops × 25.5m² each
+  Any single MMOD hit → lose 25% thermal capacity → derate to 75%
+  Acceptable: still runs ${Math.floor(m.oruCount * 0.75)} of ${m.oruCount} ORUs` :
+  cfg.isPhotonic ? `DP3 Photonic (832m²): PGS radiator panels + droplet backup
+  Primary: pyrolytic graphite (no pressurized fluid, MMOD-tolerant)
+  Backup: droplet radiator for growth (add 2030+ when TRL≥5)
+  Cryo radiator (2.5m²): Whipple-shielded (critical, small area)` :
+  `DP3B Electrical (832m²): Carbon-carbon composite panels
+  Segmented into 8 × 104m² independent zones
+  Any hit → lose 12.5% capacity → derate ${Math.floor(m.oruCount/8)} ORUs
+  Self-sealing polymer interlayer for small particles`}
+        </div>
+        <div class="section-header">Mitigation Strategy</div>
+        <div class="metric-row"><span class="metric-label">Whipple shield (critical)</span><span class="metric-value">Bus, cryo section, PMAD</span></div>
+        <div class="metric-row"><span class="metric-label">Shield mass (0.5mm Al)</span><span class="metric-value">${(cfg.isDP3 ? 50 : 10)} kg est.</span></div>
+        <div class="metric-row"><span class="metric-label">Conjunction alerts</span><span class="metric-value">18th SDS (>10cm tracked)</span></div>
+        <div class="metric-row"><span class="metric-label">Maneuver capability</span><span class="metric-value">${cfg.isDP3 ? 'Hall EP (Busek BHT-600)' : 'Cold-gas Kr'}</span></div>
+        <div class="metric-row"><span class="metric-label">Debris avoidance/yr</span><span class="metric-value">~3 maneuvers (CAM threshold <1e-4)</span></div>
+        <div class="metric-row"><span class="metric-label">Graceful degradation</span><span class="metric-value">${cfg.isDP3 ? 'Segmented + PGS: lose area, not function' : 'Segmented LHP: isolate damaged loop'}</span></div>
     </div>
     `;
 }
