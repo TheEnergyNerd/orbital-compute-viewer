@@ -2162,67 +2162,50 @@ Spine joints: bolted flange (RUAG heritage)` : ''}
   KE = ½mv² = ½ × ${(4/3*Math.PI*0.0005*0.0005*0.0005*2700).toExponential(1)} kg × (10⁴)²
      = <span class="highlight">${(0.5 * (4/3*Math.PI*Math.pow(0.0005,3)*2700) * Math.pow(10000,2)).toFixed(1)} J</span>
   Penetrates: ~1.5mm Al (ballistic limit, NASA JSC BLE)
-  Effect: severs heat pipe → ammonia leak → thermal segment lost</div>
+  Effect on solid Al plate: local hot spot only — <span class="g">no fluid leak</span></div>
 
-        <div class="section-header">Radiator MMOD Vulnerability</div>
-        <div class="calc-block"><span class="comment">// Why Al honeycomb + ammonia heat pipes is the WRONG choice for large stations</span>
+        <div class="section-header">Radiator Architecture: Solid Al 6061-T6</div>
+        <div class="calc-block"><span class="comment">// Al 6061-T6 flat plate — SpaceX Starlink heritage design</span>
+<span class="comment">// No heat pipes, no pressurized fluid, no single-point failure</span>
 
-<span class="r">Problem:</span> Honeycomb radiator with embedded ammonia heat pipes is a
-<span class="r">pressurized single-point-of-failure</span>. One 1mm MMOD puncture:
-  1. Punctures 1.5mm Al face sheet
-  2. Severs heat pipe tube wall (0.8mm Al)
-  3. Ammonia vents to vacuum (boiling point: −33°C)
-  4. That thermal loop is DEAD — no repair possible
-  5. Cascade: adjacent ORUs overheat → derate or fail
+<span class="w">Architecture:</span> ORU bolted directly to solid Al 6061-T6 plate
+  Thickness: 3–5 mm (varies by platform)
+  Coating: AZ-93 white paint (ε=0.96, α=0.15)
+  Both faces radiate to space (bifacial)
 
-For small stations (DP1: 22m², 1% risk): acceptable.
-For DP3 (832m², ~4% risk on radiator alone): <span class="r">NOT acceptable</span>.
+<span class="g">MMOD tolerance:</span>
+  1mm particle punctures 1.5mm Al (ballistic limit)
+  But no pressurized fluid → <span class="g">NO catastrophic leak mode</span>
+  Hole creates small local hot spot (~10cm radius)
+  Affected ORU(s) may throttle; rest of panel unaffected
+  <span class="g">Graceful degradation</span> vs <span class="r">cascading failure (heat pipes)</span>
 
-<span class="g">Better approaches:</span>
+<span class="w">Mass comparison (per m² of radiator panel):</span>
+  Al honeycomb + NH₃ heat pipes:  3.0–4.0 kg/m²
+  <span class="highlight">Al 6061-T6 solid plate (3mm):</span>  <span class="highlight">8.1 kg/m²</span>  (ρ=2700 × 0.003)
+  <span class="highlight">Al 6061-T6 solid plate (5mm):</span>  <span class="highlight">13.5 kg/m²</span> (ρ=2700 × 0.005)
+  Pyrolytic graphite (PGS):       2.5 kg/m²
 
-<span class="w">1. Segmented loop heat pipes (LHP) with isolation valves</span>
-   Each 4m² segment has its own evaporator/condenser
-   MMOD hits one segment → valve isolates → rest of radiator OK
-   Mass penalty: +15% vs monolithic panel
-   Heritage: ISS EETCS (External Early Thermal Control System)
+<span class="w">Cost impact — mass penalty of solid plate:</span>
+${(() => {
+    const plateThick = cfg.isDP3 ? 0.005 : 0.003;  // 5mm for DP3 (larger, needs stiffness), 3mm for DP2
+    const plateMassPerM2 = 2700 * plateThick;  // kg/m²
+    const honeycombMassPerM2 = 3.5;  // kg/m²
+    const deltaMassPerM2 = plateMassPerM2 - honeycombMassPerM2;
+    const totalDeltaMass = deltaMassPerM2 * cfg.radM2;
+    const launchCostDelta = totalDeltaMass * (cfg.launchCostPerKg || 1500);
+    return `  Plate thickness: <span class="highlight">${(plateThick*1000).toFixed(0)} mm</span> (${cfg.isDP3 ? 'stiffness for 60m spine' : 'adequate for DP2 panels'})
+  Mass/m²: <span class="highlight">${plateMassPerM2.toFixed(1)} kg/m²</span> vs 3.5 kg/m² (honeycomb)
+  Delta: +${deltaMassPerM2.toFixed(1)} kg/m² × ${cfg.radM2} m² = <span class="highlight">+${totalDeltaMass.toFixed(0)} kg</span>
+  Launch cost delta: +$${(launchCostDelta/1e6).toFixed(2)}M @ $${cfg.launchCostPerKg}/kg
 
-<span class="w">2. Pyrolytic graphite sheet (PGS) radiators</span>
-   No pressurized fluid at all — solid conduction only
-   In-plane k = 1500 W/m·K (5× copper)
-   MMOD makes a hole → small hot spot, graceful degradation
-   No catastrophic leak mode
-   Vendor: Panasonic (PGS), Momentive (TPG)
-   Mass: ~2.5 kg/m² (vs 3.0 for honeycomb+HP)
-
-<span class="w">3. Carbon-carbon composite panels</span>
-   k = 400-600 W/m·K in-plane
-   MMOD-tolerant: no pressurized working fluid
-   Self-sealing with embedded polymer layer
-   Vendor: Safran (SEPCARB), C-CAT
-   Heritage: X-37B thermal tiles
-
-<span class="w">4. Droplet radiators (DP3 2030+ timeline)</span>
-   Liquid metal or silicone oil droplets emitted into space
-   Radiate during free-flight, collected by electromagnetic funnel
-   NO solid panel = ZERO MMOD cross-section for radiator
-   10× mass reduction (no structure, just emitter/collector)
-   TRL 3-4 — AFRL demos planned
-   Risk: droplet loss rate, contamination
-
-<span class="comment">// Recommendation per platform:</span>
-${cfg.isDP1 ? `DP1 (22m²): Al honeycomb + heat pipes ✓ (heritage, low risk)` :
-  !cfg.isDP3 ? `DP2 (102m²): Segmented LHP with isolation valves
-  4 independent loops × 25.5m² each
-  Any single MMOD hit → lose 25% thermal capacity → derate to 75%
-  Acceptable: still runs ${Math.floor(m.oruCount * 0.75)} of ${m.oruCount} ORUs` :
-  cfg.isPhotonic ? `DP3 Photonic (832m²): PGS radiator panels + droplet backup
-  Primary: pyrolytic graphite (no pressurized fluid, MMOD-tolerant)
-  Backup: droplet radiator for growth (add 2030+ when TRL≥5)
-  Cryo radiator (2.5m²): Whipple-shielded (critical, small area)` :
-  `DP3B Electrical (832m²): Carbon-carbon composite panels
-  Segmented into 8 × 104m² independent zones
-  Any hit → lose 12.5% capacity → derate ${Math.floor(m.oruCount/8)} ORUs
-  Self-sealing polymer interlayer for small particles`}
+  <span class="comment">// Worth it? Yes.</span>
+  <span class="g">Eliminates</span> ammonia loop failure mode entirely
+  No pumps, no valves, no working fluid management
+  Simpler manufacturing (sheet metal vs brazed honeycomb)
+  SpaceX uses this at scale — Starlink bus IS the radiator
+  $${(launchCostDelta/1e6).toFixed(1)}M launch penalty << $XXM ammonia loop + Whipple shielding`;
+})()}
         </div>
         <div class="section-header">Mitigation Strategy</div>
         <div class="metric-row"><span class="metric-label">Whipple shield (critical)</span><span class="metric-value">Bus, cryo section, PMAD</span></div>
@@ -2540,7 +2523,7 @@ scene.add(sunMesh);
 const MAT = {
     pv:      new THREE.MeshStandardMaterial({ color: 0x0c1858, metalness: 0.72, roughness: 0.12, emissive: 0x061040, emissiveIntensity: 0.5 }),
     pvBack:  new THREE.MeshStandardMaterial({ color: 0xf5f5fa, roughness: 0.7, metalness: 0.05, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }),
-    rad:     new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4, metalness: 0.05, emissive: 0x303040, emissiveIntensity: 0.5 }),
+    rad:     new THREE.MeshStandardMaterial({ color: 0xf8f8ff, roughness: 0.25, metalness: 0.08, emissive: 0x556070, emissiveIntensity: 0.7 }),
     oru:     new THREE.MeshStandardMaterial({ color: 0x353840, roughness: 0.65, metalness: 0.3, emissive: 0x060808, emissiveIntensity: 0.15 }),
     hub:     new THREE.MeshStandardMaterial({ color: 0x2a2a30, roughness: 0.5, metalness: 0.5, emissive: 0x040406, emissiveIntensity: 0.15 }),
     truss:   new THREE.MeshStandardMaterial({ color: 0xc5c5cc, roughness: 0.4, metalness: 0.6, emissive: 0x0a0a0e, emissiveIntensity: 0.1 }),
@@ -2550,9 +2533,9 @@ const MAT = {
     pipe:    new THREE.MeshStandardMaterial({ color: 0x606870, roughness: 0.35, metalness: 0.65 }),
     antenna: new THREE.MeshStandardMaterial({ color: 0xe8e8f0, roughness: 0.25, metalness: 0.6 }),
     seam:    new THREE.MeshStandardMaterial({ color: 0x040430, roughness: 0.5 }),
-    decode:  new THREE.MeshStandardMaterial({ color: 0xff3020, roughness: 0.5, metalness: 0.2, emissive: 0x440808, emissiveIntensity: 0.4 }),
-    prefill: new THREE.MeshStandardMaterial({ color: 0x2266ff, roughness: 0.5, metalness: 0.2, emissive: 0x081044, emissiveIntensity: 0.4 }),
-    context: new THREE.MeshStandardMaterial({ color: 0x22dd44, roughness: 0.5, metalness: 0.2, emissive: 0x084418, emissiveIntensity: 0.4 }),
+    decode:  new THREE.MeshStandardMaterial({ color: 0xff4030, roughness: 0.4, metalness: 0.15, emissive: 0x660c0c, emissiveIntensity: 0.6 }),
+    prefill: new THREE.MeshStandardMaterial({ color: 0x3377ff, roughness: 0.4, metalness: 0.15, emissive: 0x0c1866, emissiveIntensity: 0.6 }),
+    context: new THREE.MeshStandardMaterial({ color: 0x33ee55, roughness: 0.4, metalness: 0.15, emissive: 0x0c6620, emissiveIntensity: 0.6 }),
     brace:   new THREE.MeshStandardMaterial({ color: 0xa0a8b0, roughness: 0.45, metalness: 0.5 }),
     rcs:     new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.4, metalness: 0.5 }),
     highlight: new THREE.MeshStandardMaterial({ color: 0xffff66, roughness: 0.3, emissive: 0x444400 }),
@@ -2568,7 +2551,7 @@ const ORU_ROLES = {
     decode:  { mat: MAT.decode,  color: '#ff3020', label: 'DECODE',  desc: 'Token generation — autoregressive sampling, memory-BW bound. Red ORUs run the decode phase of inference.' },
     prefill: { mat: MAT.prefill, color: '#2266ff', label: 'PREFILL', desc: 'Prompt processing — parallel KV-cache generation, compute bound. Blue ORUs handle initial prompt ingestion.' },
     context: { mat: MAT.context, color: '#22dd44', label: 'CONTEXT', desc: 'KV-cache storage & serving — high-capacity memory nodes. Green ORUs store long-context attention state.' },
-    routing: { mat: new THREE.MeshStandardMaterial({ color: 0xffaa00, roughness: 0.4, metalness: 0.2, emissive: 0x442200, emissiveIntensity: 0.4 }),
+    routing: { mat: new THREE.MeshStandardMaterial({ color: 0xffbb22, roughness: 0.35, metalness: 0.15, emissive: 0x663300, emissiveIntensity: 0.6 }),
                color: '#ffaa00', label: 'ROUTING', desc: 'Router/scheduler — request dispatch, load balancing, ground antenna control. Orange ORUs handle network coordination.' },
     compute: { mat: MAT.oru,     color: '#353840', label: 'COMPUTE', desc: 'General compute — flexible allocation between prefill/decode as load shifts. Gray ORUs are unbiased.' },
 };
@@ -2596,7 +2579,7 @@ function getORURole(oruIdx, primaryRole) {
 // =====================================================================
 const PART_DB = {
     "pv_wing": { label: "PV Array Wing", desc: null },  // dynamic — filled by showPartInfo
-    "radiator": { label: "Main Radiator (370K)", desc: "Al honeycomb + ammonia heat pipes. AZ-93 coating: ε=0.96, α=0.15." },
+    "radiator": { label: "Main Radiator (370K)", desc: "Al 6061-T6 solid flat plate, 3-5mm thick. AZ-93 white paint coating: ε=0.96, α=0.15. No heat pipes — ORU direct-bolted to plate, conduction path through aluminum. SpaceX Starlink heritage (bus = radiator)." },
     "oru": { label: "ORU — Compute Module", desc: "Self-contained GPU/ASIC + VRM + HBM. Zero-length thermal path to radiator." },
     "hub": { label: "Spacecraft Bus", desc: "ADCS, PMAD, flight computer, ground link antenna." },
     "spine": { label: "Structural Spine", desc: "CFRP truss backbone with X-bracing. Carries power bus and heat pipe manifolds." },
@@ -2974,7 +2957,10 @@ function buildT1(cfg) {
     refGroup.position.set(-bsize1.x * 0.4, bbox1.min.y - 3, bsize1.z * 0.3);
     refGroup.userData = { partType: 'scale_ref', label: 'Starlink V2 mini (7m \u00d7 3.5m) \u2014 scale reference' };
     stationGroup.add(refGroup);
-    partRegistry.push({mesh: refBody, partType: 'scale_ref', label: 'Starlink V2 mini (7m \u00d7 3.5m) \u2014 scale reference', originalMaterial: refBody.material});
+    const slLabel = 'Starlink V2 mini (7m \u00d7 3.5m) \u2014 scale reference';
+    partRegistry.push({mesh: refBody, partType: 'scale_ref', label: slLabel, originalMaterial: refBody.material});
+    partRegistry.push({mesh: refPanel1, partType: 'scale_ref', label: slLabel, originalMaterial: refPanel1.material});
+    partRegistry.push({mesh: refPanel2, partType: 'scale_ref', label: slLabel, originalMaterial: refPanel2.material});
 }
 
 function buildDP2(cfg) {
@@ -3192,7 +3178,10 @@ function buildDP2(cfg) {
     refGroupDP2.position.set(-bsizeDP2.x * 0.4, bboxDP2.min.y - 3, bsizeDP2.z * 0.3);
     refGroupDP2.userData = { partType: 'scale_ref', label: 'Starlink V2 mini (7m \u00d7 3.5m) \u2014 scale reference' };
     stationGroup.add(refGroupDP2);
-    partRegistry.push({mesh: refBodyDP2, partType: 'scale_ref', label: 'Starlink V2 mini (7m \u00d7 3.5m) \u2014 scale reference', originalMaterial: refBodyDP2.material});
+    const slLabelDP2 = 'Starlink V2 mini (7m \u00d7 3.5m) \u2014 scale reference';
+    partRegistry.push({mesh: refBodyDP2, partType: 'scale_ref', label: slLabelDP2, originalMaterial: refBodyDP2.material});
+    partRegistry.push({mesh: refPanel1DP2, partType: 'scale_ref', label: slLabelDP2, originalMaterial: refPanel1DP2.material});
+    partRegistry.push({mesh: refPanel2DP2, partType: 'scale_ref', label: slLabelDP2, originalMaterial: refPanel2DP2.material});
 }
 
 function buildDP3(cfg) {
@@ -3550,7 +3539,10 @@ function buildDP3(cfg) {
     refGroupDP3.position.set(-bsizeDP3.x * 0.4, bboxDP3.min.y - 3, bsizeDP3.z * 0.3);
     refGroupDP3.userData = { partType: 'scale_ref', label: 'Starlink V2 mini (7m \u00d7 3.5m) \u2014 scale reference' };
     stationGroup.add(refGroupDP3);
-    partRegistry.push({mesh: refBodyDP3, partType: 'scale_ref', label: 'Starlink V2 mini (7m \u00d7 3.5m) \u2014 scale reference', originalMaterial: refBodyDP3.material});
+    const slLabelDP3 = 'Starlink V2 mini (7m \u00d7 3.5m) \u2014 scale reference';
+    partRegistry.push({mesh: refBodyDP3, partType: 'scale_ref', label: slLabelDP3, originalMaterial: refBodyDP3.material});
+    partRegistry.push({mesh: refPanel1DP3, partType: 'scale_ref', label: slLabelDP3, originalMaterial: refPanel1DP3.material});
+    partRegistry.push({mesh: refPanel2DP3, partType: 'scale_ref', label: slLabelDP3, originalMaterial: refPanel2DP3.material});
 }
 
 function buildCluster(cfgKey) {
@@ -3785,15 +3777,18 @@ function switchConfig(key) {
         // Photonic stations are prefill-biased (compute-heavy), electrical are decode-biased (memory-BW)
         const primaryRole = isPhot ? 'PREFILL' : 'DECODE';
         const primaryPct = '60%', secondaryPct = '25%', tertiaryPct = '15%';
-        const roles = isPhot ?
+        let roles = isPhot ?
             [['#3373e6','PREFILL',primaryPct,'Prompt processing (compute-bound)'],
              ['#e64033','DECODE',secondaryPct,'Token generation (memory-BW)'],
              ['#33bf4d','CONTEXT',tertiaryPct,'KV-cache storage']] :
             [['#e64033','DECODE',primaryPct,'Token generation (memory-BW)'],
              ['#3373e6','PREFILL',secondaryPct,'Prompt processing (compute-bound)'],
              ['#33bf4d','CONTEXT',tertiaryPct,'KV-cache storage']];
+        if (isCluster) {
+            roles.push(['#ffaa00','ROUTING','center','Scheduler, load balancer, ground link']);
+        }
 
-        legend.innerHTML = `<div class="legend-title">ORU ROLES ${isCentralized ? '(centralized)' : isCluster ? '(cluster)' : ''}</div>` +
+        legend.innerHTML = `<div class="legend-title">ORU ROLES ${isCentralized ? '(centralized)' : isCluster ? '(cluster — per node bias)' : ''}</div>` +
             roles.map(([c,n,p,d]) => `<div class="legend-item"><span class="legend-dot" style="background:${c}"></span>${n} <span class="legend-pct" title="${d}">${p}</span></div>`).join('');
 
         // Hide legend for centralized DP2B (no ORUs on radiator)
