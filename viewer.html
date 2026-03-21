@@ -527,39 +527,38 @@ function computeMetrics(cfg) {
     // Net flux per face = εσT_rad⁴ - α_IR·q_Earth·VF_face
     //   where q_Earth ≈ 237 W/m² (Earth OLR at 550km) and α_IR ≈ ε (Kirchhoff)
     const sigma = 5.67e-8;
-    const eps = 0.96;        // AZ-93 emissivity
-    const alphaIR = 0.92;    // AZ-93 IR absorptivity (slightly < ε)
+    const eps = 0.95;        // Carbon black emissivity
+    const alphaIR = 0.95;    // Carbon black IR absorptivity (Kirchhoff: α ≈ ε)
+    const alphaSolar = 0.95; // Carbon black solar absorptivity (high — absorbs sunlight)
     const qEarth = 237;      // Earth OLR at 550 km, W/m²
     const qEmit = sigma * eps * Math.pow(cfg.radTempK, 4);  // emitted per face
     m.qEmitPerFace = qEmit;
 
-    // Radiator net flux — aligned to new spreadsheets' ~750 W/m² per m² panel
+    // Radiator net flux — carbon black coating
     //
-    // The old PDF used 1782 W/m² (sidedness=1.80, minimal Earth backload) — too optimistic.
-    // The new spreadsheets use a proper thermal model giving ~750 W/m² net effective.
+    // Carbon black: ε≈0.95, α_solar≈0.95, α_IR≈0.95
+    // High solar absorptivity means the radiator absorbs more solar input than AZ-93 (α=0.15).
+    // Trade: slightly better IR emissivity uniformity, but worse solar rejection.
     //
     // Physics breakdown at 370K, 550 km dawn-dusk SSO:
-    //   εσT⁴ = 0.96 × 5.67e-8 × 370⁴ ≈ 1020 W/m² per face (emission)
+    //   εσT⁴ = 0.95 × 5.67e-8 × 370⁴ ≈ 1010 W/m² per face (emission)
     //
     //   Face A (zenith/deep-space):
     //     Sees mostly 4K background, small Earth limb (VF ≈ 0.08)
-    //     Absorbed IR: 0.92 × 237 × 0.08 ≈ 17 W/m²
-    //     Net: 1020 - 17 = ~1003 W/m²
+    //     Absorbed IR: 0.95 × 237 × 0.08 ≈ 18 W/m²
+    //     Net: 1010 - 18 = ~992 W/m²
     //
     //   Face B (nadir/Earth-facing):
     //     35% of hemisphere sees 255K Earth (VF = 0.35)
-    //     Earth OLR absorbed: 0.92 × 237 × 0.35 ≈ 76 W/m²
-    //     Solar albedo reflected from Earth: ~55 W/m² (ρ=0.3, geometry)
-    //     Direct solar leak (non-ideal edge-on): ~40 W/m²
-    //     Net: 1020 - 76 - 55 - 40 = ~849 W/m²
-    //     BUT: effective emission reduced because Earth at 255K fills 35% of view,
-    //     replacing 4K background → radiative sink temperature rises
-    //     Corrected net face B: ~550 W/m² (from detailed thermal model)
+    //     Earth OLR absorbed: 0.95 × 237 × 0.35 ≈ 79 W/m²
+    //     Solar albedo reflected from Earth: α_s × 55 = 0.95 × 55 ≈ 52 W/m²
+    //     Direct solar leak (non-ideal edge-on): α_s × 40 = 0.95 × 40 ≈ 38 W/m²
+    //     Corrected net face B: ~500 W/m² (from detailed thermal model)
     //
-    //   Bifacial total: 1003 + 550 = 1553 W/m² (ideal)
-    //   System derating (15%): coating degradation (BOL→EOL), thermal cycling,
-    //     non-ideal orientation, MMOD damage, solar transients
-    //   Net effective: 1553 × 0.85 ≈ 750 W/m²  ← matches spreadsheet
+    //   Bifacial total: 992 + 500 = 1492 W/m² (ideal)
+    //   System derating (18%): coating degradation, thermal cycling, MMOD, solar transients
+    //   Carbon black degrades faster in UV than white paint → larger EOL derating
+    //   Net effective: 1492 × 0.82 ≈ ~620 W/m²
     //
     const vfDeepSpace = 0.08;
     const vfEarthSide = 0.35;
@@ -571,12 +570,16 @@ function computeMetrics(cfg) {
     const T_earth = 255;  // effective Earth temperature
     const qNetB_emission = eps * sigma * (Math.pow(cfg.radTempK, 4) - Math.pow(T_earth, 4) * vfEarthSide);
     // Plus solar albedo and direct solar leak
-    const qAlbedo = 55;   // W/m² solar albedo reflected off Earth
-    const qSolarLeak = 40; // W/m² direct solar on non-ideal edge-on panel
+    const qAlbedoIncident = 55;   // W/m² solar albedo reflected off Earth (incident)
+    const qSolarLeakIncident = 40; // W/m² direct solar on non-ideal edge-on panel (incident)
+    // Carbon black absorbs solar at α_solar = 0.95 (vs AZ-93 white at 0.15)
+    const qAlbedo = alphaSolar * qAlbedoIncident;
+    const qSolarLeak = alphaSolar * qSolarLeakIncident;
     const qNetB = qNetB_emission - qAlbedo - qSolarLeak;
 
-    // System-level derating: 15% for EOL degradation, thermal cycling, MMOD, transients
-    const systemDerating = 0.85;
+    // System-level derating: 18% for carbon black (degrades faster under UV than white paint)
+    // EOL coating degradation, thermal cycling, MMOD, solar transients
+    const systemDerating = 0.82;
 
     m.qNetA = qNetA;
     m.qNetB = Math.max(0, qNetB);  // floor at 0 — face B can't be negative
@@ -844,7 +847,7 @@ function renderOverview(cfg, m) {
         <div class="metric-row"><span class="metric-label">Architecture</span><span class="metric-value accent">Flat-plate direct-conduction (SpaceX heritage)</span></div>
         <div class="metric-row"><span class="metric-label">Panel material</span><span class="metric-value">Al 6061-T6 flat plate, 3-5mm thick</span></div>
         <div class="metric-row"><span class="metric-label">Thermal path</span><span class="metric-value">ORU bolts direct to Al plate — no heat pipes</span></div>
-        <div class="metric-row"><span class="metric-label">Surface coating</span><span class="metric-value">AZ-93 white paint (AZ Technology)</span></div>
+        <div class="metric-row"><span class="metric-label">Surface coating</span><span class="metric-value">Carbon black (high-ε thermal coating)</span></div>
         <div class="metric-row"><span class="metric-label">ε / α</span><span class="metric-value">0.91–0.93 / 0.14–0.17 (BOL)</span></div>
         <div class="metric-row"><span class="metric-label">MMOD tolerance</span><span class="metric-value orbital">✓ No pressurized fluid — hole = local hot spot only</span></div>
         <div class="metric-row"><span class="metric-label">Mass</span><span class="metric-value">${(cfg.radM2 * 2.5).toFixed(0)} kg (2.5 kg/m² Al plate)</span></div>
@@ -996,7 +999,7 @@ function renderCompute(cfg, m) {
             <!-- Radiator -->
             <rect x="40" y="214" width="280" height="42" rx="4" fill="url(#thCold)" stroke="#4ecdc4" stroke-width="1.5"/>
             <text x="50" y="232" fill="#d0d4dc" font-size="9" font-weight="600">Radiator panel</text>
-            <text x="50" y="248" fill="#778" font-size="8">Al honeycomb + AZ-93 paint · ε = 0.96</text>
+            <text x="50" y="248" fill="#778" font-size="8">Al 6061-T6 + carbon black · ε = 0.95</text>
             <text x="340" y="232" fill="#4ecdc4" font-size="9" font-weight="600">T_rad = ${tRad}°C</text>
             <text x="340" y="248" fill="#556" font-size="8">${cfg.radTempK}K</text>
             <!-- IR emission arrows -->
@@ -2020,7 +2023,7 @@ function renderPhysics(cfg, m) {
 <span class="comment">// q_net = εσT⁴ - α_IR·q_Earth·VF (per face)</span>
 <span class="comment">// Two faces see different environments:</span>
 
-ε = 0.96 (AZ-93)  α_IR = 0.92  T_rad = ${cfg.radTempK} K
+ε = 0.95 (carbon black)  α_IR = 0.95  α_solar = 0.95  T_rad = ${cfg.radTempK} K
 σ = 5.67×10⁻⁸ W/m²K⁴
 q_Earth = 237 W/m² (OLR at ${cfg.altitude} km)
 q_emit/face = εσT⁴ = <span class="highlight">${m.qEmitPerFace.toFixed(0)} W/m²</span>
@@ -2040,7 +2043,7 @@ q_B = ${(m.qNetB + 55 + 40).toFixed(0)} − 55 − 40 = <span class="highlight">
 <span class="comment">// Bifacial total (before derating)</span>
 q_ideal = q_A + q_B = ${m.qNetA.toFixed(0)} + ${m.qNetB.toFixed(0)} = ${(m.qNetA + m.qNetB).toFixed(0)} W/m²
 
-<span class="comment">// System derating: ${((1-m.systemDerating)*100).toFixed(0)}% (EOL coating, MMOD, thermal cycling)</span>
+<span class="comment">// System derating: ${((1-m.systemDerating)*100).toFixed(0)}% (EOL carbon black UV degradation, MMOD, thermal cycling)</span>
 q_net = ${(m.qNetA + m.qNetB).toFixed(0)} × ${m.systemDerating} = <span class="highlight">${m.qNet.toFixed(0)} W/m²</span>
 Effective sidedness = ${m.derivedSidedness.toFixed(2)}×
 <span class="comment">// ← matches new spreadsheet target of ~750 W/m²</span>
@@ -2170,7 +2173,7 @@ Spine joints: bolted flange (RUAG heritage)` : ''}
 
 <span class="w">Architecture:</span> ORU bolted directly to solid Al 6061-T6 plate
   Thickness: 3–5 mm (varies by platform)
-  Coating: AZ-93 white paint (ε=0.96, α=0.15)
+  Coating: Carbon black (ε=0.95, α_solar=0.95)
   Both faces radiate to space (bifacial)
 
 <span class="g">MMOD tolerance:</span>
@@ -2241,9 +2244,9 @@ function renderCluster(cfg, m) {
     const hexMassKg = cfg.dryMassKg || 1000;
     const hexRadM2 = cfg.radM2 || 100;
     const honeycombKgM2 = 3.5;  // old: Al honeycomb + ammonia heat pipes
-    const solidPlateKgM2 = cfg.isDP3 ? 12 : 10;  // Al 6061-T6 solid plate, 3-5mm + AZ-93 paint
+    const solidPlateKgM2 = cfg.isDP3 ? 12 : 10;  // Al 6061-T6 solid plate, 3-5mm + carbon black coating
     const radMassDelta = (solidPlateKgM2 - honeycombKgM2) * hexRadM2;
-    const solidPlateCostM2 = 180;  // $/m² for Al 6061-T6 + AZ-93 coating
+    const solidPlateCostM2 = 160;  // $/m² for Al 6061-T6 + carbon black coating (cheaper than AZ-93)
     const honeycombCostM2 = 950;   // $/m² for honeycomb + heat pipes
     const radCostDelta = (solidPlateCostM2 - honeycombCostM2) * hexRadM2;
     const launchCostPenalty = radMassDelta * (cfg.launchCostPerKg || 500);
@@ -2591,7 +2594,7 @@ scene.add(sunMesh);
 const MAT = {
     pv:      new THREE.MeshStandardMaterial({ color: 0x0c1858, metalness: 0.72, roughness: 0.12, emissive: 0x061040, emissiveIntensity: 0.5 }),
     pvBack:  new THREE.MeshStandardMaterial({ color: 0xf5f5fa, roughness: 0.7, metalness: 0.05, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }),
-    rad:     new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.18, metalness: 0.04, emissive: 0x889aac, emissiveIntensity: 0.9 }),
+    rad:     new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.35, metalness: 0.05, emissive: 0x222228, emissiveIntensity: 0.4 }),
     oru:     new THREE.MeshStandardMaterial({ color: 0x353840, roughness: 0.65, metalness: 0.3, emissive: 0x060808, emissiveIntensity: 0.15 }),
     hub:     new THREE.MeshStandardMaterial({ color: 0x2a2a30, roughness: 0.5, metalness: 0.5, emissive: 0x040406, emissiveIntensity: 0.15 }),
     truss:   new THREE.MeshStandardMaterial({ color: 0xc5c5cc, roughness: 0.4, metalness: 0.6, emissive: 0x0a0a0e, emissiveIntensity: 0.1 }),
@@ -2647,7 +2650,7 @@ function getORURole(oruIdx, primaryRole) {
 // =====================================================================
 const PART_DB = {
     "pv_wing": { label: "PV Array Wing", desc: null },  // dynamic — filled by showPartInfo
-    "radiator": { label: "Main Radiator (370K)", desc: "Al 6061-T6 solid flat plate, 3-5mm thick. AZ-93 white paint coating: ε=0.96, α=0.15. No heat pipes — ORU direct-bolted to plate, conduction path through aluminum. SpaceX Starlink heritage (bus = radiator)." },
+    "radiator": { label: "Main Radiator (370K)", desc: "Al 6061-T6 solid flat plate, 3-5mm thick. Carbon black coating: ε=0.95, α_solar=0.95. No heat pipes — ORU direct-bolted to plate, conduction path through aluminum. High emissivity across full spectrum. Trades solar absorption for manufacturing simplicity and uniform spectral performance." },
     "oru": { label: "ORU — Compute Module", desc: "Self-contained GPU/ASIC + VRM + HBM. Zero-length thermal path to radiator." },
     "hub": { label: "Spacecraft Bus", desc: "ADCS, PMAD, flight computer, ground link antenna." },
     "spine": { label: "Structural Spine", desc: "CFRP truss backbone with X-bracing. Carries power bus and heat pipe manifolds." },
@@ -3069,7 +3072,7 @@ function buildDP2(cfg) {
     // Main radiator panel — bright white, prominent
     const rad = new THREE.Mesh(box(rC, rS, radThick), MAT.rad);
     rad.position.set(0, rY, 0);
-    addPart(rad, "radiator", `Main Radiator — ${cfg.radM2}m² (AZ-93 white)`);
+    addPart(rad, "radiator", `Main Radiator — ${cfg.radM2}m² (carbon black)`);
 
     // Heat pipe channels (visible lines running along Y span)
     const hpMat = new THREE.MeshStandardMaterial({color: 0xd0d0dd, roughness: 0.35, metalness: 0.4});
