@@ -251,8 +251,8 @@ body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', 
             <button class="config-tab" data-config="DP2B">DP2B<span class="sub">VR Hub</span></button>
             <button class="config-tab" data-config="DP3">DP3<span class="sub">AI7 Photonic</span></button>
             <button class="config-tab" data-config="DP3B">DP3B<span class="sub">AI7 Electrical</span></button>
-            <button class="config-tab" data-config="DP2_CLUSTER">Cluster<span class="sub">DP2 ×5</span></button>
-            <button class="config-tab" data-config="DP3_CLUSTER">Cluster<span class="sub">DP3 ×10</span></button>
+            <button class="config-tab" data-config="DP2_CLUSTER">Hex-Cell<span class="sub">DP2 ×5</span></button>
+            <button class="config-tab" data-config="DP3_CLUSTER">Hex-Cell<span class="sub">DP3 ×10</span></button>
         </div>
         <div style="flex:1"></div>
         <span class="badge orbital">Dawn-Dusk SSO</span>
@@ -407,7 +407,7 @@ const CONFIGS = {
         islApertureCm: 8, islPointingUrad: 1.5, islFEC: "LDPC 3/4",
         groundLinkGbps: 10, groundStations: 3, groundModulation: "64-QAM OFDM",
         contactFraction: 0.35, storeAndForward: false,
-        clusterSize: 5, clusterTopology: "dragonfly all-to-all",
+        clusterSize: 5, clusterTopology: "hex-cell dragonfly",
         clusterRoles: ["prefill","decode","context","routing"], maxClusterSize: 16,
         tensorParallel: 4, pipelineParallel: 2,
         batchSize: 32, seqLen: 4096, radHardening: 0.65,
@@ -470,7 +470,7 @@ const CONFIGS = {
         islApertureCm: 12, islPointingUrad: 0.5, islFEC: "Polar 7/8",
         groundLinkGbps: 40, groundStations: 5, groundModulation: "256-QAM OFDM",
         contactFraction: 0.35, storeAndForward: false,
-        clusterSize: 10, clusterTopology: "dragonfly+ with adaptive routing",
+        clusterSize: 10, clusterTopology: "hex-cell dragonfly+",
         clusterRoles: ["prefill","decode","context","routing","KV-cache-server"], maxClusterSize: 64,
         tensorParallel: 8, pipelineParallel: 4,
         batchSize: 64, seqLen: 8192, radHardening: 0.80,
@@ -501,7 +501,7 @@ const CONFIGS = {
         islApertureCm: 15, islPointingUrad: 0.8, islFEC: "Polar 7/8",
         groundLinkGbps: 80, groundStations: 8, groundModulation: "256-QAM OFDM",
         contactFraction: 0.35, storeAndForward: false,
-        clusterSize: 10, clusterTopology: "fat-tree with CXL fabric",
+        clusterSize: 10, clusterTopology: "hex-cell fat-tree",
         clusterRoles: ["prefill","decode","context","KV-cache-server","scheduler"], maxClusterSize: 32,
         tensorParallel: 8, pipelineParallel: 4,
         batchSize: 128, seqLen: 8192, radHardening: 0.70,
@@ -2232,43 +2232,121 @@ function renderCluster(cfg, m) {
     const clusterISLBw = m.islBandwidthGbps;
 
     // Communication overhead estimate
-    const allReduceBytes = m.totalMemTB * 1024 * 1e9 * 0.01; // 1% of weights for gradient sync
+    const allReduceBytes = m.totalMemTB * 1024 * 1e9 * 0.01;
     const allReduceTimeMs = cs > 1 ? (allReduceBytes * 8 / (clusterISLBw * 1e9) * 1000 * 2 * Math.log2(cs)) : 0;
     const commOverhead = cs > 1 ? Math.min(30, allReduceTimeMs / 100 * 10) : 0;
+
+    // Hex-cell scaling analysis
+    const hexPowerKw = cfg.busPwr;
+    const hexMassKg = cfg.dryMassKg || 1000;
+    const hexRadM2 = cfg.radM2 || 100;
+    const honeycombKgM2 = 3.5;  // old: Al honeycomb + ammonia heat pipes
+    const solidPlateKgM2 = cfg.isDP3 ? 12 : 10;  // Al 6061-T6 solid plate, 3-5mm + AZ-93 paint
+    const radMassDelta = (solidPlateKgM2 - honeycombKgM2) * hexRadM2;
+    const solidPlateCostM2 = 180;  // $/m² for Al 6061-T6 + AZ-93 coating
+    const honeycombCostM2 = 950;   // $/m² for honeycomb + heat pipes
+    const radCostDelta = (solidPlateCostM2 - honeycombCostM2) * hexRadM2;
+    const launchCostPenalty = radMassDelta * (cfg.launchCostPerKg || 500);
+
+    // Fault tolerance: probability of losing >50% of cluster
+    const mmodHitProbPerYear = 0.03;  // per hex-cell, solid plate is more robust
+    const pAllSurvive = Math.pow(1 - mmodHitProbPerYear, cs * (cfg.satLife || 5));
+    const faultToleranceLoss = 1 / cs;  // lose 1 hex = lose 1/N capacity
 
     return `
     <div class="card">
         <div class="card-header">
-            <span class="card-title">Cluster Architecture</span>
-            <span class="card-badge" style="background:rgba(26,138,106,0.2);color:var(--orbital)">${cs === 1 ? 'STANDALONE' : cs + ' NODES'}</span>
+            <span class="card-title">Hex-Cell Architecture</span>
+            <span class="card-badge" style="background:rgba(26,138,106,0.2);color:var(--orbital)">${cs === 1 ? 'STANDALONE' : cs + ' HEX-CELLS'}</span>
         </div>
         <div class="metric-row"><span class="metric-label">Topology</span><span class="metric-value accent">${topology}</span></div>
-        <div class="metric-row"><span class="metric-label">Current size</span><span class="metric-value">${cs} node${cs>1?'s':''}</span></div>
-        <div class="metric-row"><span class="metric-label">Max cluster size</span><span class="metric-value">${maxCs} nodes</span></div>
-        <div class="metric-row"><span class="metric-label">Tensor parallel (TP)</span><span class="metric-value purple">${tp}-way</span></div>
-        <div class="metric-row"><span class="metric-label">Pipeline parallel (PP)</span><span class="metric-value purple">${pp}-way</span></div>
-        <div class="metric-row"><span class="metric-label">Effective model parallel</span><span class="metric-value accent">${tp*pp}-way</span></div>
+        <div class="metric-row"><span class="metric-label">Hex-cells</span><span class="metric-value">${cs} (2 primary + ${cs - 2} edge)</span></div>
+        <div class="metric-row"><span class="metric-label">Max cluster</span><span class="metric-value">${maxCs} cells</span></div>
+        <div class="metric-row"><span class="metric-label">TP × PP</span><span class="metric-value purple">${tp}-way × ${pp}-way = ${tp*pp}-way</span></div>
+        <div class="metric-row"><span class="metric-label">Primary redundancy</span><span class="metric-value orbital">2× (N+1 spine)</span></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">Hex-Cell Concept</span></div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
+            Each hex-cell is a self-contained unit with own solar, compute, and radiator.
+            Identical hardware at every node — differentiated only by software role assignment.
+            Two redundant primary cores provide N+1 fault tolerance for the control plane.
+        </div>
+
+        <div class="svg-diagram"><svg viewBox="0 0 540 280" xmlns="http://www.w3.org/2000/svg">
+            <rect x="0" y="0" width="540" height="280" fill="#080a0f"/>
+            <text x="270" y="16" text-anchor="middle" fill="#556" font-size="8" font-style="italic">Hex-cell branching topology — self-similar building blocks</text>
+
+            <!-- Primary 1 (left) -->
+            <polygon points="200,110 220,98 240,110 240,130 220,142 200,130" fill="#1a1410" stroke="#ffcc00" stroke-width="2"/>
+            <text x="220" y="122" text-anchor="middle" fill="#ffcc00" font-size="8" font-weight="700">P1</text>
+            <text x="220" y="132" text-anchor="middle" fill="#887700" font-size="6">ROUTE</text>
+
+            <!-- Primary 2 (right) -->
+            <polygon points="290,110 310,98 330,110 330,130 310,142 290,130" fill="#1a1410" stroke="#ffcc00" stroke-width="2"/>
+            <text x="310" y="122" text-anchor="middle" fill="#ffcc00" font-size="8" font-weight="700">P2</text>
+            <text x="310" y="132" text-anchor="middle" fill="#887700" font-size="6">ROUTE</text>
+
+            <!-- Spine link between primaries -->
+            <line x1="240" y1="120" x2="290" y2="120" stroke="#ffdd00" stroke-width="3" opacity="0.7"/>
+            <text x="265" y="115" text-anchor="middle" fill="#aa8800" font-size="6">SPINE</text>
+
+            <!-- Edge cells branching off P1 -->
+            <polygon points="110,60 130,48 150,60 150,80 130,92 110,80" fill="#0e1828" stroke="#3377ff" stroke-width="1.5"/>
+            <text x="130" y="73" text-anchor="middle" fill="#3377ff" font-size="7" font-weight="600">PRE</text>
+            <line x1="150" y1="70" x2="200" y2="115" stroke="#00ffcc" stroke-width="1.5" opacity="0.5"/>
+
+            <polygon points="95,150 115,138 135,150 135,170 115,182 95,170" fill="#0e1828" stroke="#ff4030" stroke-width="1.5"/>
+            <text x="115" y="163" text-anchor="middle" fill="#ff4030" font-size="7" font-weight="600">DEC</text>
+            <line x1="135" y1="155" x2="200" y2="125" stroke="#00ffcc" stroke-width="1.5" opacity="0.5"/>
+
+            <!-- Deeper branch off P1 -->
+            <polygon points="40,30 60,18 80,30 80,50 60,62 40,50" fill="#0e1828" stroke="#33ee55" stroke-width="1.5"/>
+            <text x="60" y="43" text-anchor="middle" fill="#33ee55" font-size="7" font-weight="600">CTX</text>
+            <line x1="80" y1="40" x2="110" y2="65" stroke="#00ffcc" stroke-width="1" opacity="0.4"/>
+
+            <!-- Edge cells branching off P2 -->
+            <polygon points="380,55 400,43 420,55 420,75 400,87 380,75" fill="#0e1828" stroke="#3377ff" stroke-width="1.5"/>
+            <text x="400" y="68" text-anchor="middle" fill="#3377ff" font-size="7" font-weight="600">PRE</text>
+            <line x1="380" y1="65" x2="330" y2="115" stroke="#00ffcc" stroke-width="1.5" opacity="0.5"/>
+
+            <polygon points="390,145 410,133 430,145 430,165 410,177 390,165" fill="#0e1828" stroke="#ff4030" stroke-width="1.5"/>
+            <text x="410" y="158" text-anchor="middle" fill="#ff4030" font-size="7" font-weight="600">DEC</text>
+            <line x1="390" y1="155" x2="330" y2="125" stroke="#00ffcc" stroke-width="1.5" opacity="0.5"/>
+
+            <!-- Cross-branch link -->
+            <line x1="150" y1="70" x2="380" y2="65" stroke="#ff8800" stroke-width="1" opacity="0.4" stroke-dasharray="4 3"/>
+            <text x="265" y="60" text-anchor="middle" fill="#ff8800" font-size="6" opacity="0.7">cross-branch</text>
+
+            <!-- Legend -->
+            <rect x="20" y="210" width="500" height="60" fill="#0a0c12" stroke="#333" stroke-width="0.5" rx="4"/>
+            <circle cx="45" cy="228" r="5" fill="#ffcc00"/><text x="60" y="232" fill="#aab" font-size="8">Primary (redundant routing cores)</text>
+            <circle cx="45" cy="248" r="5" fill="#00ffcc"/><text x="60" y="252" fill="#aab" font-size="8">Branch ISL (parent→child)</text>
+            <circle cx="280" cy="228" r="5" fill="#ff8800"/><text x="295" y="232" fill="#aab" font-size="8">Cross-branch ISL (global link)</text>
+            <text x="280" y="252" fill="#667" font-size="8">Each hex = own solar + compute + radiator</text>
+        </svg></div>
     </div>
 
     <div class="card">
         <div class="card-header"><span class="card-title">Disaggregated Serving Roles</span></div>
         ${roles.map(role => {
-            const icons = { 'prefill':'🔴', 'decode':'🔵', 'context':'🟢', 'routing':'⚪', 'hub-prefill':'🟠',
-                           'KV-cache-server':'🟡', 'scheduler':'⚫', 'inference':'🔵' };
+            const icons = { 'prefill':'🔵', 'decode':'🔴', 'context':'🟢', 'routing':'🟡', 'hub-prefill':'🟠',
+                           'KV-cache-server':'🟣', 'scheduler':'⚫', 'inference':'🔵' };
             const descs = {
-                'prefill': 'Compute-bound prompt processing. Maximizes FLOPS utilization. Batch-processes prompts, generates KV cache, forwards to decode nodes.',
-                'decode': 'Memory-BW-bound autoregressive generation. Streams tokens at HBM bandwidth limit. One token per forward pass.',
-                'context': 'KV cache storage + context management. Holds long-context state, serves KV slices to decode nodes on demand via ISL.',
-                'routing': 'Request dispatch + load balancing. Tracks node utilization, routes incoming requests to least-loaded prefill node.',
-                'hub-prefill': 'Centralized prefill + routing hub. Single node handles all prompt processing, dispatches decode to spokes.',
-                'KV-cache-server': 'Dedicated KV cache pool. Offloads KV storage from decode nodes, serves via high-BW ISL. Enables longer contexts.',
-                'scheduler': 'Global cluster scheduler. Orchestrates batch formation, speculative decode, preemption, and SLA management.',
-                'inference': 'All-in-one inference node. Handles prefill + decode + KV cache locally. No disaggregation (standalone mode).',
+                'prefill': 'Compute-bound prompt processing. Assigned to dedicated edge hex-cells that maximize FLOPS utilization.',
+                'decode': 'Memory-BW-bound token generation. Edge hex-cells optimized for streaming HBM bandwidth.',
+                'context': 'KV cache storage + context management. Edge hex-cells with high memory capacity, serve KV slices via ISL.',
+                'routing': 'Request dispatch + load balancing on primary hex-cells. Tracks node utilization, routes to least-loaded prefill cell.',
+                'hub-prefill': 'Centralized prefill + routing hub. Primary hex-cell handles prompt processing + dispatch.',
+                'KV-cache-server': 'Dedicated KV cache pool. Offloads KV storage from decode cells, serves via high-BW ISL.',
+                'scheduler': 'Global cluster scheduler on primary. Orchestrates batch formation, preemption, and SLA management.',
+                'inference': 'All-in-one inference node. Handles prefill + decode + KV cache locally.',
             };
             return `
             <div style="margin:6px 0;padding:6px 0;border-bottom:1px solid var(--surface2)">
                 <div style="font-weight:600;font-size:12px">${icons[role]||'⬡'} ${role.toUpperCase().replace(/-/g,' ')}</div>
-                <div style="font-size:10px;color:var(--muted);margin-top:2px">${descs[role]||'Specialized cluster role.'}</div>
+                <div style="font-size:10px;color:var(--muted);margin-top:2px">${descs[role]||'Specialized hex-cell role.'}</div>
             </div>`;
         }).join('')}
     </div>
@@ -2282,145 +2360,135 @@ function renderCluster(cfg, m) {
         <div class="metric-row"><span class="metric-label">Comm overhead</span><span class="metric-value ${commOverhead > 15 ? 'ground' : 'orbital'}">${commOverhead.toFixed(0)}%</span></div>
         <div class="metric-row"><span class="metric-label">Max model (TP×PP)</span><span class="metric-value">${(clusterMemTB*1024/2).toFixed(0)} GB (FP16)</span></div>
     </div>
+    ` : ''}
 
     <div class="card">
+        <div class="card-header"><span class="card-title">Hex-Cell Scaling Analysis</span><span class="card-badge" style="background:rgba(58,122,184,0.15);color:var(--accent)">NAPKIN MATH</span></div>
+        <div class="section-header">Self-Similar Scaling</div>
+        <div class="calc-block"><span class="comment">// Each hex-cell is generation-independent</span>
+<span class="comment">// The hex size scales with technology, topology stays the same</span>
+
+Hex power  = <span class="highlight">${hexPowerKw} kW</span>  (${cfg.shortName} generation)
+Hex mass   = <span class="highlight">${(hexMassKg/1000).toFixed(1)} t</span>
+Hex GPUs   = <span class="highlight">${cfg.gpuCount}</span> × ${cfg.gpuType}
+Hex memory = <span class="highlight">${m.totalMemTB.toFixed(1)} TB</span>
+Hex rad    = <span class="highlight">${hexRadM2} m²</span>
+
+Cluster power  = N × ${hexPowerKw} kW = <span class="highlight">${(cs * hexPowerKw / 1000).toFixed(1)} MW</span> (${cs} cells)
+Cluster memory = N × ${m.totalMemTB.toFixed(1)} TB = <span class="highlight">${clusterMemTB.toFixed(0)} TB</span>
+Cluster rad    = N × ${hexRadM2} m² = <span class="highlight">${(cs * hexRadM2).toFixed(0)} m²</span>
+Cluster TFLOPS = N × ${m.effectiveTFLOPS.toFixed(0)} = <span class="highlight">${clusterTFLOPS.toFixed(0)}</span></div>
+
+        <div class="section-header">Fault Tolerance <span class="chip chip-green">N+1 primary</span></div>
+        <div class="calc-block"><span class="comment">// Lose 1 hex-cell → lose 1/N of capacity (graceful)</span>
+<span class="comment">// 2 primary cores → control plane survives single failure</span>
+
+Loss per hex failure = <span class="highlight">1/${cs} = ${(faultToleranceLoss*100).toFixed(1)}%</span> capacity
+MMOD hit rate/cell   = ${(mmodHitProbPerYear*100).toFixed(1)}%/yr (solid plate)
+P(all survive ${cfg.satLife || 5}yr) = <span class="${pAllSurvive > 0.7 ? 'highlight' : 'error'}">${(pAllSurvive*100).toFixed(1)}%</span>
+P(lose control)      = <span class="highlight">${(Math.pow(mmodHitProbPerYear, 2) * 100).toFixed(3)}%/yr</span> (need both primaries)</div>
+
+        <div class="section-header">Radiator Material Trade</div>
+        <div class="calc-block"><span class="comment">// Al 6061-T6 solid plate vs honeycomb + heat pipes</span>
+<span class="comment">// Solid plate: heavier but simpler, cheaper, MMOD-robust</span>
+
+                         Honeycomb    Solid Plate
+Mass per m²:         ${honeycombKgM2.toFixed(1)} kg/m²    ${solidPlateKgM2} kg/m²
+Cost per m²:         $${honeycombCostM2}/m²     $${solidPlateCostM2}/m²
+Radiator area:       ${hexRadM2} m²       ${hexRadM2} m²
+───────────────────────────────────────
+Rad mass (per hex):  ${(honeycombKgM2 * hexRadM2/1000).toFixed(1)} t        <span class="${radMassDelta > 0 ? 'error' : 'highlight'}">${(solidPlateKgM2 * hexRadM2/1000).toFixed(1)} t</span>  (+${(radMassDelta/1000).toFixed(1)} t)
+Rad cost (per hex):  $${(honeycombCostM2 * hexRadM2/1000).toFixed(0)}k       <span class="highlight">$${(solidPlateCostM2 * hexRadM2/1000).toFixed(0)}k</span>  (saves $${Math.abs(radCostDelta/1000).toFixed(0)}k)
+Launch penalty:      —            +$${(launchCostPenalty/1000).toFixed(0)}k (@ $${cfg.launchCostPerKg}/kg)
+───────────────────────────────────────
+Net delta/hex:       <span class="${(radCostDelta + launchCostPenalty) < 0 ? 'highlight' : 'error'}">${((radCostDelta + launchCostPenalty)/1000) < 0 ? 'SAVES' : 'COSTS'} $${Math.abs((radCostDelta + launchCostPenalty)/1000).toFixed(0)}k/hex</span>
+Net delta/cluster:   <span class="${(radCostDelta + launchCostPenalty) < 0 ? 'highlight' : 'error'}">${((radCostDelta + launchCostPenalty)*cs/1e6) < 0 ? 'SAVES' : 'COSTS'} $${Math.abs((radCostDelta + launchCostPenalty)*cs/1e6).toFixed(2)}M total</span>
+
+<span class="comment">// Solid plate trades mass for:</span>
+<span class="comment">// ✓ 4× cheaper manufacturing (stamped Al vs brazed honeycomb)</span>
+<span class="comment">// ✓ MMOD-robust (no heat pipe puncture → single-point failure)</span>
+<span class="comment">// ✓ SpaceX Starlink heritage (bus IS radiator)</span>
+<span class="comment">// ✗ ~${(radMassDelta/hexMassKg*100).toFixed(0)}% mass increase per hex</span></div>
+
+        <div class="section-header">Scaling Roadmap</div>
+        <div class="calc-block"><span class="comment">// Same hex-cell architecture, bigger building blocks</span>
+
+2026: hex = DP1    ${(CONFIGS.DP1.busPwr/1000).toFixed(2)} MW   ${CONFIGS.DP1.gpuCount} GPUs    Falcon 9
+2028: hex = DP2    ${(CONFIGS.DP2.busPwr/1000).toFixed(2)} MW   ${CONFIGS.DP2.gpuCount} GPUs    Starship
+2030: hex = DP3    ${(CONFIGS.DP3.busPwr/1000).toFixed(2)} MW   ${CONFIGS.DP3.gpuCount} GPUs    Starship
+
+<span class="comment">// Manufacturing: one SKU per generation</span>
+<span class="comment">// Deploy: flat-pack hex-cells into fairing, unfold on orbit</span>
+<span class="comment">// Scale: add more hex-cells to cluster (linear scaling)</span>
+<span class="comment">// Repair: swap failed hex-cell, cluster continues at (N-1)/N</span></div>
+    </div>
+
+    ${cs > 1 ? `
+    <div class="card">
         <div class="card-header"><span class="card-title">Communication Patterns</span></div>
-        <div class="section-header">Tensor Parallel All-Reduce <span class="chip chip-blue">TP-${tp}</span></div>
-        <div class="svg-diagram"><svg viewBox="0 0 540 150" xmlns="http://www.w3.org/2000/svg">
-            <defs><marker id="ring_ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#5cb8e6"/></marker></defs>
-            <rect x="0" y="0" width="540" height="150" fill="#080a0f"/>
-            <text x="270" y="14" text-anchor="middle" fill="#556" font-size="8" font-style="italic">Ring all-reduce across ${tp} nodes per decode step</text>
-            <!-- Ring of nodes -->
-            <rect x="30" y="30" width="50" height="30" rx="6" fill="#0e1828" stroke="#5cb8e6" stroke-width="1.5"/>
-            <text x="55" y="49" text-anchor="middle" fill="#5cb8e6" font-size="10" font-weight="600">N0</text>
-            <line x1="80" y1="45" x2="118" y2="45" stroke="#5cb8e6" stroke-width="1.5" marker-end="url(#ring_ah)"/>
-            <rect x="122" y="30" width="50" height="30" rx="6" fill="#0e1828" stroke="#5cb8e6" stroke-width="1.5"/>
-            <text x="147" y="49" text-anchor="middle" fill="#5cb8e6" font-size="10" font-weight="600">N1</text>
-            <line x1="172" y1="45" x2="210" y2="45" stroke="#5cb8e6" stroke-width="1.5" marker-end="url(#ring_ah)"/>
-            <rect x="214" y="30" width="50" height="30" rx="6" fill="#0e1828" stroke="#5cb8e6" stroke-width="1.5"/>
-            <text x="239" y="49" text-anchor="middle" fill="#5cb8e6" font-size="10" font-weight="600">N2</text>
-            <line x1="264" y1="45" x2="302" y2="45" stroke="#5cb8e6" stroke-width="1.5" marker-end="url(#ring_ah)"/>
-            <text x="320" y="49" fill="#778" font-size="10">...</text>
-            <line x1="340" y1="45" x2="378" y2="45" stroke="#5cb8e6" stroke-width="1.5" marker-end="url(#ring_ah)"/>
-            <rect x="382" y="30" width="70" height="30" rx="6" fill="#0e1828" stroke="#5cb8e6" stroke-width="1.5"/>
-            <text x="417" y="49" text-anchor="middle" fill="#5cb8e6" font-size="10" font-weight="600">N${tp-1}</text>
-            <!-- Return path (bottom) -->
-            <path d="M417 60 L417 75 L55 75 L55 63" stroke="#5cb8e6" stroke-width="1.5" fill="none" marker-end="url(#ring_ah)"/>
-            <!-- Stats -->
-            <text x="30" y="100" fill="#778" font-size="9">Payload: 2 × h × TP = <tspan fill="#f0c040" font-weight="600">${(2*8192*tp/1024).toFixed(1)} KB</tspan></text>
-            <text x="30" y="116" fill="#778" font-size="9">Ring: 2×(p-1)/p × data</text>
-            <text x="30" y="132" fill="#778" font-size="9">Latency: <tspan fill="#f0c040" font-weight="600">${(2*8192*tp*8/(clusterISLBw*1e9)*1e6 + 100*Math.log2(tp)).toFixed(0)} μs</tspan> per step</text>
+        <div class="section-header">Primary Spine <span class="chip chip-orange">P1 ↔ P2</span></div>
+        <div class="svg-diagram"><svg viewBox="0 0 540 90" xmlns="http://www.w3.org/2000/svg">
+            <defs><marker id="spine_ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#ffcc00"/></marker></defs>
+            <rect x="0" y="0" width="540" height="90" fill="#080a0f"/>
+            <text x="270" y="14" text-anchor="middle" fill="#556" font-size="8" font-style="italic">Redundant primary spine — control plane + data sync</text>
+            <rect x="60" y="28" width="120" height="36" rx="6" fill="#1a1410" stroke="#ffcc00" stroke-width="2"/>
+            <text x="120" y="46" text-anchor="middle" fill="#ffcc00" font-size="10" font-weight="700">PRIMARY 1</text>
+            <text x="120" y="58" text-anchor="middle" fill="#887700" font-size="7">routing + prefill</text>
+            <line x1="180" y1="46" x2="350" y2="46" stroke="#ffdd00" stroke-width="3" marker-end="url(#spine_ah)"/>
+            <text x="265" y="40" text-anchor="middle" fill="#aa8800" font-size="7">${clusterISLBw} Gbps × 2 (redundant)</text>
+            <rect x="355" y="28" width="120" height="36" rx="6" fill="#1a1410" stroke="#ffcc00" stroke-width="2"/>
+            <text x="415" y="46" text-anchor="middle" fill="#ffcc00" font-size="10" font-weight="700">PRIMARY 2</text>
+            <text x="415" y="58" text-anchor="middle" fill="#887700" font-size="7">routing + decode</text>
+            <text x="40" y="80" fill="#778" font-size="8">Failover: <tspan fill="#f0c040">&lt; 100ms</tspan> (Raft leader election)</text>
         </svg></div>
 
-        <div class="section-header">Pipeline Parallel <span class="chip chip-green">PP-${pp}, 1F1B</span></div>
-        <div class="svg-diagram"><svg viewBox="0 0 540 ${pp >= 4 ? 185 : pp >= 3 ? 170 : 155}" xmlns="http://www.w3.org/2000/svg">
-            <defs></defs>
-            <rect x="0" y="0" width="540" height="${pp >= 4 ? 185 : pp >= 3 ? 170 : 155}" fill="#080a0f"/>
-            <text x="270" y="14" text-anchor="middle" fill="#556" font-size="8" font-style="italic">1F1B micro-batch schedule (${pp} stages)</text>
-            <text x="490" y="32" fill="#778" font-size="7">time →</text>
-            <!-- Legend -->
-            <rect x="420" y="38" width="16" height="10" fill="#5cb8e6"/>
-            <text x="440" y="47" fill="#778" font-size="7">fwd</text>
-            <rect x="465" y="38" width="16" height="10" fill="#4ecdc4"/>
-            <text x="485" y="47" fill="#778" font-size="7">bwd</text>
-            <!-- S0 -->
-            <text x="25" y="48" text-anchor="middle" fill="#e8a838" font-size="9" font-weight="600">S0</text>
-            <line x1="40" y1="34" x2="40" y2="52" stroke="#556" stroke-width="0.5"/>
-            <rect x="42" y="36" width="28" height="14" fill="#5cb8e6" rx="2"/><rect x="70" y="36" width="28" height="14" fill="#4ecdc4" rx="2"/>
-            <rect x="98" y="36" width="28" height="14" fill="#5cb8e6" rx="2"/><rect x="126" y="36" width="28" height="14" fill="#4ecdc4" rx="2"/>
-            <rect x="154" y="36" width="28" height="14" fill="#5cb8e6" rx="2"/><rect x="182" y="36" width="28" height="14" fill="#4ecdc4" rx="2"/>
-            <!-- S1 -->
-            <text x="25" y="68" text-anchor="middle" fill="#e8a838" font-size="9" font-weight="600">S1</text>
-            <line x1="40" y1="54" x2="40" y2="72" stroke="#556" stroke-width="0.5"/>
-            <rect x="70" y="56" width="28" height="14" fill="#5cb8e6" rx="2"/><rect x="98" y="56" width="28" height="14" fill="#4ecdc4" rx="2"/>
-            <rect x="126" y="56" width="28" height="14" fill="#5cb8e6" rx="2"/><rect x="154" y="56" width="28" height="14" fill="#4ecdc4" rx="2"/>
-            <rect x="182" y="56" width="28" height="14" fill="#5cb8e6" rx="2"/><rect x="210" y="56" width="28" height="14" fill="#4ecdc4" rx="2"/>
-            <!-- S2 (conditional) -->
-            ${pp>=3 ? `<text x="25" y="88" text-anchor="middle" fill="#e8a838" font-size="9" font-weight="600">S2</text>
-            <line x1="40" y1="74" x2="40" y2="92" stroke="#556" stroke-width="0.5"/>
-            <rect x="98" y="76" width="28" height="14" fill="#5cb8e6" rx="2"/><rect x="126" y="76" width="28" height="14" fill="#4ecdc4" rx="2"/>
-            <rect x="154" y="76" width="28" height="14" fill="#5cb8e6" rx="2"/><rect x="182" y="76" width="28" height="14" fill="#4ecdc4" rx="2"/>
-            <rect x="210" y="76" width="28" height="14" fill="#5cb8e6" rx="2"/><rect x="238" y="76" width="28" height="14" fill="#4ecdc4" rx="2"/>` : ''}
-            <!-- S3 (conditional) -->
-            ${pp>=4 ? `<text x="25" y="108" text-anchor="middle" fill="#e8a838" font-size="9" font-weight="600">S3</text>
-            <line x1="40" y1="94" x2="40" y2="112" stroke="#556" stroke-width="0.5"/>
-            <rect x="126" y="96" width="28" height="14" fill="#5cb8e6" rx="2"/><rect x="154" y="96" width="28" height="14" fill="#4ecdc4" rx="2"/>
-            <rect x="182" y="96" width="28" height="14" fill="#5cb8e6" rx="2"/><rect x="210" y="96" width="28" height="14" fill="#4ecdc4" rx="2"/>
-            <rect x="238" y="96" width="28" height="14" fill="#5cb8e6" rx="2"/><rect x="266" y="96" width="28" height="14" fill="#4ecdc4" rx="2"/>` : ''}
-            <!-- Stats -->
-            <text x="30" y="${pp >= 4 ? 135 : pp >= 3 ? 120 : 105}" fill="#778" font-size="9">Activation per layer: <tspan fill="#d0d4dc" font-weight="600">${(2*8192*cfg.seqLen/1e6).toFixed(0)} MB</tspan></text>
-            <text x="30" y="${pp >= 4 ? 151 : pp >= 3 ? 136 : 121}" fill="#778" font-size="9">Naive bubble: ${((pp-1)/pp*100).toFixed(0)}%</text>
-            <text x="30" y="${pp >= 4 ? 167 : pp >= 3 ? 152 : 137}" fill="#778" font-size="9">1F1B bubble: <tspan fill="#f0c040" font-weight="600">${((pp-1)/(pp*3)*100).toFixed(0)}%</tspan></text>
-        </svg></div>
-
-        <div class="section-header">KV Cache Migration <span class="chip chip-orange">prefill→decode</span></div>
-        <div class="svg-diagram"><svg viewBox="0 0 540 110" xmlns="http://www.w3.org/2000/svg">
+        <div class="section-header">KV Cache Migration <span class="chip chip-blue">prefill→decode cell</span></div>
+        <div class="svg-diagram"><svg viewBox="0 0 540 100" xmlns="http://www.w3.org/2000/svg">
             <defs><marker id="kv_ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#e8a838"/></marker></defs>
-            <rect x="0" y="0" width="540" height="110" fill="#080a0f"/>
-            <text x="270" y="14" text-anchor="middle" fill="#556" font-size="8" font-style="italic">Context handoff over ISL</text>
-            <!-- Prefill node -->
-            <rect x="40" y="28" width="110" height="40" rx="6" fill="#1a0e0e" stroke="#e05555" stroke-width="1.5"/>
-            <text x="95" y="46" text-anchor="middle" fill="#e05555" font-size="10" font-weight="600">PREFILL</text>
-            <text x="95" y="60" text-anchor="middle" fill="#778" font-size="8">node</text>
-            <!-- Transfer arrow with data -->
-            <line x1="150" y1="48" x2="350" y2="48" stroke="#e8a838" stroke-width="2" marker-end="url(#kv_ah)"/>
-            <rect x="195" y="34" width="120" height="20" rx="4" fill="#1a1420" stroke="#e8a838" stroke-width="1"/>
-            <text x="255" y="48" text-anchor="middle" fill="#e8a838" font-size="9" font-weight="600">${(0.5*cfg.seqLen/1000).toFixed(1)} GB KV</text>
-            <text x="255" y="63" text-anchor="middle" fill="#778" font-size="7">@ ${cfg.islRateGbps} Gbps ISL</text>
-            <!-- Decode node -->
-            <rect x="355" y="28" width="110" height="40" rx="6" fill="#0e1828" stroke="#5cb8e6" stroke-width="1.5"/>
-            <text x="410" y="46" text-anchor="middle" fill="#5cb8e6" font-size="10" font-weight="600">DECODE</text>
-            <text x="410" y="60" text-anchor="middle" fill="#778" font-size="8">node</text>
-            <!-- Stats -->
-            <text x="40" y="90" fill="#778" font-size="9">Transfer: <tspan fill="#f0c040" font-weight="600">${(0.5*cfg.seqLen/1000*8/(cfg.islRateGbps)*1000).toFixed(0)} ms</tspan></text>
-            <text x="250" y="90" fill="#556" font-size="8">One-time per request, amortized over decode</text>
+            <rect x="0" y="0" width="540" height="100" fill="#080a0f"/>
+            <text x="270" y="14" text-anchor="middle" fill="#556" font-size="8" font-style="italic">Context handoff between hex-cells via ISL</text>
+            <rect x="40" y="28" width="110" height="36" rx="6" fill="#0e1828" stroke="#3377ff" stroke-width="1.5"/>
+            <text x="95" y="46" text-anchor="middle" fill="#3377ff" font-size="10" font-weight="600">PREFILL</text>
+            <text x="95" y="57" text-anchor="middle" fill="#778" font-size="7">hex-cell</text>
+            <line x1="150" y1="46" x2="350" y2="46" stroke="#e8a838" stroke-width="2" marker-end="url(#kv_ah)"/>
+            <rect x="195" y="32" width="120" height="18" rx="4" fill="#1a1420" stroke="#e8a838" stroke-width="1"/>
+            <text x="255" y="44" text-anchor="middle" fill="#e8a838" font-size="8" font-weight="600">${(0.5*cfg.seqLen/1000).toFixed(1)} GB KV</text>
+            <text x="255" y="58" text-anchor="middle" fill="#778" font-size="7">@ ${cfg.islRateGbps} Gbps ISL</text>
+            <rect x="355" y="28" width="110" height="36" rx="6" fill="#1a0e0e" stroke="#ff4030" stroke-width="1.5"/>
+            <text x="410" y="46" text-anchor="middle" fill="#ff4030" font-size="10" font-weight="600">DECODE</text>
+            <text x="410" y="57" text-anchor="middle" fill="#778" font-size="7">hex-cell</text>
+            <text x="40" y="85" fill="#778" font-size="8">Transfer: <tspan fill="#f0c040" font-weight="600">${(0.5*cfg.seqLen/1000*8/(cfg.islRateGbps)*1000).toFixed(0)} ms</tspan></text>
+            <text x="250" y="85" fill="#556" font-size="8">One-time per request, amortized over decode</text>
         </svg></div>
     </div>
     ` : `
     <div class="card">
         <div class="card-header"><span class="card-title">Standalone Mode</span></div>
-        <div class="svg-diagram"><svg viewBox="0 0 540 160" xmlns="http://www.w3.org/2000/svg">
-            <defs><marker id="solo_ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#e8a838"/></marker></defs>
-            <rect x="0" y="0" width="540" height="160" fill="#080a0f"/>
-            <text x="270" y="14" text-anchor="middle" fill="#556" font-size="8" font-style="italic">Single-node inference (no cluster comm)</text>
-            <!-- Main node box -->
-            <rect x="100" y="26" width="340" height="80" rx="6" fill="#0e1828" stroke="#5cb8e6" stroke-width="1.5"/>
-            <text x="270" y="44" text-anchor="middle" fill="#d0d4dc" font-size="11" font-weight="600">LOCAL NODE</text>
-            <!-- Internal pipeline -->
-            <rect x="130" y="54" width="70" height="24" rx="4" fill="#1a1420" stroke="#e8a838" stroke-width="1"/>
-            <text x="165" y="70" text-anchor="middle" fill="#e8a838" font-size="8">Prefill</text>
-            <line x1="200" y1="66" x2="228" y2="66" stroke="#e8a838" stroke-width="1.5" marker-end="url(#solo_ah)"/>
-            <rect x="232" y="54" width="70" height="24" rx="4" fill="#1a1420" stroke="#4ecdc4" stroke-width="1"/>
-            <text x="267" y="70" text-anchor="middle" fill="#4ecdc4" font-size="8">Decode</text>
-            <line x1="302" y1="66" x2="330" y2="66" stroke="#e8a838" stroke-width="1.5" marker-end="url(#solo_ah)"/>
-            <rect x="334" y="54" width="55" height="24" rx="4" fill="#1a1420" stroke="#b080e0" stroke-width="1"/>
-            <text x="361" y="70" text-anchor="middle" fill="#b080e0" font-size="8">Out</text>
-            <!-- Stats inside box -->
-            <text x="130" y="94" fill="#778" font-size="8">KV cache: local</text>
-            <text x="250" y="94" fill="#778" font-size="8">Max model: <tspan fill="#f0c040" font-weight="600">${(m.totalMemTB*1024/2).toFixed(0)} B</tspan> params</text>
-            <text x="400" y="94" fill="#778" font-size="8">Mem: <tspan fill="#b080e0" font-weight="600">${m.totalMemTB.toFixed(1)} TB</tspan></text>
-            <!-- Footer -->
-            <text x="100" y="128" fill="#556" font-size="8" font-style="italic">Scaling path: join cluster of up to ${maxCs} nodes</text>
-            <text x="100" y="144" fill="#556" font-size="8" font-style="italic">→ TP-${Math.min(maxCs,8)}/PP-${Math.min(Math.ceil(maxCs/8),4)} → ${(m.totalMemTB * maxCs * 1024 / 2 / 1e3).toFixed(0)}T params max</text>
-        </svg></div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px">
+            Single hex-cell operating independently. Can join cluster of up to ${maxCs} cells for larger models.
+        </div>
+        <div class="metric-row"><span class="metric-label">Max model (FP16)</span><span class="metric-value">${(m.totalMemTB*1024/2).toFixed(0)} B params</span></div>
+        <div class="metric-row"><span class="metric-label">Memory</span><span class="metric-value purple">${m.totalMemTB.toFixed(1)} TB</span></div>
+        <div class="metric-row"><span class="metric-label">Scaling path</span><span class="metric-value">→ ${maxCs} cells → ${(m.totalMemTB * maxCs * 1024 / 2 / 1e3).toFixed(0)}T params</span></div>
     </div>
     `}
 
     <div class="card">
         <div class="card-header"><span class="card-title">Fault Tolerance</span></div>
-        <div class="metric-row"><span class="metric-label">Redundancy mode</span><span class="metric-value">${cs > 1 ? 'N+1 hot spare' : 'Single-string'}</span></div>
-        <div class="metric-row"><span class="metric-label">Checkpoint interval</span><span class="metric-value">${cs > 1 ? '60s (ISL snapshot)' : '300s (ground dump)'}</span></div>
+        <div class="metric-row"><span class="metric-label">Redundancy mode</span><span class="metric-value">${cs > 1 ? '2× primary + N-2 edge' : 'Single-string'}</span></div>
+        <div class="metric-row"><span class="metric-label">Hex-cell loss impact</span><span class="metric-value orbital">${(faultToleranceLoss*100).toFixed(1)}% capacity per cell</span></div>
+        <div class="metric-row"><span class="metric-label">Control plane failure</span><span class="metric-value">${cs > 1 ? 'Requires both primaries lost' : 'Single point'}</span></div>
+        <div class="metric-row"><span class="metric-label">Checkpoint</span><span class="metric-value">${cs > 1 ? '60s (ISL snapshot to peer)' : '300s (ground dump)'}</span></div>
         <div class="metric-row"><span class="metric-label">SEU scrubbing</span><span class="metric-value orbital">ECC + periodic resync</span></div>
         <div class="metric-row"><span class="metric-label">ORU hot-swap</span><span class="metric-value">${cfg.gpuPowerW > 500 ? '✓ Field-replaceable' : '✗ Soldered'}</span></div>
-        <div class="metric-row"><span class="metric-label">Graceful degrade</span><span class="metric-value">Reduce batch size on ORU failure</span></div>
         <div class="metric-row"><span class="metric-label">SEU rate (LEO)</span><span class="metric-value warning">~10 upsets/device/day</span></div>
     </div>
 
     <div class="card">
         <div class="card-header"><span class="card-title">Scheduling & SLA</span></div>
-        <div class="metric-row"><span class="metric-label">Scheduler</span><span class="metric-value">${cs > 1 ? 'Distributed (Raft consensus)' : 'Local FIFO + priority'}</span></div>
+        <div class="metric-row"><span class="metric-label">Scheduler</span><span class="metric-value">${cs > 1 ? 'Raft consensus (2 primaries)' : 'Local FIFO + priority'}</span></div>
         <div class="metric-row"><span class="metric-label">Batch formation</span><span class="metric-value">Continuous batching (vLLM-style)</span></div>
-        <div class="metric-row"><span class="metric-label">Preemption</span><span class="metric-value">${cs > 1 ? '✓ Swap to context node' : '✓ Recompute'}</span></div>
+        <div class="metric-row"><span class="metric-label">Preemption</span><span class="metric-value">${cs > 1 ? '✓ Swap to context cell' : '✓ Recompute'}</span></div>
         <div class="metric-row"><span class="metric-label">SLA target</span><span class="metric-value orbital">99.9% (8.76 hr/yr downtime)</span></div>
         <div class="metric-row"><span class="metric-label">TTFT budget</span><span class="metric-value">${((2*70e9*cfg.seqLen/(m.effectiveTFLOPS*1e12))*1000 + m.totalLatencyMs).toFixed(0)} ms (70B)</span></div>
         <div class="metric-row"><span class="metric-label">TPS target</span><span class="metric-value accent">≥ 30 tok/s per stream</span></div>
@@ -2523,7 +2591,7 @@ scene.add(sunMesh);
 const MAT = {
     pv:      new THREE.MeshStandardMaterial({ color: 0x0c1858, metalness: 0.72, roughness: 0.12, emissive: 0x061040, emissiveIntensity: 0.5 }),
     pvBack:  new THREE.MeshStandardMaterial({ color: 0xf5f5fa, roughness: 0.7, metalness: 0.05, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }),
-    rad:     new THREE.MeshStandardMaterial({ color: 0xf8f8ff, roughness: 0.25, metalness: 0.08, emissive: 0x556070, emissiveIntensity: 0.7 }),
+    rad:     new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.18, metalness: 0.04, emissive: 0x889aac, emissiveIntensity: 0.9 }),
     oru:     new THREE.MeshStandardMaterial({ color: 0x353840, roughness: 0.65, metalness: 0.3, emissive: 0x060808, emissiveIntensity: 0.15 }),
     hub:     new THREE.MeshStandardMaterial({ color: 0x2a2a30, roughness: 0.5, metalness: 0.5, emissive: 0x040406, emissiveIntensity: 0.15 }),
     truss:   new THREE.MeshStandardMaterial({ color: 0xc5c5cc, roughness: 0.4, metalness: 0.6, emissive: 0x0a0a0e, emissiveIntensity: 0.1 }),
@@ -2587,8 +2655,8 @@ const PART_DB = {
     "cryo_radiator": { label: "77K Intercept Radiator", desc: "Low-ε panel at deep-space end." },
     "dragonfly_link": { label: "Dragonfly ISL Terminal", desc: "1550nm laser, 100+ Gbps, μrad gimbal pointing. Dragonfly topology." },
     "structure": { label: "Structural Stiffening", desc: "CFRP longerons + Al battens + Ti root blocks + eddy-current dampers." },
-    "cluster_node": { label: "Cluster Node", desc: null },  // dynamic — filled by showPartInfo
-    "scale_ref": { label: "Starlink V2 mini — Scale Reference", desc: "SpaceX Starlink V2 mini satellite shown for scale comparison.\n\nDimensions: 7.0m wingspan × 3.5m body × 0.05m thick\nMass: ~800 kg\nPower: ~2.5 kW (solar)\nOrbit: 540-570 km, 53° inclination\nLaunch: Falcon 9 (21 per launch)\nPayload: Ka/Ku-band phased array, laser ISL\n\nThe Starlink is shown at 1:1 scale relative to the orbital compute station. Note the dramatic size difference — DP2 is ~20× the solar area, DP3 is ~200× the solar area of a single Starlink." },
+    "cluster_node": { label: "Hex-Cell Node", desc: null },  // dynamic — filled by showPartInfo
+    "scale_ref": { label: "Starlink V2 mini — Scale Reference", desc: "SpaceX Starlink V2 mini satellite shown at 1:1 scale.\n\nDimensions: 7.0m wingspan × 3.5m body × 0.05m thick\nMass: ~800 kg\nPower: ~2.5 kW (solar)\nOrbit: 540-570 km, 53° inclination\nLaunch: Falcon 9 (21 per launch) or Starship (60+ per launch)\nPayload: Ka/Ku-band phased array + laser ISL\nLaser ISL: ~10 Gbps optical, 1550 nm\nDesign life: 5-7 years\n\nThe bus bottom IS the radiator — no separate thermal system. This is the heritage design for the hex-cell architecture: scale up the self-contained concept.\n\nSize comparison: DP1 ≈ 7× solar area, DP2 ≈ 29× solar area, DP3 ≈ 168× solar area of a single Starlink." },
 };
 
 // =====================================================================
@@ -3548,67 +3616,105 @@ function buildDP3(cfg) {
 function buildCluster(cfgKey) {
     const baseCfg = CONFIGS[cfgKey.replace('_CLUSTER','')];
     const nodeCount = baseCfg.clusterSize || 4;
-    const edgeCount = nodeCount - 1;
-    const clusterR = baseCfg.isDP3 ? 300 : 80;
+    const hexR = baseCfg.isDP3 ? 200 : 60;  // distance between adjacent hex-cells
 
     // ================================================================
-    // DRAGONFLY TOPOLOGY (Kim, Dally, Abts 2008) — ring-of-groups layout
+    // HEX-CELL BRANCHING TOPOLOGY
     //
-    // Groups arranged in a ring (like the reference diagram).
-    // Each group is a small cluster of nodes placed close together.
-    // Center router node sits at the origin with hub links to each group.
+    // Each node ("hex-cell") is a self-contained unit: own solar, compute,
+    // radiator. The cluster grows by budding new cells off primary nodes.
     //
-    // DP2 (5 nodes): 1 center + 2 groups of 2
-    // DP3 (10 nodes): 1 center + 3 groups of 3
+    // Layout matches the sticky note sketch:
+    //   - 2 redundant PRIMARY nodes at center (fault tolerance)
+    //   - Edge nodes branch outward from the primaries
+    //   - Each hex-cell is identical hardware, differentiated by role
+    //   - Branching pattern ≈ crystal growth / organic topology
     //
-    // Role assignment per group:
-    //   Center: ROUTING (orange) — scheduler, load balancer, ground antenna
-    //   Group 1: PREFILL-biased (blue) — compute-heavy prompt processing
-    //   Group 2: DECODE-biased (red) — memory-BW-heavy token generation
-    //   Group 3: CONTEXT-biased (green) — KV cache storage & serving
+    // DP2 (5 nodes): 2 primary + 3 edge (branching off)
+    // DP3 (10 nodes): 2 primary + 8 edge (deeper branching)
+    //
+    // Dragonfly wiring overlaid on physical hex-cell positions:
+    //   - Intra-branch: full mesh within branch (cyan)
+    //   - Cross-branch: sparse global links (orange)
+    //   - Primary spine: thick link between 2 primaries (gold)
+    //
+    // Role assignment:
+    //   Primary 1: ROUTING + PREFILL (handles ingress, prompt processing)
+    //   Primary 2: ROUTING + DECODE (handles egress, token generation)
+    //   Edge cells: specialized by branch (prefill / decode / context / KV-cache)
     // ================================================================
-    const groupSize = baseCfg.isDP3 ? 3 : 2;
-    const numGroups = Math.ceil(edgeCount / groupSize);
 
-    // Group role assignments — each group specializes differently
-    const groupRoles = ['prefill', 'decode', 'context', 'prefill', 'decode'];
-    const groupRoleLabels = ['PREFILL', 'DECODE', 'CONTEXT', 'PREFILL-2', 'DECODE-2'];
+    // Branching positions — organic layout like the sticky note sketch
+    // Two primaries offset from center, edges branch outward
+    const positions = [];
+    const nodeRoles = [];
+    const nodeGroupIdx = [];  // which branch
+    const nodePrimary = [];   // is this a primary node?
 
-    // Build groups of node indices (1-based, 0 = center)
-    const groups = [];
-    for (let g = 0; g < numGroups; g++) {
-        const grp = [];
-        for (let i = 0; i < groupSize && g * groupSize + i < edgeCount; i++) {
-            grp.push(g * groupSize + i + 1);
-        }
-        groups.push(grp);
-    }
+    const spacing = hexR;
+    const primaryGap = spacing * 0.6;
 
-    // Position nodes: groups arranged in a ring, nodes within each group clustered together
-    // This creates the visual ring-of-groups pattern from the reference image
-    const positions = [[0, 0, 0]];  // center node at origin
-    const nodeRoles = ['routing'];   // center = routing
-    const nodeGroupIdx = [-1];       // center has no group
+    // Primary nodes — 2 redundant cores offset from center
+    positions.push([-primaryGap/2, 0, 0]);  // Primary 1 (left)
+    nodeRoles.push('routing');
+    nodeGroupIdx.push(-1);
+    nodePrimary.push(true);
 
-    const groupSpread = baseCfg.isDP3 ? 60 : 25;  // how far apart nodes within a group are
+    positions.push([primaryGap/2, 0, 0]);   // Primary 2 (right)
+    nodeRoles.push('routing');
+    nodeGroupIdx.push(-1);
+    nodePrimary.push(true);
 
-    for (let g = 0; g < numGroups; g++) {
-        const groupAngle = (2 * Math.PI * g) / numGroups;  // group center angle on ring
-        const groupCenterX = clusterR * Math.cos(groupAngle);
-        const groupCenterZ = clusterR * Math.sin(groupAngle);
+    // Edge nodes branch outward from the primaries in an organic pattern
+    // Branching angles and distances create the sticky-note crystal growth look
+    const edgeCount = nodeCount - 2;
+    const branchRoles = ['prefill', 'decode', 'context', 'KV-cache-server', 'prefill', 'decode', 'context', 'scheduler'];
+    const branchLabels = ['PREFILL', 'DECODE', 'CONTEXT', 'KV-CACHE', 'PREFILL-2', 'DECODE-2', 'CONTEXT-2', 'SCHEDULER'];
 
-        for (let i = 0; i < groups[g].length; i++) {
-            // Spread nodes within the group perpendicular to the radial direction
-            const perpAngle = groupAngle + Math.PI / 2;
-            const offset = (i - (groups[g].length - 1) / 2) * groupSpread;
-            const x = groupCenterX + Math.cos(perpAngle) * offset;
-            const z = groupCenterZ + Math.sin(perpAngle) * offset;
-            // Slight Y offset per node for visual depth
-            const y = (i - 1) * (baseCfg.isDP3 ? 15 : 5);
-
+    if (baseCfg.isDP3) {
+        // DP3: 10 nodes → 2 primary + 8 edge in branching pattern
+        // Branch off primary 1 (left side) — 4 nodes
+        const b1 = [
+            { angle: Math.PI * 0.75,  dist: 1.0, parent: 0 },  // upper-left
+            { angle: Math.PI * 1.1,   dist: 1.0, parent: 0 },  // lower-left
+            { angle: Math.PI * 0.85,  dist: 1.9, parent: 0 },  // far upper-left (branches off first)
+            { angle: Math.PI * 1.2,   dist: 1.8, parent: 0 },  // far lower-left
+        ];
+        // Branch off primary 2 (right side) — 4 nodes
+        const b2 = [
+            { angle: -Math.PI * 0.15, dist: 1.0, parent: 1 },  // upper-right
+            { angle: -Math.PI * 0.45, dist: 1.0, parent: 1 },  // mid-right
+            { angle: Math.PI * 0.1,   dist: 1.8, parent: 1 },  // far upper-right
+            { angle: -Math.PI * 0.55, dist: 1.7, parent: 1 },  // far lower-right
+        ];
+        const branches = [...b1, ...b2];
+        for (let i = 0; i < branches.length; i++) {
+            const b = branches[i];
+            const parentPos = positions[b.parent];
+            const x = parentPos[0] + Math.cos(b.angle) * spacing * b.dist;
+            const z = parentPos[2] + Math.sin(b.angle) * spacing * b.dist;
+            const y = (Math.random() - 0.5) * 20;  // slight Y scatter for depth
             positions.push([x, y, z]);
-            nodeRoles.push(groupRoles[g % groupRoles.length]);
-            nodeGroupIdx.push(g);
+            nodeRoles.push(branchRoles[i % branchRoles.length]);
+            nodeGroupIdx.push(i < 4 ? 0 : 1);  // branch 0 = left primary, branch 1 = right primary
+            nodePrimary.push(false);
+        }
+    } else {
+        // DP2: 5 nodes → 2 primary + 3 edge
+        const branches = [
+            { angle: Math.PI * 0.8,  dist: 1.0, parent: 0 },   // upper-left off primary 1
+            { angle: -Math.PI * 0.2, dist: 1.0, parent: 1 },   // upper-right off primary 2
+            { angle: -Math.PI * 0.7, dist: 1.1, parent: 1 },   // lower-right off primary 2
+        ];
+        for (let i = 0; i < branches.length; i++) {
+            const b = branches[i];
+            const parentPos = positions[b.parent];
+            const x = parentPos[0] + Math.cos(b.angle) * spacing * b.dist;
+            const z = parentPos[2] + Math.sin(b.angle) * spacing * b.dist;
+            positions.push([x, 0, z]);
+            nodeRoles.push(branchRoles[i % branchRoles.length]);
+            nodeGroupIdx.push(i < 1 ? 0 : 1);
+            nodePrimary.push(false);
         }
     }
 
@@ -3617,23 +3723,32 @@ function buildCluster(cfgKey) {
     for (let n = 0; n < positions.length; n++) {
         const [x, y, z] = positions[n];
         const role = nodeRoles[n];
-        const isCenter = (n === 0);
+        const isPrimary = nodePrimary[n];
         const gIdx = nodeGroupIdx[n];
-        const groupLabel = isCenter ? 'CENTER (Router)' : `Group ${gIdx + 1} — ${groupRoleLabels[gIdx % groupRoleLabels.length]}`;
+        const nodeLabel = isPrimary
+            ? `Primary ${n + 1} — ROUTING (redundant core)`
+            : `Hex-Cell ${n + 1} — ${branchLabels[(n - 2) % branchLabels.length]}`;
 
         const group = new THREE.Group();
         group.position.set(x, y, z);
         group.userData = {
             partType: "cluster_node",
-            label: `Node ${n + 1} — ${groupLabel}`,
+            label: `Node ${n + 1} — ${nodeLabel}`,
             clusterRole: role,
             nodeIndex: n,
-            groupIndex: gIdx
+            groupIndex: gIdx,
+            isPrimary: isPrimary
         };
         stationGroup = group;
 
-        // Build with role-specific ORU color bias
-        const nodeCfg = { ...baseCfg, oruPrimaryRole: role };
+        // Primary nodes get mixed role (routing + compute), edges specialize
+        const nodeCfg = { ...baseCfg };
+        if (isPrimary) {
+            // Primaries: 40% routing, 30% prefill, 20% decode, 10% context
+            nodeCfg.oruPrimaryRole = n === 0 ? 'prefill' : 'decode';
+        } else {
+            nodeCfg.oruPrimaryRole = role;
+        }
         if (baseCfg.isDP3) buildDP3(nodeCfg); else buildDP2(nodeCfg);
         saved.add(group);
     }
@@ -3641,17 +3756,17 @@ function buildCluster(cfgKey) {
 
     // ── ISL LINK RENDERING ──
     const linkR = baseCfg.isDP3 ? 1.5 : 0.5;
-    const intraLinkMat = new THREE.MeshStandardMaterial({
+    const spineLinkMat = new THREE.MeshStandardMaterial({
+        color: 0xffdd00, transparent: true, opacity: 0.7,
+        emissive: 0xffaa00, emissiveIntensity: 0.5
+    });
+    const branchLinkMat = new THREE.MeshStandardMaterial({
         color: 0x00ffcc, transparent: true, opacity: 0.5,
         emissive: 0x00ffcc, emissiveIntensity: 0.3
     });
-    const globalLinkMat = new THREE.MeshStandardMaterial({
-        color: 0xff8800, transparent: true, opacity: 0.45,
-        emissive: 0xff6600, emissiveIntensity: 0.3
-    });
-    const hubLinkMat = new THREE.MeshStandardMaterial({
-        color: 0xffcc00, transparent: true, opacity: 0.55,
-        emissive: 0xffaa00, emissiveIntensity: 0.35
+    const crossLinkMat = new THREE.MeshStandardMaterial({
+        color: 0xff8800, transparent: true, opacity: 0.4,
+        emissive: 0xff6600, emissiveIntensity: 0.25
     });
 
     function addLink(i, j, mat, r, label) {
@@ -3667,50 +3782,62 @@ function buildCluster(cfgKey) {
         addPart(mesh, "dragonfly_link", label);
     }
 
-    // 1. Hub links: center node → first node (router) in each group (gold, thick)
-    for (let g = 0; g < groups.length; g++) {
-        addLink(0, groups[g][0], hubLinkMat, linkR,
-            `Hub Link: Center ↔ Group ${g + 1} [${groupRoleLabels[g % groupRoleLabels.length]}]`);
+    // 1. Primary spine: thick gold link between the 2 redundant primary nodes
+    addLink(0, 1, spineLinkMat, linkR * 1.5, 'Primary Spine: Core 1 ↔ Core 2 (redundant link)');
+
+    // 2. Branch links: each edge node connects to its parent primary (cyan)
+    for (let n = 2; n < positions.length; n++) {
+        const parentIdx = nodeGroupIdx[n] === 0 ? 0 : 1;
+        addLink(parentIdx, n, branchLinkMat, linkR,
+            `Branch Link: Primary ${parentIdx + 1} ↔ Hex-Cell ${n + 1} [${branchLabels[(n-2) % branchLabels.length]}]`);
     }
 
-    // 2. Intra-group links: full mesh within each group (cyan)
-    for (let g = 0; g < groups.length; g++) {
-        const grp = groups[g];
-        for (let a = 0; a < grp.length; a++) {
-            for (let b = a + 1; b < grp.length; b++) {
-                addLink(grp[a], grp[b], intraLinkMat, linkR * 0.6,
-                    `Intra-Group ${g + 1}: Node ${grp[a] + 1} ↔ Node ${grp[b] + 1}`);
+    // 3. Cross-branch links: sparse global links between branches (orange)
+    // Connect one node from each branch for inter-branch communication
+    const branch0 = [], branch1 = [];
+    for (let n = 2; n < positions.length; n++) {
+        if (nodeGroupIdx[n] === 0) branch0.push(n);
+        else branch1.push(n);
+    }
+    const crossCount = Math.min(branch0.length, branch1.length, baseCfg.isDP3 ? 3 : 1);
+    for (let c = 0; c < crossCount; c++) {
+        addLink(branch0[c % branch0.length], branch1[c % branch1.length], crossLinkMat, linkR * 0.5,
+            `Cross-Branch Link: Branch A[${c}] ↔ Branch B[${c}]`);
+    }
+
+    // 4. Intra-branch mesh: connect neighboring edge nodes within same branch (thin cyan)
+    [branch0, branch1].forEach((branch, bi) => {
+        for (let a = 0; a < branch.length; a++) {
+            for (let b = a + 1; b < branch.length; b++) {
+                // Only connect if they're close enough (immediate neighbors in the branch)
+                const [xa,,za] = positions[branch[a]], [xb,,zb] = positions[branch[b]];
+                const dist = Math.sqrt((xa-xb)**2 + (za-zb)**2);
+                if (dist < spacing * 1.5) {
+                    addLink(branch[a], branch[b], branchLinkMat, linkR * 0.4,
+                        `Intra-Branch ${bi+1}: Cell ${branch[a]+1} ↔ Cell ${branch[b]+1}`);
+                }
             }
         }
-    }
-
-    // 3. Global links: one link between each pair of groups (orange)
-    //    Round-robin: node[k] in group A ↔ node[k] in group B
-    for (let ga = 0; ga < groups.length; ga++) {
-        for (let gb = ga + 1; gb < groups.length; gb++) {
-            const k = (ga + gb) % Math.min(groups[ga].length, groups[gb].length);
-            const nodeA = groups[ga][Math.min(k, groups[ga].length - 1)];
-            const nodeB = groups[gb][Math.min(k, groups[gb].length - 1)];
-            addLink(nodeA, nodeB, globalLinkMat, linkR * 0.45,
-                `Global Link: Group ${ga + 1} ↔ Group ${gb + 1}`);
-        }
-    }
-
-    // 4. Add group boundary rings (subtle visual grouping — like the reference diagram)
-    const ringMat = new THREE.MeshStandardMaterial({
-        color: 0x334455, transparent: true, opacity: 0.08,
-        emissive: 0x112233, emissiveIntensity: 0.1, side: THREE.DoubleSide
     });
-    for (let g = 0; g < numGroups; g++) {
-        const groupAngle = (2 * Math.PI * g) / numGroups;
-        const cx = clusterR * Math.cos(groupAngle);
-        const cz = clusterR * Math.sin(groupAngle);
-        const ringR = groupSpread * (groups[g].length) * 0.8;
-        const ringGeo = new THREE.RingGeometry(ringR * 0.3, ringR, 24);
-        const ring = new THREE.Mesh(ringGeo, ringMat);
-        ring.position.set(cx, -2, cz);
-        ring.rotation.x = -Math.PI / 2;
-        stationGroup.add(ring);
+
+    // 5. Hex-cell boundary indicators — subtle hexagonal outlines around each node
+    const hexOutlineMat = new THREE.MeshStandardMaterial({
+        color: 0x445566, transparent: true, opacity: 0.06,
+        emissive: 0x223344, emissiveIntensity: 0.08, side: THREE.DoubleSide
+    });
+    const primaryOutlineMat = new THREE.MeshStandardMaterial({
+        color: 0xffcc00, transparent: true, opacity: 0.08,
+        emissive: 0x665500, emissiveIntensity: 0.12, side: THREE.DoubleSide
+    });
+    for (let n = 0; n < positions.length; n++) {
+        const [x, y, z] = positions[n];
+        const outlineR = (baseCfg.isDP3 ? 80 : 25);
+        // Use CircleGeometry with 6 sides for hexagonal outline
+        const hexGeo = new THREE.RingGeometry(outlineR * 0.6, outlineR, 6);
+        const hex = new THREE.Mesh(hexGeo, nodePrimary[n] ? primaryOutlineMat : hexOutlineMat);
+        hex.position.set(x, (y || 0) - 3, z);
+        hex.rotation.x = -Math.PI / 2;
+        stationGroup.add(hex);
     }
 }
 
@@ -3785,10 +3912,10 @@ function switchConfig(key) {
              ['#3373e6','PREFILL',secondaryPct,'Prompt processing (compute-bound)'],
              ['#33bf4d','CONTEXT',tertiaryPct,'KV-cache storage']];
         if (isCluster) {
-            roles.push(['#ffaa00','ROUTING','center','Scheduler, load balancer, ground link']);
+            roles.push(['#ffaa00','ROUTING','primary','Primary hex-cell routing + scheduling']);
         }
 
-        legend.innerHTML = `<div class="legend-title">ORU ROLES ${isCentralized ? '(centralized)' : isCluster ? '(cluster — per node bias)' : ''}</div>` +
+        legend.innerHTML = `<div class="legend-title">ORU ROLES ${isCentralized ? '(centralized)' : isCluster ? '(hex-cell — per cell bias)' : ''}</div>` +
             roles.map(([c,n,p,d]) => `<div class="legend-item"><span class="legend-dot" style="background:${c}"></span>${n} <span class="legend-pct" title="${d}">${p}</span></div>`).join('');
 
         // Hide legend for centralized DP2B (no ORUs on radiator)
@@ -3867,34 +3994,38 @@ function showPartInfo(partType, label) {
     let clusterExtra = '';
     if (partType === 'cluster_node') {
         const roleDescriptions = {
-            'prefill': 'Handles prompt ingestion and KV-cache generation for incoming requests.',
-            'decode': 'Runs autoregressive token generation from pre-filled KV-cache.',
-            'context': 'Stores and serves long-context KV-cache segments across the cluster.',
-            'routing': 'Routes inference requests to optimal nodes based on load and locality.',
-            'KV-cache-server': 'Dedicated KV-cache storage node with high-bandwidth memory.',
-            'hub-prefill': 'Central hub node handling prefill aggregation and dispatch.',
-            'scheduler': 'Cluster-wide job scheduler and resource allocator.',
-            'inference': 'General-purpose inference node.',
-            'compute': 'General compute node.'
+            'prefill': 'Edge hex-cell handling compute-bound prompt processing and KV-cache generation.',
+            'decode': 'Edge hex-cell running memory-BW-bound autoregressive token generation.',
+            'context': 'Edge hex-cell storing and serving long-context KV-cache segments across the cluster.',
+            'routing': 'Primary hex-cell routing inference requests and balancing load across edge cells.',
+            'KV-cache-server': 'Edge hex-cell acting as dedicated KV-cache pool with high-bandwidth memory.',
+            'hub-prefill': 'Primary hex-cell handling prefill aggregation and dispatch.',
+            'scheduler': 'Primary hex-cell running cluster-wide job scheduler and resource allocator.',
+            'inference': 'General-purpose inference hex-cell.',
+            'compute': 'General compute hex-cell.'
         };
         // Extract role from label
         const roleParts = label.match(/— (.+)/);
         const role = roleParts ? roleParts[1].toLowerCase() : 'compute';
-        desc = roleDescriptions[role] || `Cluster node running ${role} workload.`;
+        const isPrimary = label.includes('Primary');
+        desc = roleDescriptions[role] || `Hex-cell running ${role} workload.`;
         const tflops = m.tflopsEff || 0;
         const mem = m.totalMemTB || 0;
         clusterExtra = `
-            <h3>Node Resources</h3>
+            <h3>Hex-Cell Resources</h3>
+            <div class="metric-row"><span class="metric-label">Type</span><span class="metric-value ${isPrimary ? 'warning' : 'orbital'}">${isPrimary ? '⬡ PRIMARY' : '⬡ EDGE'}</span></div>
             <div class="metric-row"><span class="metric-label">Role</span><span class="metric-value">${role.toUpperCase()}</span></div>
             <div class="metric-row"><span class="metric-label">TFLOPS (eff)</span><span class="metric-value">${tflops.toLocaleString()}</span></div>
             <div class="metric-row"><span class="metric-label">Memory</span><span class="metric-value">${mem.toFixed(1)} TB</span></div>
             <div class="metric-row"><span class="metric-label">Bus power</span><span class="metric-value">${cfg.busPwr} kW</span></div>
+            <div class="metric-row"><span class="metric-label">Solar area</span><span class="metric-value">${cfg.solarM2} m²</span></div>
+            <div class="metric-row"><span class="metric-label">Radiator area</span><span class="metric-value">${cfg.radM2} m²</span></div>
             <div class="metric-row"><span class="metric-label">ISL bandwidth</span><span class="metric-value">${cfg.islRateGbps * cfg.islCount} Gbps</span></div>
-            <h3>Cluster Context</h3>
+            <h3>Hex-Cell Cluster</h3>
             <div class="metric-row"><span class="metric-label">Topology</span><span class="metric-value">${cfg.clusterTopology}</span></div>
-            <div class="metric-row"><span class="metric-label">Cluster size</span><span class="metric-value">${cfg.clusterSize} nodes</span></div>
-            <div class="metric-row"><span class="metric-label">Tensor parallel</span><span class="metric-value">${cfg.tensorParallel}-way</span></div>
-            <div class="metric-row"><span class="metric-label">Pipeline parallel</span><span class="metric-value">${cfg.pipelineParallel}-way</span></div>
+            <div class="metric-row"><span class="metric-label">Cluster size</span><span class="metric-value">${cfg.clusterSize} hex-cells</span></div>
+            <div class="metric-row"><span class="metric-label">Redundancy</span><span class="metric-value">${isPrimary ? '2× primary (N+1)' : 'Edge — replaceable'}</span></div>
+            <div class="metric-row"><span class="metric-label">Fault impact</span><span class="metric-value">${isPrimary ? 'Failover to other primary' : `Lose ${(100/cfg.clusterSize).toFixed(1)}% capacity`}</span></div>
         `;
     }
     // Extract ORU role from label (e.g., "ORU [3,5] — DECODE")
@@ -4118,7 +4249,7 @@ table.cmp tr:hover{background:#151d28}
         const c = captures[key];
         html += `<div class="img-card"><img src="${c.imgData}" alt="${key}">
 <div class="caption">${key}<span class="badge b-cl">CLUSTER</span></div>
-<div class="sub">${c.cfg.clusterSize}-node ${c.cfg.clusterTopology}</div></div>`;
+<div class="sub">${c.cfg.clusterSize}-cell ${c.cfg.clusterTopology}</div></div>`;
     }
     html += `</div>`;
 
@@ -4211,7 +4342,7 @@ table.cmp tr:hover{background:#151d28}
         ['Ground Link (Gbps)', k => captures[k].cfg.groundLinkGbps],
         ['Ground Stations', k => captures[k].cfg.groundStations],
         ['Contact Fraction', k => fmt(captures[k].cfg.contactFraction,2)],
-        ['Cluster Size', k => captures[k].cfg.clusterSize],
+        ['Hex-Cell Count', k => captures[k].cfg.clusterSize],
         ['Topology', k => captures[k].cfg.clusterTopology],
         ['Tensor Parallel', k => captures[k].cfg.tensorParallel],
         ['Pipeline Parallel', k => captures[k].cfg.pipelineParallel],
@@ -4226,7 +4357,7 @@ table.cmp tr:hover{background:#151d28}
 <tr><th>Part Type</th>${allConfigs.map(k => `<th>${k}</th>`).join('')}</tr>`;
     const allPartTypes = new Set();
     allConfigs.forEach(k => Object.keys(captures[k].partGroups).forEach(t => allPartTypes.add(t)));
-    const ptNames = {pv_wing:'Solar Arrays',radiator:'Radiators',oru:'ORUs/Compute',spine:'Spine',structure:'Structure',dragonfly_link:'ISL Links',cryo_section:'Cryogenic',cryo_radiator:'Cryo Rad',hub:'Bus/Hub',cluster_node:'Cluster Nodes'};
+    const ptNames = {pv_wing:'Solar Arrays',radiator:'Radiators',oru:'ORUs/Compute',spine:'Spine',structure:'Structure',dragonfly_link:'ISL Links',cryo_section:'Cryogenic',cryo_radiator:'Cryo Rad',hub:'Bus/Hub',cluster_node:'Hex-Cells'};
     for (const pt of allPartTypes) {
         html += `<tr><td>${ptNames[pt]||pt}</td>`;
         for (const k of allConfigs) {
