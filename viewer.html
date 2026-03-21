@@ -3266,10 +3266,10 @@ function buildDP3(cfg) {
     //   Photonic compute is in 4K cryo section, NOT on radiator
     //
     // ELECTRICAL (30m spine):
-    //   SUN → [PV at +Y=15m] → [Spine] → [Radiator XZ-plane at Y=-10m]
-    //   Radiator is a FLAT panel in XZ plane (normal ±Y), same as DP2
-    //   ORUs on -Y face (deep space facing)
-    //   No cryo section
+    //   SUN → [PV at +Y=15m] → [Spine] → [Radiator YZ-plane at Y=-10m]
+    //   Radiator is a VERTICAL WALL in YZ plane (normal ±X), same as photonic
+    //   Both ±X faces radiate to space (perpendicular to sun in dawn-dusk SSO)
+    //   ORUs on +X face, no cryo section
     // ================================================================
     const halfSpine = cfg.spineLen / 2;
 
@@ -3513,78 +3513,88 @@ function buildDP3(cfg) {
 
     } else {
         // ================================================================
-        // DP3B ELECTRICAL — Radiator in XZ plane at -Y end (same layout as DP2)
-        // Normal ±Y. Span along X = radPanelSpan, chord along Z = radPanelChord
-        // ORUs on -Y face (deep space facing)
-        // No cryo section
+        // DP3B ELECTRICAL — Radiator in YZ plane (vertical thermal wall)
+        // Same orientation as DP3 photonic — perpendicular to sun vector
+        //
+        // Why vertical wall, not flat like DP2:
+        //   1. Zero direct solar absorption (normal ±X, sun along +Y)
+        //   2. Both ±X faces radiate to deep space → ~1.8× sidedness
+        //   3. Zero mutual view factor with horizontal PV wings
+        //   4. Dawn-dusk SSO: sun always edge-on to wall
+        //
+        // DP2 uses flat XZ because it's small (no spine). DP3B has a spine,
+        // so the vertical wall is strictly better thermally.
+        //
+        // Normal ±X. Height along Y = radPanelChord, Width along Z = radPanelSpan
+        // ORUs on +X face (outward), -X face radiates freely
+        // No cryo section (room-temp compute)
         // ================================================================
-        const rW = radPanelSpan;   // ~55m wide
-        const rD = radPanelChord;  // ~22m deep
+        const rH = radPanelChord;  // ~18m (Y extent, height along spine)
+        const rW = radPanelSpan;   // ~46m (Z extent, width)
 
-        // Main radiator panel (thin slab in XZ plane)
-        const rd = new THREE.Mesh(box(rW, 0.015, rD), MAT.rad);
+        // Main radiator panel (thin slab in YZ plane — 15mm thick)
+        const radThick = 0.015;
+        const rd = new THREE.Mesh(box(radThick, rH, rW), MAT.rad);
         rd.position.set(0, radY, 0);
-        addPart(rd, "radiator", `Main Radiator (370K) — ${Math.round(cfg.radM2)}m² XZ-plane`);
+        addPart(rd, "radiator", `Main Radiator (370K) — ${Math.round(cfg.radM2)}m² YZ-plane [${rH.toFixed(1)}m×${rW.toFixed(1)}m]`);
 
-        // Heat pipe channels on radiator surface (6 lines along Z)
+        // Heat pipe channel lines on +X face (6 lines along Y, spaced along Z)
         for (let i = 0; i < 6; i++) {
-            const xPos = -rW / 2 + rW * (i + 1) / 7;
-            const pLine = new THREE.Mesh(box(0.01, 0.004, rD * 0.9), pipeMat);
-            pLine.position.set(xPos, radY + 0.015 / 2 + 0.003, 0);
+            const zPos = -rW / 2 + rW * (i + 1) / 7;
+            const pLine = new THREE.Mesh(box(0.004, rH * 0.92, 0.01), pipeMat);
+            pLine.position.set(radThick / 2 + 0.003, radY, zPos);
             stationGroup.add(pLine);
         }
 
-        // Radiator stiffening longerons (2 at ±25% chord, running full span)
+        // Radiator stiffening — 2 longerons at ±25% of Z extent on -X face
         for (const frac of [-0.25, 0.25]) {
-            const lg = new THREE.Mesh(box(rW * 0.95, 0.06, 0.06), MAT.truss);
-            lg.position.set(0, radY - 0.015 / 2 - 0.04, frac * rD);
+            const lg = new THREE.Mesh(box(0.06, rH * 0.95, 0.06), MAT.truss);
+            lg.position.set(-radThick / 2 - 0.04, radY, frac * rW);
             addPart(lg, "structure", "Radiator Longeron");
         }
 
-        // ORU grid on -Y face — biased role colors per Onshape
-        // DP3B: computeKw=1014, gpuCount=3481 (from spreadsheet)
+        // ORU grid on +X face — same layout as photonic but decode-biased
         const oruCount = Math.min(300, Math.floor(cfg.computeKw * 1000 / cfg.gpuPowerW));
         const panelAspect = 2.5;
         const oruCols = Math.max(1, Math.floor(Math.sqrt(oruCount / panelAspect)));
         const oruRows = Math.max(1, Math.floor(oruCount / oruCols));
-        const dispCols = Math.min(oruCols, 20);
-        const dispRows = Math.min(oruRows, 15);
+        const dispCols = Math.min(oruCols, 10);
+        const dispRows = Math.min(oruRows, 25);
 
-        // Size ORUs to fill ~75% of panel (dense grid, clearly visible)
-        const oruDispW = (rW * 0.85) / dispCols;
-        const oruDispD = (rD * 0.85) / dispRows;
-        const oruDispH = 0.08;  // protrusion below radiator
-        const gapW = rW / (dispCols + 1);
-        const gapD = rD / (dispRows + 1);
+        const oruDisplayH = (rH * 0.85) / dispCols;
+        const oruDisplayW = (rW * 0.85) / dispRows;
+        const oruDisplayD = 0.08;
+        const gapH = rH / (dispCols + 1);
+        const gapW2 = rW / (dispRows + 1);
 
         for (let ci = 0; ci < dispCols; ci++) {
             for (let ri = 0; ri < dispRows; ri++) {
-                const ox = -rW / 2 + gapW * (ci + 1);
-                const oz = -rD / 2 + gapD * (ri + 1);
-                const oruY = radY - 0.015 / 2 - oruDispH / 2;
+                const oy = -rH / 2 + gapH * (ci + 1);
+                const oz = -rW / 2 + gapW2 * (ri + 1);
+                const oruX = radThick / 2 + oruDisplayD / 2;
 
                 const oruIdx = ci * dispRows + ri;
-                const role = getORURole(oruIdx, cfg.oruPrimaryRole || 'decode');  // electrical default: decode-biased
+                const role = getORURole(oruIdx, cfg.oruPrimaryRole || 'decode');
 
-                const oru = new THREE.Mesh(box(oruDispW * 0.85, oruDispH, oruDispD * 0.85), role.mat);
-                oru.position.set(ox, oruY, oz);
+                const oru = new THREE.Mesh(box(oruDisplayD, oruDisplayH * 0.82, oruDisplayW * 0.82), role.mat);
+                oru.position.set(oruX, radY + oy, oz);
                 const lbl = `ORU [${ci},${ri}] — ${role.label}`;
                 if (ci === 0 && ri === 0) addPart(oru, "oru", lbl);
                 else { oru.userData = {partType: "oru", label: lbl}; stationGroup.add(oru); partRegistry.push({mesh: oru, partType: "oru", label: lbl, originalMaterial: oru.material}); }
             }
         }
 
-        // Power bus bar along spine (gold, per Onshape)
+        // Power bus bar along spine (gold)
         const bbLen = Math.abs(halfSpine - radY) * 0.8;
         const bb = new THREE.Mesh(box(0.05, bbLen, 0.02),
             new THREE.MeshStandardMaterial({color:0xd4a820,metalness:0.7,roughness:0.3}));
         bb.position.set(0.3, (halfSpine + radY) / 2, 0);
         addPart(bb, "structure", "Power Bus Bar");
 
-        // Loop heat pipe headers along radiator edges
-        for (const hz of [-rD * 0.2, rD * 0.2]) {
-            const lhp = new THREE.Mesh(box(rW * 0.8, 0.04, 0.06), pipeMat);
-            lhp.position.set(0, radY + 0.04, hz);
+        // Loop heat pipe headers along radiator edges (on +X face, running along Z)
+        for (const yOff of [-rH * 0.2, rH * 0.2]) {
+            const lhp = new THREE.Mesh(box(0.06, 0.04, rW * 0.8), pipeMat);
+            lhp.position.set(radThick / 2 + 0.04, radY + yOff, 0);
             addPart(lhp, "structure", "Loop Heat Pipe Header");
         }
     }
