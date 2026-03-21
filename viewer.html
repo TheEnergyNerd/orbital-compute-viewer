@@ -2030,15 +2030,15 @@ q_emit/face = εσT⁴ = <span class="highlight">${m.qEmitPerFace.toFixed(0)} W/
 
 <span class="comment">// Face A — zenith/deep-space (VF_Earth ≈ 0.08)</span>
 q_A = εσT⁴ - α_IR × q_Earth × VF
-    = ${m.qEmitPerFace.toFixed(0)} - 0.92 × 237 × 0.08
-    = ${m.qEmitPerFace.toFixed(0)} - ${(0.92*237*0.08).toFixed(0)} = <span class="highlight">${m.qNetA.toFixed(0)} W/m²</span>
+    = ${m.qEmitPerFace.toFixed(0)} - 0.95 × 237 × 0.08
+    = ${m.qEmitPerFace.toFixed(0)} - ${(0.95*237*0.08).toFixed(0)} = <span class="highlight">${m.qNetA.toFixed(0)} W/m²</span>
 
 <span class="comment">// Face B — nadir/Earth-facing (VF_Earth = 0.35, T_earth = 255K)</span>
 q_B_emit = εσ(T_rad⁴ − T_earth⁴ × VF)
-         = <span class="highlight">${(m.qNetB + 55 + 40).toFixed(0)} W/m²</span>  (net radiative)
-q_albedo = −55 W/m² (solar reflection off Earth)
-q_solar  = −40 W/m² (direct solar leak, edge-on)
-q_B = ${(m.qNetB + 55 + 40).toFixed(0)} − 55 − 40 = <span class="highlight">${m.qNetB.toFixed(0)} W/m²</span>
+         = <span class="highlight">${(m.qNetB + 0.95*55 + 0.95*40).toFixed(0)} W/m²</span>  (net radiative)
+q_albedo = −${(0.95*55).toFixed(0)} W/m² (α_s × 55 W/m² solar albedo)
+q_solar  = −${(0.95*40).toFixed(0)} W/m² (α_s × 40 W/m² direct solar leak)
+q_B = ${(m.qNetB + 0.95*55 + 0.95*40).toFixed(0)} − ${(0.95*55).toFixed(0)} − ${(0.95*40).toFixed(0)} = <span class="highlight">${m.qNetB.toFixed(0)} W/m²</span>
 
 <span class="comment">// Bifacial total (before derating)</span>
 q_ideal = q_A + q_B = ${m.qNetA.toFixed(0)} + ${m.qNetB.toFixed(0)} = ${(m.qNetA + m.qNetB).toFixed(0)} W/m²
