@@ -250,8 +250,8 @@ body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', 
             <button class="config-tab" data-config="T1">T1<span class="sub">Hex GB300</span></button>
             <button class="config-tab active" data-config="DP2">DP2<span class="sub">Vera Rubin</span></button>
             <button class="config-tab" data-config="DP2B">DP2B<span class="sub">VR Hub</span></button>
-            <button class="config-tab" data-config="DP3">DP3<span class="sub">AI7 Photonic</span></button>
-            <button class="config-tab" data-config="DP3B">DP3B<span class="sub">AI7 Electrical</span></button>
+            <button class="config-tab" data-config="DP3">DP3<span class="sub">D3 Photonic</span></button>
+            <button class="config-tab" data-config="DP3B">DP3B<span class="sub">D3 Electrical</span></button>
             <button class="config-tab" data-config="DP2_CLUSTER">Hex-Cell<span class="sub">DP2 ×5</span></button>
             <button class="config-tab" data-config="DP3_CLUSTER">Hex-Cell<span class="sub">DP3 ×10</span></button>
         </div>
@@ -482,13 +482,13 @@ const CONFIGS = {
         batchSize: 32, seqLen: 4096, radHardening: 0.65,
     },
     DP3: {
-        name: "DP3 Tesla AI7 Photonic", shortName: "DP3",
+        name: "DP3 Tesla D3 Photonic", shortName: "DP3",
         busPwr: 1092, computeKw: 1014, thermalKw: 1092,
         // Power split: 1092 × 0.92 (8% housekeeping) ≈ 1005 kW available + margin → 1014 kW compute
         // Solar sized for 10% reserve: 1092 / (1361 * 0.234 * 0.90) * 1.10 = 4188 m²
         solarM2: 4188, radM2: 832, radTempK: 370,
         earthVF: 0.22, sidedness: 1.72,
-        gpuPowerW: 250, gpuCount: 3481, gpuType: "Tesla AI7 Photonic (4K cryo)",
+        gpuPowerW: 250, gpuCount: 3481, gpuType: "Tesla D3 Photonic (4K cryo)",
         gpuGFLOPS_W: 15000, gpuMemGB: 64, gpuMemType: "Cryo-SRAM",
         gpuMemBwTBs: 12.0, gpuInterconnect: "Photonic waveguide mesh",
         gpuNvlinkBwGBs: 0, gpuProcess: "SiN photonic + NbN SNSPD",
@@ -515,12 +515,12 @@ const CONFIGS = {
         batchSize: 64, seqLen: 8192, radHardening: 0.80,
     },
     DP3B: {
-        name: "DP3B AI7 Electrical", shortName: "DP3B",
+        name: "DP3B D3 Electrical", shortName: "DP3B",
         busPwr: 1092, computeKw: 1014, thermalKw: 1092,
         // Same 8% housekeeping as DP3, same bus power (1092 × 0.92 ≈ 1005 → 1014 kW)
         solarM2: 4188, radM2: 832, radTempK: 370,
         earthVF: 0.22, sidedness: 1.72,
-        gpuPowerW: 250, gpuCount: 3481, gpuType: "Tesla AI7 (rad-hard)",
+        gpuPowerW: 250, gpuCount: 3481, gpuType: "Tesla D3 (rad-hard)",
         gpuGFLOPS_W: 4200, gpuMemGB: 256, gpuMemType: "HBM4",
         gpuMemBwTBs: 8.0, gpuInterconnect: "D2D chiplet mesh + CXL 3.0",
         gpuNvlinkBwGBs: 0, gpuProcess: "Samsung 2nm GAA (rad-hard)",
@@ -912,7 +912,7 @@ function renderOverview(cfg, m) {
         <div class="metric-row"><span class="metric-label">HBM3E</span><span class="metric-value">SK Hynix / Samsung (12-Hi, 36GB)</span></div>
         <div class="metric-row"><span class="metric-label">Interposer</span><span class="metric-value">CoWoS-L (TSMC, organic bridge)</span></div>
         <div class="metric-row"><span class="metric-label">Substrate</span><span class="metric-value">ABF organic (Ibiden / Shinko)</span></div>
-        ` : cfg.gpuType.includes('AI7 Photonic') ? `
+        ` : cfg.gpuType.includes('D3 Photonic') ? `
         <div class="metric-row"><span class="metric-label">Photonic IC</span><span class="metric-value accent">Si₃N₄ PIC (Ligentec / IMEC)</span></div>
         <div class="metric-row"><span class="metric-label">Foundry</span><span class="metric-value">Ligentec (Lausanne) / IMEC (Leuven)</span></div>
         <div class="metric-row"><span class="metric-label">Modulators</span><span class="metric-value">LiNbO₃ thin-film (HyperLight)</span></div>
@@ -920,7 +920,7 @@ function renderOverview(cfg, m) {
         <div class="metric-row"><span class="metric-label">Cryo-SRAM</span><span class="metric-value">Intel 4K-compatible SRAM (custom)</span></div>
         <div class="metric-row"><span class="metric-label">Cryocooler</span><span class="metric-value">Sunpower CryoTel GT (Ametek)</span></div>
         ` : `
-        <div class="metric-row"><span class="metric-label">GPU die</span><span class="metric-value accent">Tesla AI7 (Samsung 2nm GAA)</span></div>
+        <div class="metric-row"><span class="metric-label">GPU die</span><span class="metric-value accent">Tesla D3 (Samsung 2nm GAA)</span></div>
         <div class="metric-row"><span class="metric-label">Foundry</span><span class="metric-value">Samsung (Pyeongtaek P3)</span></div>
         <div class="metric-row"><span class="metric-label">HBM4</span><span class="metric-value">SK Hynix (16-Hi, 64GB/stack)</span></div>
         <div class="metric-row"><span class="metric-label">Packaging</span><span class="metric-value">Foveros 3D + EMIB (Intel / ASE)</span></div>
