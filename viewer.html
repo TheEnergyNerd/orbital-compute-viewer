@@ -259,7 +259,7 @@ body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', 
         </div>
         <div style="flex:1"></div>
         <span class="badge orbital">Dawn-Dusk SSO</span>
-        <span class="badge power">550 km</span>
+        <span class="badge power">625 km</span>
     </div>
 
     <!-- 3D Viewport -->
@@ -325,7 +325,7 @@ const CONFIGS = {
         oruThermalInterface: "Direct-bond copper to heat pipe manifold",
         oruVRM: "48V→0.8V GaN buck, 96% eff",
         oruPackaging: "CoWoS-L, 2.5D interposer, 8-HBM3E stack",
-        orbit: "Dawn-dusk SSO, 550 km", altitude: 550,
+        orbit: "Dawn-dusk SSO, 625 km", altitude: 625,
         isPhotonic: false, isDP3: false, isDP1: true, spineLen: 0,
         solarCell: "Monocrystalline silicon (c-Si)", solarCellEff: 0.20, solarCellGen: "Silicon",
         busW: 0.77, busD: 0.51, busL: 0.15,
@@ -363,7 +363,7 @@ const CONFIGS = {
         oruThermalInterface: "Vapor chamber + pyrolytic graphite spreader",
         oruVRM: "48V→1.0V, integrated GaN",
         oruPackaging: "MCM, 4-chiplet + 4-HBM3, CPO edge couplers",
-        orbit: "Dawn-dusk SSO, 550 km", altitude: 550,
+        orbit: "Dawn-dusk SSO, 625 km", altitude: 625,
         isPhotonic: false, isDP3: false, isDP1: true, isHexpack: true, spineLen: 0,
         solarCell: "Monocrystalline silicon (c-Si)", solarCellEff: 0.20, solarCellGen: "Silicon",
         hexPanelAcross: 2.5, hexPanelTh: 0.045, hexPanelCount: 15,
@@ -401,7 +401,7 @@ const CONFIGS = {
         oruThermalInterface: "Direct-bond copper to bus cold plate",
         oruVRM: "48V→0.8V GaN buck, 96% eff",
         oruPackaging: "CoWoS-L, 2.5D interposer, 8-HBM3E stack",
-        orbit: "Dawn-dusk SSO, 550 km", altitude: 550,
+        orbit: "Dawn-dusk SSO, 625 km", altitude: 625,
         isPhotonic: false, isDP3: false, isDP1: false, isDP1B: true, spineLen: 0,
         solarCell: "Monocrystalline silicon (c-Si)", solarCellEff: 0.22, solarCellGen: "Silicon",
         // Geometry: scaled-up Starlink V2 mini form factor
@@ -411,7 +411,7 @@ const CONFIGS = {
         year: 2027, satLife: 5, waccOrbital: 0.15,
         launchCostPerKg: 800, dryMassKg: 1650, launchVehicle: "Starship",
         totalProgramCost: 15200000,
-        massSolar: 360, massRadiator: 225, massCompute: 120, massStructure: 600,
+        massSolar: 360, massRadiator: 220, massCompute: 120, massStructure: 600,
         // Networking
         islCount: 4, islRateGbps: 100, islWavelength: "1550 nm", islModulation: "DP-QPSK",
         islApertureCm: 8, islPointingUrad: 1.5, islFEC: "LDPC 5/6",
@@ -436,7 +436,7 @@ const CONFIGS = {
         oruThermalInterface: "Zero-length: ORU bolted direct to radiator heat pipe",
         oruVRM: "48V→0.7V multiphase GaN, 97% eff",
         oruPackaging: "CoWoS-L, 2.5D interposer, 8-HBM3E stack",
-        orbit: "Dawn-dusk SSO, 550 km", altitude: 550,
+        orbit: "Dawn-dusk SSO, 625 km", altitude: 625,
         isPhotonic: false, isDP3: false, spineLen: 0,
         solarCell: "Monocrystalline silicon (c-Si)", solarCellEff: 0.216, solarCellGen: "Silicon",
         // Economics (2028 spreadsheet) — satLife 5yr
@@ -466,7 +466,7 @@ const CONFIGS = {
         oruThermalInterface: "Cold plate + pumped-loop fluid coupling",
         oruVRM: "48V→0.7V multiphase GaN, 97% eff",
         oruPackaging: "CoWoS-L, 2.5D interposer, 8-HBM3E stack",
-        orbit: "Dawn-dusk SSO, 550 km", altitude: 550,
+        orbit: "Dawn-dusk SSO, 625 km", altitude: 625,
         isPhotonic: false, isDP3: false, centralized: true, spineLen: 0,
         solarCell: "Monocrystalline silicon (c-Si)", solarCellEff: 0.216, solarCellGen: "Silicon",
         // Economics (same 2028 basis as DP2) — satLife 5yr
@@ -498,7 +498,7 @@ const CONFIGS = {
         oruThermalInterface: "4K cold finger via pulse-tube cryocooler",
         oruVRM: "Cryogenic CMOS regulator, sub-1V",
         oruPackaging: "Photonic IC + cryo-SRAM, wire-bonded to cold plate",
-        orbit: "Dawn-dusk SSO, 550 km", altitude: 550,
+        orbit: "Dawn-dusk SSO, 625 km", altitude: 625,
         isPhotonic: true, isDP3: true,
         solarCell: "Perovskite/Si tandem (CsPbI₃/c-Si)", solarCellEff: 0.234, solarCellGen: "Perovskite tandem",
         spineLen: 60, cryoTempK: 4, cryoCoolingW: 300, cryoCOP: 0.003,
@@ -530,7 +530,7 @@ const CONFIGS = {
         oruThermalInterface: "Vapor chamber + loop heat pipe to radiator spine",
         oruVRM: "48V→0.65V integrated voltage regulator (IVR)",
         oruPackaging: "Foveros 3D stacked chiplets, 16-HBM4 stack",
-        orbit: "Dawn-dusk SSO, 550 km", altitude: 550,
+        orbit: "Dawn-dusk SSO, 625 km", altitude: 625,
         isPhotonic: false, isDP3: true, spineLen: 30,
         solarCell: "Perovskite/Si tandem (CsPbI₃/c-Si)", solarCellEff: 0.234, solarCellGen: "Perovskite tandem",
         // Economics (2030 non-photonic spreadsheet) — satLife 5yr
@@ -566,12 +566,12 @@ function computeMetrics(cfg) {
     //   Face A (deep-space side): radiates to 3K background, absorbs Earth IR at view factor F_A
     //   Face B (Earth/sun side): radiates to 3K + Earth, absorbs Earth IR at view factor F_B
     // Net flux per face = εσT_rad⁴ - α_IR·q_Earth·VF_face
-    //   where q_Earth ≈ 237 W/m² (Earth OLR at 550km) and α_IR ≈ ε (Kirchhoff)
+    //   where q_Earth ≈ 237 W/m² (Earth OLR at 625km) and α_IR ≈ ε (Kirchhoff)
     const sigma = 5.67e-8;
     const eps = 0.95;        // Carbon black emissivity
     const alphaIR = 0.95;    // Carbon black IR absorptivity (Kirchhoff: α ≈ ε)
     const alphaSolar = 0.95; // Carbon black solar absorptivity (high — absorbs sunlight)
-    const qEarth = 237;      // Earth OLR at 550 km, W/m²
+    const qEarth = 237;      // Earth OLR at 625 km, W/m²
     const qEmit = sigma * eps * Math.pow(cfg.radTempK, 4);  // emitted per face
     m.qEmitPerFace = qEmit;
 
@@ -581,7 +581,7 @@ function computeMetrics(cfg) {
     // High solar absorptivity means the radiator absorbs more solar input than AZ-93 (α=0.15).
     // Trade: slightly better IR emissivity uniformity, but worse solar rejection.
     //
-    // Physics breakdown at 370K, 550 km dawn-dusk SSO:
+    // Physics breakdown at 370K, 625 km dawn-dusk SSO:
     //   εσT⁴ = 0.95 × 5.67e-8 × 370⁴ ≈ 1010 W/m² per face (emission)
     //
     //   Face A (zenith/deep-space):
@@ -3983,7 +3983,7 @@ function buildDragonfly(cfgKey) {
 function buildCluster(cfgKey) {
     const baseCfg = CONFIGS[cfgKey.replace('_CLUSTER','')];
     const nodeCount = baseCfg.clusterSize || 4;
-    const hexR = baseCfg.isDP3 ? 200 : 60;  // distance between adjacent hex-cells
+    const hexR = baseCfg.isDP3 ? 300 : 90;  // distance between adjacent hex-cells (increased 50% to prevent panel overlap)
 
     // ================================================================
     // HEX-CELL BRANCHING TOPOLOGY
