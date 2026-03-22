@@ -246,6 +246,7 @@ body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', 
         <span class="subtitle">Station Technical Explorer</span>
         <div class="config-tabs" id="config-tabs">
             <button class="config-tab" data-config="DP1">DP1<span class="sub">GB300</span></button>
+            <button class="config-tab" data-config="DP1B">DP1B<span class="sub">AI Sat Mini</span></button>
             <button class="config-tab" data-config="T1">T1<span class="sub">Hex GB300</span></button>
             <button class="config-tab active" data-config="DP2">DP2<span class="sub">Vera Rubin</span></button>
             <button class="config-tab" data-config="DP2B">DP2B<span class="sub">VR Hub</span></button>
@@ -381,6 +382,47 @@ const CONFIGS = {
         batchSize: 16, seqLen: 2048,
         radHardening: 0.70,
         launchVehicle: "Falcon 9",
+    },
+    DP1B: {
+        name: "DP1B AI Sat Mini", shortName: "DP1B",
+        busPwr: 100, computeKw: 92, thermalKw: 100,
+        // Dimensions derived from SpaceX render vs Starship V3 (~121m):
+        //   Body: ~25m long × 3m wide × 0.3m thick (flat bus, Starlink heritage)
+        //   Solar panels: 2 wings ±X, each ~15m span × 12m chord ≈ 360 m² total
+        //   Body surface acts as radiator (both sides) + 2 deployable rad wings
+        //   Total radiator: body (25×3×2 = 150 m²) + deploy (2×10 = 20 m²) ≈ 170 m²
+        solarM2: 360, radM2: 170, radTempK: 370,
+        earthVF: 0.24, sidedness: 1.80,
+        gpuPowerW: 1400, gpuCount: 48, gpuType: "NVIDIA B300 (rad-screened)",
+        gpuGFLOPS_W: 5000, gpuMemGB: 192, gpuMemType: "HBM3E",
+        gpuMemBwTBs: 8.0, gpuInterconnect: "NVLink 5.0 + NVSwitch",
+        gpuNvlinkBwGBs: 1800, gpuProcess: "TSMC 4NP",
+        oruSize: [0.6, 0.4, 0.06],
+        oruThermalInterface: "Direct-bond copper to bus cold plate",
+        oruVRM: "48V→0.8V GaN buck, 96% eff",
+        oruPackaging: "CoWoS-L, 2.5D interposer, 8-HBM3E stack",
+        orbit: "Dawn-dusk SSO, 550 km", altitude: 550,
+        isPhotonic: false, isDP3: false, isDP1: false, isDP1B: true, spineLen: 0,
+        solarCell: "Monocrystalline silicon (c-Si)", solarCellEff: 0.22, solarCellGen: "Silicon",
+        // Body dimensions (meters) — scaled-up Starlink V3 form factor
+        bodyLen: 25, bodyW: 3, bodyTh: 0.3,
+        pvWings: 2, pvWingSpan: 15, pvWingChord: 12,
+        radDeployW: 5, radDeployL: 2,   // 2 small deployable radiator wings
+        // Economics (2027 Starship launch)
+        year: 2027, satLife: 5, waccOrbital: 0.15,
+        launchCostPerKg: 800, dryMassKg: 2400, launchVehicle: "Starship",
+        totalProgramCost: 18500000,
+        massSolar: 360, massRadiator: 500, massCompute: 120, massStructure: 900,
+        // Networking
+        islCount: 4, islRateGbps: 100, islWavelength: "1550 nm", islModulation: "DP-QPSK",
+        islApertureCm: 8, islPointingUrad: 1.5, islFEC: "LDPC 5/6",
+        groundLinkGbps: 10, groundStations: 3, groundModulation: "16-QAM OFDM",
+        contactFraction: 0.32, storeAndForward: true,
+        clusterSize: 1, clusterTopology: "standalone",
+        clusterRoles: ["inference"], maxClusterSize: 12,
+        tensorParallel: 2, pipelineParallel: 1,
+        batchSize: 16, seqLen: 4096,
+        radHardening: 0.60,
     },
     DP2: {
         name: "DP2 Space-1 Vera Rubin", shortName: "DP2",
@@ -2867,6 +2909,196 @@ function buildDP1(cfg) {
     }
 }
 
+function buildDP1B(cfg) {
+    // ================================================================
+    // DP1B AI SAT MINI — SpaceX 100kW AI satellite
+    // Scaled-up Starlink V3 form factor:
+    //   - Tall flat bus body (~25m × 3m × 0.3m) — body IS the radiator
+    //   - 2 deployable solar wings extending ±X from body center
+    //   - ORUs mounted on anti-sun face of body
+    //   - 2 small deployable radiator wings at body ends
+    //   - 4 ISL laser terminals
+    //
+    // Derived from SpaceX "Scaling for massive capacity" render:
+    //   Body proportions match Starship V3 scale comparison
+    //   100 kW bus, 92 kW compute, ~360 m² solar, ~170 m² radiator
+    // ================================================================
+    const bodyL = cfg.bodyLen || 25;     // Y extent (long axis, vertical in orbit)
+    const bodyW = cfg.bodyW || 3;        // X extent (width)
+    const bodyTh = cfg.bodyTh || 0.3;    // Z extent (thickness)
+    const wingSpan = cfg.pvWingSpan || 15;
+    const wingChord = cfg.pvWingChord || 12;
+    const radDW = cfg.radDeployW || 5;
+    const radDL = cfg.radDeployL || 2;
+
+    // ── BUS BODY ──
+    // The flat bus body is the primary structure AND radiator (Starlink heritage)
+    const bus = new THREE.Mesh(box(bodyW, bodyL, bodyTh), MAT.hub);
+    addPart(bus, "hub", `Spacecraft Bus (${bodyL}m × ${bodyW}m × ${bodyTh}m)`);
+
+    // Anti-sun face (-Z) is the radiator surface (carbon black coated)
+    const radFace = new THREE.Mesh(box(bodyW * 0.98, bodyL * 0.98, 0.01), MAT.rad);
+    radFace.position.set(0, 0, -bodyTh / 2 - 0.006);
+    addPart(radFace, "radiator", `Body Radiator Face — ${(bodyW * bodyL * 2).toFixed(0)}m² (both sides)`);
+
+    // Sun-facing face (+Z) — lighter color, MLI thermal blanket
+    const sunFace = new THREE.Mesh(box(bodyW * 0.98, bodyL * 0.98, 0.005), MAT.mli);
+    sunFace.position.set(0, 0, bodyTh / 2 + 0.003);
+    stationGroup.add(sunFace);
+
+    // Structural grid lines on body (panel seams — like Starlink's flat pack)
+    const seamMat = new THREE.MeshStandardMaterial({ color: 0x111115, roughness: 0.5 });
+    // Horizontal seams (along X, spaced along Y)
+    const ySeams = Math.floor(bodyL / 3);
+    for (let i = 1; i < ySeams; i++) {
+        const yPos = -bodyL / 2 + bodyL * i / ySeams;
+        const seam = new THREE.Mesh(box(bodyW * 0.95, 0.02, bodyTh + 0.02), seamMat);
+        seam.position.set(0, yPos, 0);
+        stationGroup.add(seam);
+    }
+    // Vertical seam (center line along Y)
+    const centerSeam = new THREE.Mesh(box(0.02, bodyL * 0.95, bodyTh + 0.02), seamMat);
+    stationGroup.add(centerSeam);
+
+    // ── PMAD / AVIONICS ──
+    const pmad = new THREE.Mesh(box(bodyW * 0.4, bodyL * 0.08, bodyTh * 0.6), MAT.gold);
+    pmad.position.set(0, bodyL * 0.35, 0);
+    addPart(pmad, "hub", "PMAD + Flight Computer");
+
+    // Ground antenna (phased array, top of body)
+    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.15, 16), MAT.antenna);
+    ant.rotation.x = Math.PI / 2;
+    ant.position.set(0, bodyL / 2 - 0.5, bodyTh / 2 + 0.1);
+    addPart(ant, "hub", "Ka-band Ground Antenna");
+
+    // ── DEPLOYABLE SOLAR WINGS ±X ──
+    // Large panels extending from body mid-height, like Starlink but bigger
+    const wingRoot = bodyW / 2 + 0.15;
+    const wingY = 0;  // wings deploy from body center
+
+    for (let side = 0; side < 2; side++) {
+        const dir = side === 0 ? 1 : -1;
+        const cx = dir * (wingRoot + wingSpan / 2);
+
+        // Root hinge bracket
+        const rootBracket = new THREE.Mesh(box(0.2, 0.08, bodyTh * 0.5), MAT.truss);
+        rootBracket.position.set(dir * (bodyW / 2 + 0.05), wingY, 0);
+        addPart(rootBracket, "structure", "Wing Root Hinge");
+
+        // Main solar panel
+        const wing = new THREE.Mesh(box(wingSpan, 0.02, wingChord), MAT.pv);
+        wing.position.set(cx, wingY, 0);
+        addPart(wing, "pv_wing", `Solar Wing ${dir > 0 ? '+' : '-'}X (${wingSpan}m × ${wingChord}m)`);
+
+        // Back face (bifacial)
+        const back = new THREE.Mesh(box(wingSpan, 0.008, wingChord), MAT.pvBack);
+        back.position.set(cx, wingY - 0.015, 0);
+        stationGroup.add(back);
+
+        // Panel segment fold lines
+        const segCount = Math.max(5, Math.ceil(wingSpan / 2));
+        for (let s = 1; s <= segCount; s++) {
+            const xs = cx + dir * (-wingSpan / 2 + wingSpan * s / (segCount + 1));
+            const seamLine = new THREE.Mesh(box(0.005, 0.008, wingChord * 0.94), MAT.seam);
+            seamLine.position.set(xs, wingY + 0.012, 0);
+            stationGroup.add(seamLine);
+        }
+
+        // Structural spars under wing
+        for (const sf of [-0.3, 0.3]) {
+            const spar = new THREE.Mesh(box(wingSpan * 0.98, 0.02, 0.02), MAT.truss);
+            spar.position.set(cx, wingY - 0.02, sf * wingChord);
+            stationGroup.add(spar);
+        }
+
+        // Battens across chord
+        const battCount = Math.max(3, Math.ceil(wingSpan / 4));
+        for (let b = 1; b <= battCount; b++) {
+            const bx = cx + dir * (-wingSpan / 2 + wingSpan * b / (battCount + 1));
+            const batt = new THREE.Mesh(box(0.04, 0.015, wingChord * 0.7), MAT.brace);
+            batt.position.set(bx, wingY - 0.02, 0);
+            stationGroup.add(batt);
+        }
+    }
+
+    // ── ORU GRID ON ANTI-SUN FACE (-Z) ──
+    const gpuCount = cfg.gpuCount || 48;
+    const dispCols = Math.min(8, Math.ceil(Math.sqrt(gpuCount / 3)));
+    const dispRows = Math.min(12, Math.ceil(gpuCount / dispCols));
+
+    const oruAreaW = bodyW * 0.85;
+    const oruAreaL = bodyL * 0.65;  // ORUs cover ~65% of body length (centered)
+    const oruW = oruAreaW / dispCols;
+    const oruL = oruAreaL / dispRows;
+    const oruTh = 0.08;
+
+    for (let ci = 0; ci < dispCols; ci++) {
+        for (let ri = 0; ri < dispRows; ri++) {
+            const ox = -oruAreaW / 2 + oruW * (ci + 0.5);
+            const oy = -oruAreaL / 2 + oruL * (ri + 0.5);
+            const oz = -bodyTh / 2 - 0.01 - oruTh / 2;
+
+            const oruIdx = ci * dispRows + ri;
+            const role = getORURole(oruIdx, cfg.oruPrimaryRole || 'decode');
+
+            const oru = new THREE.Mesh(box(oruW * 0.82, oruL * 0.82, oruTh), role.mat);
+            oru.position.set(ox, oy, oz);
+            const lbl = `ORU [${ci},${ri}] — ${role.label}`;
+            if (ci === 0 && ri === 0) addPart(oru, "oru", lbl);
+            else { oru.userData = {partType: "oru", label: lbl}; stationGroup.add(oru); partRegistry.push({mesh: oru, partType: "oru", label: lbl, originalMaterial: oru.material}); }
+        }
+    }
+
+    // ── DEPLOYABLE RADIATOR WINGS (top and bottom of body) ──
+    // Small deployable radiator panels at ±Y ends, folding out along X
+    for (let end = 0; end < 2; end++) {
+        const yPos = end === 0 ? bodyL / 2 - 1 : -bodyL / 2 + 1;
+        for (let side = 0; side < 2; side++) {
+            const dir = side === 0 ? 1 : -1;
+            const radPanel = new THREE.Mesh(box(radDW, radDL, 0.015), MAT.rad);
+            radPanel.position.set(dir * (bodyW / 2 + radDW / 2 + 0.1), yPos, 0);
+            addPart(radPanel, "radiator", `Deployable Radiator ${end === 0 ? 'Top' : 'Bottom'} ${dir > 0 ? '+' : '-'}X`);
+
+            // Hinge
+            const hinge = new THREE.Mesh(box(0.08, radDL * 0.8, 0.06), MAT.truss);
+            hinge.position.set(dir * (bodyW / 2 + 0.06), yPos, 0);
+            stationGroup.add(hinge);
+        }
+    }
+
+    // ── 4 ISL LASER TERMINALS ──
+    for (let i = 0; i < (cfg.islCount || 4); i++) {
+        const angle = i * Math.PI / 2 + Math.PI / 4;
+        const lt = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.15, 8), MAT.antenna);
+        lt.position.set(Math.cos(angle) * bodyW * 0.3, bodyL / 2 + 0.1, Math.sin(angle) * bodyTh * 0.3);
+        addPart(lt, "dragonfly_link", "ISL Terminal " + (i + 1));
+    }
+
+    // ── RCS THRUSTERS (4 corners) ──
+    for (const [dx, dy] of [[1,1],[1,-1],[-1,1],[-1,-1]]) {
+        const rcs = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.15, 8), MAT.rcs);
+        rcs.position.set(dx * bodyW / 2 * 0.9, dy * bodyL / 2 * 0.95, -bodyTh / 2 - 0.08);
+        rcs.rotation.x = Math.PI;
+        stationGroup.add(rcs);
+    }
+
+    // ── SCALE REFERENCE: Starlink V2 mini ──
+    const refGroup = new THREE.Group();
+    const refBody = new THREE.Mesh(box(1.3, 0.05, 0.8), new THREE.MeshStandardMaterial({color: 0xff8800, transparent: true, opacity: 0.5}));
+    const refPanel1 = new THREE.Mesh(box(3.5, 0.01, 1.7), new THREE.MeshStandardMaterial({color: 0xff8800, transparent: true, opacity: 0.3}));
+    refPanel1.position.set(2.4, 0, 0);
+    const refPanel2 = refPanel1.clone();
+    refPanel2.position.set(-2.4, 0, 0);
+    refGroup.add(refBody, refPanel1, refPanel2);
+    refGroup.position.set(-wingSpan * 0.9, -bodyL / 2 - 5, bodyTh * 2);
+    refGroup.userData = { partType: 'scale_ref', label: 'Starlink V2 mini (7m × 3.5m) — scale reference' };
+    stationGroup.add(refGroup);
+    const slLabel = 'Starlink V2 mini (7m × 3.5m) — scale reference';
+    partRegistry.push({mesh: refBody, partType: 'scale_ref', label: slLabel, originalMaterial: refBody.material});
+    partRegistry.push({mesh: refPanel1, partType: 'scale_ref', label: slLabel, originalMaterial: refPanel1.material});
+    partRegistry.push({mesh: refPanel2, partType: 'scale_ref', label: slLabel, originalMaterial: refPanel2.material});
+}
+
 function buildT1(cfg) {
     // T1 Tanj Hex Flat-Pack — matches Onshape SatellitePlatformFS
     // DEPLOYED: linear chain of hexagonal tiles along X axis
@@ -3870,6 +4102,7 @@ function switchConfig(key) {
     } else {
         const cfg = CONFIGS[key];
         if (cfg.isDP3) buildDP3(cfg);
+        else if (cfg.isDP1B) buildDP1B(cfg);
         else if (cfg.isHexpack) buildT1(cfg);
         else if (cfg.isDP1) buildDP1(cfg);
         else buildDP2(cfg);
@@ -4173,7 +4406,7 @@ animate();
 // DEBUG REFERENCE EXPORT — Combined single-page reference for ALL configs
 // =====================================================================
 async function exportDebugReference() {
-    const singles = ['DP1','T1','DP2','DP2B','DP3','DP3B'];
+    const singles = ['DP1','DP1B','T1','DP2','DP2B','DP3','DP3B'];
     const clusters = ['DP2_CLUSTER','DP3_CLUSTER'];
     const allConfigs = [...singles, ...clusters];
     const captures = {};
