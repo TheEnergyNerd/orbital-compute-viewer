@@ -3824,7 +3824,9 @@ function buildDragonfly(cfgKey) {
     const baseCfg = CONFIGS[cfgKey.replace('_DRAGONFLY','')];
     const nodeCount = baseCfg.clusterSize || 4;
     const edgeCount = nodeCount - 1;
-    const clusterR = baseCfg.isDP3 ? 300 : 80;
+    // Size the cluster radius based on station wingspan to prevent overlap
+    // DP2 wingspan ≈ 30m (15m per PV wing), DP3 wingspan ≈ 120m (60m spine + panels)
+    const clusterR = baseCfg.isDP3 ? 500 : 160;
 
     // ================================================================
     // DRAGONFLY TOPOLOGY (Kim, Dally, Abts 2008) — ring-of-groups layout
@@ -3859,7 +3861,7 @@ function buildDragonfly(cfgKey) {
     const positions = [[0, 0, 0]];
     const nodeRoles = ['routing'];
     const nodeGroupIdx = [-1];
-    const groupSpread = baseCfg.isDP3 ? 60 : 25;
+    const groupSpread = baseCfg.isDP3 ? 120 : 50;
 
     for (let g = 0; g < numGroups; g++) {
         const groupAngle = (2 * Math.PI * g) / numGroups;
