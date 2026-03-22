@@ -386,12 +386,10 @@ const CONFIGS = {
     DP1B: {
         name: "DP1B AI Sat Mini", shortName: "DP1B",
         busPwr: 100, computeKw: 92, thermalKw: 100,
-        // Dimensions derived from SpaceX render vs Starship V3 (~121m):
-        //   Body: ~25m long × 3m wide × 0.3m thick (flat bus, Starlink heritage)
-        //   Solar panels: 2 wings ±X, each ~15m span × 12m chord ≈ 360 m² total
-        //   Body surface acts as radiator (both sides) + 2 deployable rad wings
-        //   Total radiator: body (25×3×2 = 150 m²) + deploy (2×10 = 20 m²) ≈ 170 m²
-        solarM2: 360, radM2: 170, radTempK: 370,
+        // Radiator sized from thermal model:
+        //   qNet ≈ 1500 W/m² (bifacial, 370K, carbon black, 18% derating)
+        //   reqRadM2 = 100kW / 1500 = 67 m² → 75 m² for 1.12× margin
+        solarM2: 360, radM2: 75, radTempK: 370,
         earthVF: 0.24, sidedness: 1.80,
         gpuPowerW: 1400, gpuCount: 48, gpuType: "NVIDIA B300 (rad-screened)",
         gpuGFLOPS_W: 5000, gpuMemGB: 192, gpuMemType: "HBM3E",
@@ -405,13 +403,13 @@ const CONFIGS = {
         isPhotonic: false, isDP3: false, isDP1: false, isDP1B: true, spineLen: 0,
         solarCell: "Monocrystalline silicon (c-Si)", solarCellEff: 0.22, solarCellGen: "Silicon",
         // Geometry: scaled-up Starlink V2 mini form factor
-        // 5.0m × 2.5m × 0.15m flat bus, 35m total wingspan
-        // Skinny long roll-out wings ±X (15m span × 12m chord each)
+        // 4m × 2m flat bus, skinny roll-out wings ±X (60m × 3m each)
+        // Separate DP2-style radiator panel below bus (~75 m²)
         // Economics (2027 Starship launch)
         year: 2027, satLife: 5, waccOrbital: 0.15,
-        launchCostPerKg: 800, dryMassKg: 2400, launchVehicle: "Starship",
-        totalProgramCost: 18500000,
-        massSolar: 360, massRadiator: 500, massCompute: 120, massStructure: 900,
+        launchCostPerKg: 800, dryMassKg: 1650, launchVehicle: "Starship",
+        totalProgramCost: 15200000,
+        massSolar: 360, massRadiator: 225, massCompute: 120, massStructure: 600,
         // Networking
         islCount: 4, islRateGbps: 100, islWavelength: "1550 nm", islModulation: "DP-QPSK",
         islApertureCm: 8, islPointingUrad: 1.5, islFEC: "LDPC 5/6",
@@ -2992,10 +2990,12 @@ function buildDP1B(cfg) {
     }
 
     // ── RADIATOR PANEL (DP2-style, separate from bus, below) ──
-    // Extends below bus on a deployment boom, like DP2
+    // Rotated 90°: radiator extends along Z (perpendicular to solar wings)
+    // Solar wings go ±X, radiator goes along ±Z — T-shape from above
     const radThick = 0.03;
     const boomLen = 0.4;
-    const rY = -(bH/2 + boomLen + radS/2 + 0.1);
+    // radS = long dimension (now along Z), radC = short dimension (along X)
+    const rY = -(bH/2 + boomLen + radC/2 + 0.1);
 
     // Deployment boom
     const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,boomLen,8),MAT.truss);
@@ -3005,31 +3005,31 @@ function buildDP1B(cfg) {
     const radHinge = new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,0.06,12),MAT.pipe);
     radHinge.position.set(0,-(bH/2+boomLen),0);radHinge.rotation.z=Math.PI/2;stationGroup.add(radHinge);
 
-    // Main radiator panel (carbon black)
-    const rad = new THREE.Mesh(box(radC,radS,radThick),MAT.rad);
+    // Main radiator panel (carbon black) — rotated: radS along Z, radC along Y
+    const rad = new THREE.Mesh(box(radC,radC,radS),MAT.rad);
     rad.position.set(0,rY,0);
     addPart(rad,"radiator",`Main Radiator — ${cfg.radM2}m² (${radC.toFixed(1)}m × ${radS.toFixed(1)}m)`);
 
-    // Heat pipe channels on radiator
-    for(let i=0;i<4;i++){const hpX=-radC/2+radC*(i+1)/5;const hp=new THREE.Mesh(box(0.008,radS*0.92,radThick+0.004),MAT.pipe);hp.position.set(hpX,rY,0);stationGroup.add(hp);}
+    // Heat pipe channels running along Z (long axis)
+    for(let i=0;i<4;i++){const hpX=-radC/2+radC*(i+1)/5;const hp=new THREE.Mesh(box(0.008,radThick+0.004,radS*0.92),MAT.pipe);hp.position.set(hpX,rY,0);stationGroup.add(hp);}
 
     // Radiator edge frame
     const frameMat=new THREE.MeshStandardMaterial({color:0xaaaabc,roughness:0.4,metalness:0.5});
-    for(const [fw,fh,fx,fy] of [[radC+0.04,0.02,0,radS/2],[radC+0.04,0.02,0,-radS/2],[0.02,radS,radC/2,0],[0.02,radS,-radC/2,0]]){
-        const fr=new THREE.Mesh(box(fw,fh,radThick+0.008),frameMat);fr.position.set(fx,rY+fy,0);stationGroup.add(fr);
+    for(const [fw,fd,fx,fz] of [[radC+0.04,0.02,0,radS/2],[radC+0.04,0.02,0,-radS/2],[0.02,radS,radC/2,0],[0.02,radS,-radC/2,0]]){
+        const fr=new THREE.Mesh(box(fw,radThick+0.008,fd),frameMat);fr.position.set(fx,rY,fz);stationGroup.add(fr);
     }
 
-    // ORU grid on radiator +Z face (DP2-style)
+    // ORU grid on radiator +Y face (top, facing away from deep space)
     const gpuCount=cfg.gpuCount||48;
     const [ow,oh,od]=cfg.oruSize||[0.6,0.4,0.06];
-    const cols2=Math.max(1,Math.floor(Math.sqrt(gpuCount/3)));
+    const cols2=Math.max(1,Math.floor(Math.sqrt(gpuCount/4)));
     const rows2=Math.max(1,Math.floor(gpuCount/cols2));
     const sw2=radC/(cols2+1),sh2=radS/(rows2+1);
     let gi=0;
     for(let c=0;c<cols2&&gi<gpuCount;c++)for(let r=0;r<rows2&&gi<gpuCount;r++){
         const role=getORURole(gi,cfg.oruPrimaryRole||'decode');
-        const ox=-radC/2+sw2*(c+1),oy=-radS/2+sh2*(r+1);
-        const oru=new THREE.Mesh(box(ow,oh,od),role.mat);oru.position.set(ox,rY+oy,radThick/2+od/2);
+        const ox=-radC/2+sw2*(c+1),oz=-radS/2+sh2*(r+1);
+        const oru=new THREE.Mesh(box(ow,od,oh),role.mat);oru.position.set(ox,rY+radC/2+od/2,oz);
         addPart(oru,"oru",`ORU [${c},${r}] — ${role.label}`);gi++;
     }
 
