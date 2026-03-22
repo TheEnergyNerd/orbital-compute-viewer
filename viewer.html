@@ -404,10 +404,9 @@ const CONFIGS = {
         orbit: "Dawn-dusk SSO, 550 km", altitude: 550,
         isPhotonic: false, isDP3: false, isDP1: false, isDP1B: true, spineLen: 0,
         solarCell: "Monocrystalline silicon (c-Si)", solarCellEff: 0.22, solarCellGen: "Silicon",
-        // Geometry: tall thin spine + solar panels running along it ±Z
-        // Matches SpaceX render proportions vs Starship V3 scale
-        spineH: 28, spineW: 0.5, spineTh: 0.3,
-        pvPanelSpan: 6, pvPanelLen: 24,  // panels run along spine ±Z
+        // Geometry: scaled-up Starlink V2 mini form factor
+        // 5.0m × 2.5m × 0.15m flat bus, 35m total wingspan
+        // Skinny long roll-out wings ±X (15m span × 12m chord each)
         // Economics (2027 Starship launch)
         year: 2027, satLife: 5, waccOrbital: 0.15,
         launchCostPerKg: 800, dryMassKg: 2400, launchVehicle: "Starship",
@@ -2913,180 +2912,140 @@ function buildDP1B(cfg) {
     // ================================================================
     // DP1B AI SAT MINI — SpaceX 100kW AI satellite
     //
-    // From the SpaceX render: looks like a scaled-up Starlink rotated vertical.
-    //   - Thin vertical spine/body running full height (~28m)
-    //   - Large solar panel area deploying to BOTH sides of the spine
-    //     running almost the full length of the spine
-    //   - Small ORU/compute modules visible on the spine
-    //   - Small deployable radiator fins visible at top
+    // Scaled-up Starlink V2 mini — SAME FORM FACTOR, just ~4× bigger.
     //
-    // Proportions from Starship V3 scale (~121m stack):
-    //   Sat body height ≈ 28m, body width ≈ 0.5m, body depth ≈ 0.3m
-    //   Solar panels: 2 × ~6m span × ~24m chord (running along body length)
-    //   Total solar ≈ 2 × 6 × 24 = 288 m² + body-mount ≈ 360 m²
+    // Starlink V2 mini:  1.3m × 0.8m × 0.05m body, 7m wingspan, ~2.5 kW
+    // AI Sat Mini:       5.0m × 2.5m × 0.15m body, 35m wingspan, 100 kW
     //
-    // Body cross-section is basically Starlink V2 mini (1.3m × 0.8m × 0.05m)
-    // scaled up and rotated: tall narrow spine with panels along its length.
-    //
-    // 100 kW bus, 92 kW compute, 48 GPUs
+    // Layout (identical to Starlink, just bigger):
+    //   - Flat rectangular bus body, oriented horizontally
+    //   - 2 roll-out solar wings extending ±X from bus (skinny & long)
+    //   - ORUs on anti-sun face (-Y) of bus
+    //   - Bus -Y face = primary radiator (carbon black, body IS radiator)
+    //   - 2 deployable radiator panels hinging from ±Z edges of bus
+    //   - 4 ISL laser terminals
     // ================================================================
-    const spineH = 28;      // Y extent — tall vertical spine
-    const spineW = 0.5;     // X extent — narrow
-    const spineTh = 0.3;    // Z extent — thin (like Starlink)
+    const bW = 5.0, bD = 2.5, bH = 0.15;  // bus body: X × Z × Y (flat)
+    const wingSpan = 15, wingChord = 12;   // per wing: X span × Z chord
+    const radW = 5, radD = 3;              // deployable rad panels
 
-    // Solar panels run along the spine length, deploying ±Z
-    const panelSpan = 6;      // Z extent per side (how far panel extends from spine)
-    const panelLen = 24;      // Y extent (runs along spine — almost full height)
-    const panelTh = 0.02;     // panel thickness
+    // ── BUS BODY ──
+    const bus = new THREE.Mesh(box(bW, bH, bD), MAT.hub);
+    addPart(bus, "hub", `Spacecraft Bus (${bW}m × ${bD}m × ${bH}m)`);
 
-    // ── SPINE / BUS BODY ──
-    // Thin tall rectangular spine — the structural backbone
-    const spine = new THREE.Mesh(box(spineW, spineH, spineTh), MAT.hub);
-    addPart(spine, "hub", `Spacecraft Bus / Spine (${spineH}m × ${spineW}m × ${spineTh}m)`);
+    // Seam lines (Starlink flat-pack grid)
+    const seamMat = new THREE.MeshStandardMaterial({color:0x111115, roughness:0.5});
+    for (let i=1;i<4;i++){const s=new THREE.Mesh(box(0.012,bH+0.01,bD*0.95),seamMat);s.position.set(-bW/2+bW*i/4,0,0);stationGroup.add(s);}
+    for (let i=1;i<3;i++){const s=new THREE.Mesh(box(bW*0.95,bH+0.01,0.012),seamMat);s.position.set(0,0,-bD/2+bD*i/3);stationGroup.add(s);}
 
-    // Panel seam lines along spine (horizontal divisions)
-    const seamMat = new THREE.MeshStandardMaterial({ color: 0x111115, roughness: 0.5 });
-    const nSeams = Math.floor(spineH / 3);
-    for (let i = 1; i < nSeams; i++) {
-        const yPos = -spineH / 2 + spineH * i / nSeams;
-        const seam = new THREE.Mesh(box(spineW + 0.01, 0.015, spineTh + 0.01), seamMat);
-        seam.position.set(0, yPos, 0);
-        stationGroup.add(seam);
+    // Anti-sun face (-Y) = radiator (carbon black)
+    const radFace = new THREE.Mesh(box(bW*0.97,0.006,bD*0.97),MAT.rad);
+    radFace.position.set(0,-bH/2-0.004,0);
+    addPart(radFace,"radiator",`Body Radiator (-Y) — ${(bW*bD).toFixed(0)}m²`);
+
+    // Sun face (+Y) = MLI
+    const sunFace = new THREE.Mesh(box(bW*0.97,0.004,bD*0.97),MAT.mli);
+    sunFace.position.set(0,bH/2+0.003,0); stationGroup.add(sunFace);
+
+    // PMAD
+    const pmad = new THREE.Mesh(box(bW*0.3,bH*0.6,bD*0.25),MAT.gold);
+    pmad.position.set(0,bH*0.15,bD*0.25); addPart(pmad,"hub","PMAD + Flight Computer");
+
+    // Antenna
+    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.4,0.10,16),MAT.antenna);
+    ant.position.set(0,bH/2+0.07,-bD*0.2); addPart(ant,"hub","Ka-band Phased Array");
+
+    // ── ROLL-OUT SOLAR WINGS ±X (skinny & long, just like Starlink) ──
+    const wingY = bH/2+0.012;
+    for (let side=0;side<2;side++){
+        const dir=side===0?1:-1;
+        const rootX=dir*(bW/2+0.08);
+        const cx=dir*(bW/2+wingSpan/2+0.08);
+
+        // Root bracket
+        const root=new THREE.Mesh(box(0.12,0.05,bD*0.25),MAT.truss);
+        root.position.set(rootX,wingY,0); addPart(root,"structure","Wing Root");
+
+        // Hinge
+        const hG=new THREE.CylinderGeometry(0.02,0.02,bD*0.15,8);
+        const h=new THREE.Mesh(hG,MAT.pipe);h.position.set(rootX,wingY,0);h.rotation.x=Math.PI/2;stationGroup.add(h);
+
+        // Main panel
+        const wing=new THREE.Mesh(box(wingSpan,0.012,wingChord),MAT.pv);
+        wing.position.set(cx,wingY,0);addPart(wing,"pv_wing",`Solar Wing ${dir>0?'+':'-'}X (${wingSpan}m × ${wingChord}m)`);
+
+        // Back face
+        const back=new THREE.Mesh(box(wingSpan,0.006,wingChord),MAT.pvBack);
+        back.position.set(cx,wingY-0.010,0);stationGroup.add(back);
+
+        // Longerons
+        for(const sf of [-0.30,0.30]){const sp=new THREE.Mesh(box(wingSpan*0.97,0.015,0.015),MAT.truss);sp.position.set(cx,wingY-0.015,sf*wingChord);stationGroup.add(sp);}
+
+        // Gussets
+        for(const gz of [0.012,-0.012]){const g=new THREE.Mesh(box(0.18,0.006,0.08),MAT.truss);g.position.set(rootX+dir*0.05,wingY+gz,0);stationGroup.add(g);}
+
+        // Accordion fold lines
+        const segC=Math.max(8,Math.ceil(wingSpan/1.5));
+        for(let s=1;s<=segC;s++){const xs=cx+dir*(-wingSpan/2+wingSpan*s/(segC+1));const sm=new THREE.Mesh(box(0.003,0.006,wingChord*0.94),MAT.seam);sm.position.set(xs,wingY+0.007,0);stationGroup.add(sm);}
+
+        // Tie rod
+        const tr=new THREE.Mesh(box(wingSpan*0.40,0.010,0.010),MAT.hub);
+        tr.position.set(dir*(bW/2+wingSpan*0.25+0.08),wingY+0.020,0);stationGroup.add(tr);
     }
 
-    // PMAD + flight computer module near top of spine
-    const pmad = new THREE.Mesh(box(spineW * 0.7, 1.2, spineTh * 0.7), MAT.gold);
-    pmad.position.set(0, spineH / 2 - 2, 0);
-    addPart(pmad, "hub", "PMAD + Flight Computer");
+    // ── ORU GRID ON ANTI-SUN FACE (-Y) ──
+    const gpuCount=cfg.gpuCount||48;
+    const usableX=bW*0.82, usableZ=bD*0.78;
+    const rows=Math.max(4,Math.ceil(Math.sqrt(gpuCount*2)));
+    const cols=Math.max(2,Math.ceil(gpuCount/rows));
+    const oruW=usableX/cols, oruD=usableZ/rows, oruTh=0.05;
+    let gi=0;
+    for(let r=0;r<rows&&gi<gpuCount;r++)for(let c=0;c<cols&&gi<gpuCount;c++){
+        const gx=-usableX/2+usableX*(c+0.5)/cols;
+        const gz=-usableZ/2+usableZ*(r+0.5)/rows;
+        const gy=-bH/2-0.004-oruTh/2;
+        const role=getORURole(gi,cfg.oruPrimaryRole||'decode');
+        const oru=new THREE.Mesh(box(oruW*0.80,oruTh,oruD*0.80),role.mat);
+        oru.position.set(gx,gy,gz);
+        const lbl=`ORU [${r},${c}] — ${role.label}`;
+        if(gi===0)addPart(oru,"oru",lbl);
+        else{oru.userData={partType:"oru",label:lbl};stationGroup.add(oru);partRegistry.push({mesh:oru,partType:"oru",label:lbl,originalMaterial:oru.material});}
+        gi++;
+    }
+    // Cold plate
+    const deck=new THREE.Mesh(box(usableX+0.03,0.005,usableZ+0.03),MAT.oru);
+    deck.position.set(0,-bH/2-0.004-oruTh-0.003,0);addPart(deck,"oru","Cold Plate Deck");
 
-    // Ground antenna (phased array) — on top of spine
-    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.08, 16), MAT.antenna);
-    ant.position.set(0, spineH / 2 + 0.05, 0);
-    addPart(ant, "hub", "Ka-band Phased Array");
-
-    // ── SOLAR PANELS ±Z (deploying from spine, running along its length) ──
-    // These are the large flat panels visible in the render, running almost
-    // the full height of the spine, folding out to ±Z (perpendicular to sun)
-    const panelY = -1;  // offset slightly below center (asymmetric like render)
-
-    for (let side = 0; side < 2; side++) {
-        const dir = side === 0 ? 1 : -1;
-        const cz = dir * (spineTh / 2 + panelSpan / 2 + 0.1);
-
-        // Root hinge rail along spine edge
-        const rootRail = new THREE.Mesh(box(spineW * 0.3, panelLen * 0.9, 0.04), MAT.truss);
-        rootRail.position.set(0, panelY, dir * (spineTh / 2 + 0.02));
-        stationGroup.add(rootRail);
-
-        // Main solar panel (large, runs along spine)
-        const panel = new THREE.Mesh(box(spineW * 0.1 + 0.02, panelLen, panelSpan), MAT.pv);
-        panel.position.set(0, panelY, cz);
-        addPart(panel, "pv_wing", `Solar Panel ${dir > 0 ? '+' : '-'}Z (${panelLen}m × ${panelSpan}m)`);
-
-        // Back face (bifacial)
-        const back = new THREE.Mesh(box(spineW * 0.1, panelLen, panelSpan), MAT.pvBack);
-        back.position.set(-0.015, panelY, cz);
-        stationGroup.add(back);
-
-        // Panel fold lines (horizontal, across Z span)
-        const foldCount = Math.max(6, Math.ceil(panelLen / 3));
-        for (let f = 1; f <= foldCount; f++) {
-            const fy = panelY + (-panelLen / 2 + panelLen * f / (foldCount + 1));
-            const foldLine = new THREE.Mesh(box(0.008, 0.006, panelSpan * 0.94), MAT.seam);
-            foldLine.position.set(0, fy, cz);
-            stationGroup.add(foldLine);
-        }
-
-        // Vertical fold lines (segment breaks along Z span)
-        const vFolds = Math.max(3, Math.ceil(panelSpan / 1.5));
-        for (let v = 1; v <= vFolds; v++) {
-            const fz = cz + dir * (-panelSpan / 2 + panelSpan * v / (vFolds + 1));
-            const vLine = new THREE.Mesh(box(0.006, panelLen * 0.96, 0.005), MAT.seam);
-            vLine.position.set(0, panelY, fz);
-            stationGroup.add(vLine);
-        }
-
-        // Structural spars running along Y (under panel)
-        for (const sf of [-0.3, 0.3]) {
-            const spar = new THREE.Mesh(box(0.015, panelLen * 0.95, 0.015), MAT.truss);
-            spar.position.set(-0.02, panelY, cz + dir * sf * panelSpan);
-            stationGroup.add(spar);
-        }
+    // ── DEPLOYABLE RADIATOR PANELS ±Z ──
+    for(const dir of [1,-1]){
+        const rp=new THREE.Mesh(box(radW,0.010,radD),MAT.rad);
+        rp.position.set(0,-bH/2-oruTh-0.03,dir*(bD/2+radD/2+0.06));
+        addPart(rp,"radiator",`Deploy Radiator ${dir>0?'+':'-'}Z (${radW}m × ${radD}m)`);
+        const hng=new THREE.Mesh(box(radW*0.6,0.03,0.04),MAT.truss);
+        hng.position.set(0,-bH/2-oruTh-0.015,dir*(bD/2+0.03));stationGroup.add(hng);
     }
 
-    // ── ORU / COMPUTE MODULES ON SPINE ──
-    // Small modules bolted to +X face of spine (visible in render as small rectangles)
-    const gpuCount = cfg.gpuCount || 48;
-    const dispRows = Math.min(12, Math.ceil(Math.sqrt(gpuCount)));
-    const dispCols = Math.min(6, Math.ceil(gpuCount / dispRows));
-    const oruAreaH = spineH * 0.70;
-    const oruAreaW = spineW * 0.90;
-    const oruH = oruAreaH / dispRows;
-    const oruW2 = oruAreaW / dispCols;
-    const oruDepth = 0.06;
+    // Manifolds
+    const hot=new THREE.Mesh(box(bW*0.7,0.015,0.015),MAT.oru);hot.position.set(0,-bH/2+0.02,bD*0.2);addPart(hot,"structure","Hot Manifold");
+    const cold=new THREE.Mesh(box(bW*0.7,0.015,0.015),MAT.pipe);cold.position.set(0,-bH/2+0.02,-bD*0.2);addPart(cold,"structure","Cold Manifold");
 
-    for (let ri = 0; ri < dispRows; ri++) {
-        for (let ci = 0; ci < dispCols; ci++) {
-            const oy = -oruAreaH / 2 + oruH * (ri + 0.5);
-            const ox = -oruAreaW / 2 + oruW2 * (ci + 0.5);
-            const oz = spineW / 2 + oruDepth / 2 + 0.005;  // on +X face
-
-            const oruIdx = ri * dispCols + ci;
-            if (oruIdx >= gpuCount) break;
-            const role = getORURole(oruIdx, cfg.oruPrimaryRole || 'decode');
-
-            const oru = new THREE.Mesh(box(oruW2 * 0.80, oruH * 0.80, oruDepth), role.mat);
-            oru.position.set(oz, oy, ox);  // +X face = along X axis
-            const lbl = `ORU [${ri},${ci}] — ${role.label}`;
-            if (ri === 0 && ci === 0) addPart(oru, "oru", lbl);
-            else { oru.userData = {partType: "oru", label: lbl}; stationGroup.add(oru); partRegistry.push({mesh: oru, partType: "oru", label: lbl, originalMaterial: oru.material}); }
-        }
-    }
-
-    // Radiator surface on -X face (opposite to ORUs)
-    const radFace = new THREE.Mesh(box(0.01, spineH * 0.9, spineTh * 0.9), MAT.rad);
-    radFace.position.set(-spineW / 2 - 0.006, 0, 0);
-    addPart(radFace, "radiator", `Spine Radiator Face — ${(spineH * spineTh * 2).toFixed(0)}m² body-mount`);
-
-    // ── DEPLOYABLE RADIATOR FINS at top ──
-    // 2 small fins extending ±Z from top of spine (visible in render)
-    for (const dir of [1, -1]) {
-        const finW = 3;   // Z extent
-        const finH = 4;   // Y extent
-        const fin = new THREE.Mesh(box(0.015, finH, finW), MAT.rad);
-        fin.position.set(0, spineH / 2 - finH / 2 - 0.5, dir * (spineTh / 2 + finW / 2 + 0.15));
-        addPart(fin, "radiator", `Deployable Radiator Fin ${dir > 0 ? '+' : '-'}Z`);
-
-        // Hinge bracket
-        const hinge = new THREE.Mesh(box(0.06, finH * 0.6, 0.06), MAT.truss);
-        hinge.position.set(0, spineH / 2 - finH / 2 - 0.5, dir * (spineTh / 2 + 0.08));
-        stationGroup.add(hinge);
-    }
-
-    // ── 4 ISL LASER TERMINALS ──
-    for (let i = 0; i < (cfg.islCount || 4); i++) {
-        const yPos = (i < 2) ? spineH / 2 - 0.5 : -spineH / 2 + 0.5;
-        const zDir = (i % 2 === 0) ? 1 : -1;
-        const lt = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.12, 8), MAT.antenna);
-        lt.position.set(spineW / 2 + 0.08, yPos, zDir * spineTh * 0.3);
-        addPart(lt, "dragonfly_link", "ISL Terminal " + (i + 1));
-    }
+    // ── ISL TERMINALS ──
+    for(let i=0;i<(cfg.islCount||4);i++){const a=i*Math.PI/2+Math.PI/4;const lt=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,0.10,8),MAT.antenna);lt.position.set(Math.cos(a)*bW*0.4,bH/2+0.07,Math.sin(a)*bD*0.3);addPart(lt,"dragonfly_link","ISL Terminal "+(i+1));}
 
     // ── SCALE REFERENCE: Starlink V2 mini ──
-    const refGroup = new THREE.Group();
-    const refBody = new THREE.Mesh(box(1.3, 0.05, 0.8), new THREE.MeshStandardMaterial({color: 0xff8800, transparent: true, opacity: 0.5}));
-    const refPanel1 = new THREE.Mesh(box(3.5, 0.01, 1.7), new THREE.MeshStandardMaterial({color: 0xff8800, transparent: true, opacity: 0.3}));
-    refPanel1.position.set(2.4, 0, 0);
-    const refPanel2 = refPanel1.clone();
-    refPanel2.position.set(-2.4, 0, 0);
-    refGroup.add(refBody, refPanel1, refPanel2);
-    refGroup.position.set(-panelSpan * 1.5, -spineH / 2 - 3, 0);
-    refGroup.userData = { partType: 'scale_ref', label: 'Starlink V2 mini (7m × 3.5m) — scale reference' };
+    const refGroup=new THREE.Group();
+    const refBody=new THREE.Mesh(box(1.3,0.05,0.8),new THREE.MeshStandardMaterial({color:0xff8800,transparent:true,opacity:0.5}));
+    const refP1=new THREE.Mesh(box(3.5,0.01,1.7),new THREE.MeshStandardMaterial({color:0xff8800,transparent:true,opacity:0.3}));
+    refP1.position.set(2.4,0,0);const refP2=refP1.clone();refP2.position.set(-2.4,0,0);
+    refGroup.add(refBody,refP1,refP2);
+    const bb=new THREE.Box3().setFromObject(stationGroup);
+    refGroup.position.set(-bW*0.4,bb.min.y-2,bD*0.4);
+    refGroup.userData={partType:'scale_ref',label:'Starlink V2 mini (7m × 3.5m) — scale reference'};
     stationGroup.add(refGroup);
-    const slLabel = 'Starlink V2 mini (7m × 3.5m) — scale reference';
-    partRegistry.push({mesh: refBody, partType: 'scale_ref', label: slLabel, originalMaterial: refBody.material});
-    partRegistry.push({mesh: refPanel1, partType: 'scale_ref', label: slLabel, originalMaterial: refPanel1.material});
-    partRegistry.push({mesh: refPanel2, partType: 'scale_ref', label: slLabel, originalMaterial: refPanel2.material});
+    const slL='Starlink V2 mini (7m × 3.5m) — scale reference';
+    partRegistry.push({mesh:refBody,partType:'scale_ref',label:slL,originalMaterial:refBody.material});
+    partRegistry.push({mesh:refP1,partType:'scale_ref',label:slL,originalMaterial:refP1.material});
+    partRegistry.push({mesh:refP2,partType:'scale_ref',label:slL,originalMaterial:refP2.material});
 }
 
 function buildT1(cfg) {
