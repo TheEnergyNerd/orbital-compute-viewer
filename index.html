@@ -252,6 +252,8 @@ body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', 
             <button class="config-tab" data-config="DP2B">DP2B<span class="sub">VR Hub</span></button>
             <button class="config-tab" data-config="DP3">DP3<span class="sub">D3 Photonic</span></button>
             <button class="config-tab" data-config="DP3B">DP3B<span class="sub">D3 Electrical</span></button>
+            <button class="config-tab" data-config="DP2_DRAGONFLY">Dragonfly<span class="sub">DP2 ×5</span></button>
+            <button class="config-tab" data-config="DP3_DRAGONFLY">Dragonfly<span class="sub">DP3 ×10</span></button>
             <button class="config-tab" data-config="DP2_CLUSTER">Hex-Cell<span class="sub">DP2 ×5</span></button>
             <button class="config-tab" data-config="DP3_CLUSTER">Hex-Cell<span class="sub">DP3 ×10</span></button>
         </div>
@@ -1451,7 +1453,7 @@ window.applyCustomModel = function() {
     };
 
     // Re-render the models tab
-    const cfg = CONFIGS[currentConfig.replace('_CLUSTER','')] || CONFIGS.DP2;
+    const cfg = CONFIGS[currentConfig.replace('_CLUSTER','').replace('_DRAGONFLY','')] || CONFIGS.DP2;
     const m = computeMetrics(cfg);
     document.getElementById('tab-models').innerHTML = renderModels(cfg, m);
     // Scroll to results
@@ -3818,6 +3820,164 @@ function buildDP3(cfg) {
     partRegistry.push({mesh: refPanel2DP3, partType: 'scale_ref', label: slLabelDP3, originalMaterial: refPanel2DP3.material});
 }
 
+function buildDragonfly(cfgKey) {
+    const baseCfg = CONFIGS[cfgKey.replace('_DRAGONFLY','')];
+    const nodeCount = baseCfg.clusterSize || 4;
+    const edgeCount = nodeCount - 1;
+    const clusterR = baseCfg.isDP3 ? 300 : 80;
+
+    // ================================================================
+    // DRAGONFLY TOPOLOGY (Kim, Dally, Abts 2008) — ring-of-groups layout
+    //
+    // Groups arranged in a ring. Each group is a small cluster of nodes.
+    // Center router node sits at the origin with hub links to each group.
+    //
+    // DP2 (5 nodes): 1 center + 2 groups of 2
+    // DP3 (10 nodes): 1 center + 3 groups of 3
+    //
+    // Role assignment per group:
+    //   Center: ROUTING — scheduler, load balancer, ground antenna
+    //   Group 1: PREFILL-biased — compute-heavy prompt processing
+    //   Group 2: DECODE-biased — memory-BW-heavy token generation
+    //   Group 3: CONTEXT-biased — KV cache storage & serving
+    // ================================================================
+    const groupSize = baseCfg.isDP3 ? 3 : 2;
+    const numGroups = Math.ceil(edgeCount / groupSize);
+
+    const groupRoles = ['prefill', 'decode', 'context', 'prefill', 'decode'];
+    const groupRoleLabels = ['PREFILL', 'DECODE', 'CONTEXT', 'PREFILL-2', 'DECODE-2'];
+
+    const groups = [];
+    for (let g = 0; g < numGroups; g++) {
+        const grp = [];
+        for (let i = 0; i < groupSize && g * groupSize + i < edgeCount; i++) {
+            grp.push(g * groupSize + i + 1);
+        }
+        groups.push(grp);
+    }
+
+    const positions = [[0, 0, 0]];
+    const nodeRoles = ['routing'];
+    const nodeGroupIdx = [-1];
+    const groupSpread = baseCfg.isDP3 ? 60 : 25;
+
+    for (let g = 0; g < numGroups; g++) {
+        const groupAngle = (2 * Math.PI * g) / numGroups;
+        const groupCenterX = clusterR * Math.cos(groupAngle);
+        const groupCenterZ = clusterR * Math.sin(groupAngle);
+
+        for (let i = 0; i < groups[g].length; i++) {
+            const perpAngle = groupAngle + Math.PI / 2;
+            const offset = (i - (groups[g].length - 1) / 2) * groupSpread;
+            const x = groupCenterX + Math.cos(perpAngle) * offset;
+            const z = groupCenterZ + Math.sin(perpAngle) * offset;
+            const y = (i - 1) * (baseCfg.isDP3 ? 15 : 5);
+
+            positions.push([x, y, z]);
+            nodeRoles.push(groupRoles[g % groupRoles.length]);
+            nodeGroupIdx.push(g);
+        }
+    }
+
+    const saved = stationGroup;
+    for (let n = 0; n < positions.length; n++) {
+        const [x, y, z] = positions[n];
+        const role = nodeRoles[n];
+        const isCenter = (n === 0);
+        const gIdx = nodeGroupIdx[n];
+        const groupLabel = isCenter ? 'CENTER (Router)' : `Group ${gIdx + 1} — ${groupRoleLabels[gIdx % groupRoleLabels.length]}`;
+
+        const group = new THREE.Group();
+        group.position.set(x, y, z);
+        group.userData = {
+            partType: "cluster_node",
+            label: `Node ${n + 1} — ${groupLabel}`,
+            clusterRole: role,
+            nodeIndex: n,
+            groupIndex: gIdx
+        };
+        stationGroup = group;
+
+        const nodeCfg = { ...baseCfg, oruPrimaryRole: role };
+        if (baseCfg.isDP3) buildDP3(nodeCfg); else buildDP2(nodeCfg);
+        saved.add(group);
+    }
+    stationGroup = saved;
+
+    // ISL links
+    const linkR = baseCfg.isDP3 ? 1.5 : 0.5;
+    const intraLinkMat = new THREE.MeshStandardMaterial({
+        color: 0x00ffcc, transparent: true, opacity: 0.5,
+        emissive: 0x00ffcc, emissiveIntensity: 0.3
+    });
+    const globalLinkMat = new THREE.MeshStandardMaterial({
+        color: 0xff8800, transparent: true, opacity: 0.45,
+        emissive: 0xff6600, emissiveIntensity: 0.3
+    });
+    const hubLinkMat = new THREE.MeshStandardMaterial({
+        color: 0xffcc00, transparent: true, opacity: 0.55,
+        emissive: 0xffaa00, emissiveIntensity: 0.35
+    });
+
+    function addLink(i, j, mat, r, label) {
+        const [x1, y1, z1] = positions[i], [x2, y2, z2] = positions[j];
+        const dx = x2 - x1, dy = y2 - y1, dz = z2 - z1;
+        const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (len < 0.01) return;
+        const geo = new THREE.CylinderGeometry(r, r, len, 6);
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set((x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2);
+        mesh.lookAt(x2, y2, z2);
+        mesh.rotateX(Math.PI / 2);
+        addPart(mesh, "dragonfly_link", label);
+    }
+
+    // Hub links: center → each group
+    for (let g = 0; g < groups.length; g++) {
+        addLink(0, groups[g][0], hubLinkMat, linkR,
+            `Hub Link: Center ↔ Group ${g + 1} [${groupRoleLabels[g % groupRoleLabels.length]}]`);
+    }
+
+    // Intra-group: full mesh within each group
+    for (let g = 0; g < groups.length; g++) {
+        const grp = groups[g];
+        for (let a = 0; a < grp.length; a++) {
+            for (let b = a + 1; b < grp.length; b++) {
+                addLink(grp[a], grp[b], intraLinkMat, linkR * 0.6,
+                    `Intra-Group ${g + 1}: Node ${grp[a] + 1} ↔ Node ${grp[b] + 1}`);
+            }
+        }
+    }
+
+    // Global links: one link between each pair of groups
+    for (let ga = 0; ga < groups.length; ga++) {
+        for (let gb = ga + 1; gb < groups.length; gb++) {
+            const k = (ga + gb) % Math.min(groups[ga].length, groups[gb].length);
+            const nodeA = groups[ga][Math.min(k, groups[ga].length - 1)];
+            const nodeB = groups[gb][Math.min(k, groups[gb].length - 1)];
+            addLink(nodeA, nodeB, globalLinkMat, linkR * 0.45,
+                `Global Link: Group ${ga + 1} ↔ Group ${gb + 1}`);
+        }
+    }
+
+    // Group boundary rings
+    const ringMat = new THREE.MeshStandardMaterial({
+        color: 0x334455, transparent: true, opacity: 0.08,
+        emissive: 0x112233, emissiveIntensity: 0.1, side: THREE.DoubleSide
+    });
+    for (let g = 0; g < numGroups; g++) {
+        const groupAngle = (2 * Math.PI * g) / numGroups;
+        const cx = clusterR * Math.cos(groupAngle);
+        const cz = clusterR * Math.sin(groupAngle);
+        const ringR = groupSpread * (groups[g].length) * 0.8;
+        const ringGeo = new THREE.RingGeometry(ringR * 0.3, ringR, 24);
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.position.set(cx, -2, cz);
+        ring.rotation.x = -Math.PI / 2;
+        stationGroup.add(ring);
+    }
+}
+
 function buildCluster(cfgKey) {
     const baseCfg = CONFIGS[cfgKey.replace('_CLUSTER','')];
     const nodeCount = baseCfg.clusterSize || 4;
@@ -4059,6 +4219,8 @@ function switchConfig(key) {
     // Build
     if (key.includes('CLUSTER')) {
         buildCluster(key);
+    } else if (key.includes('DRAGONFLY')) {
+        buildDragonfly(key);
     } else {
         const cfg = CONFIGS[key];
         if (cfg.isDP3) buildDP3(cfg);
@@ -4068,7 +4230,7 @@ function switchConfig(key) {
         else buildDP2(cfg);
     }
     // Update sidebar
-    const cfg = CONFIGS[key.replace('_CLUSTER','')] || CONFIGS.DP2;
+    const cfg = CONFIGS[key.replace('_CLUSTER','').replace('_DRAGONFLY','')] || CONFIGS.DP2;
     const m = computeMetrics(cfg);
     updateKPIs(cfg, m);
     document.getElementById('tab-overview').innerHTML = renderOverview(cfg, m);
@@ -4103,10 +4265,10 @@ function switchConfig(key) {
     // Update role legend based on config's primary role bias
     const legend = document.getElementById('role-legend');
     if (legend) {
-        const cfgL = CONFIGS[key.replace('_CLUSTER','')] || CONFIGS.DP2;
+        const cfgL = CONFIGS[key.replace('_CLUSTER','').replace('_DRAGONFLY','')] || CONFIGS.DP2;
         const isPhot = cfgL.isPhotonic;
         const isCentralized = cfgL.centralized;
-        const isCluster = key.includes('CLUSTER');
+        const isCluster = key.includes('CLUSTER') || key.includes('DRAGONFLY');
         // Photonic stations are prefill-biased (compute-heavy), electrical are decode-biased (memory-BW)
         const primaryRole = isPhot ? 'PREFILL' : 'DECODE';
         const primaryPct = '60%', secondaryPct = '25%', tertiaryPct = '15%';
@@ -4147,7 +4309,7 @@ canvas.addEventListener('click', (e) => {
         while (obj && !obj.userData.partType) obj = obj.parent;
         if (obj && obj.userData.partType) {
             // In cluster mode, check if we can find the cluster_node group ancestor
-            if (currentConfig.includes('CLUSTER')) {
+            if (currentConfig.includes('CLUSTER') || currentConfig.includes('DRAGONFLY')) {
                 let nodeObj = obj;
                 while (nodeObj && nodeObj.userData.partType !== 'cluster_node') nodeObj = nodeObj.parent;
                 if (nodeObj && nodeObj.userData.partType === 'cluster_node') {
@@ -4189,7 +4351,7 @@ canvas.addEventListener('mousemove', (e) => {
 function showPartInfo(partType, label) {
     const db = PART_DB[partType];
     if (!db) return;
-    const cfg = CONFIGS[currentConfig.replace('_CLUSTER','')] || CONFIGS.DP2;
+    const cfg = CONFIGS[currentConfig.replace('_CLUSTER','').replace('_DRAGONFLY','')] || CONFIGS.DP2;
     const m = computeMetrics(cfg);
     // Dynamic description for solar panels based on current config
     let desc = db.desc;
@@ -4367,7 +4529,7 @@ animate();
 // =====================================================================
 async function exportDebugReference() {
     const singles = ['DP1','DP1B','T1','DP2','DP2B','DP3','DP3B'];
-    const clusters = ['DP2_CLUSTER','DP3_CLUSTER'];
+    const clusters = ['DP2_DRAGONFLY','DP3_DRAGONFLY','DP2_CLUSTER','DP3_CLUSTER'];
     const allConfigs = [...singles, ...clusters];
     const captures = {};
 
@@ -4377,7 +4539,7 @@ async function exportDebugReference() {
         await new Promise(r => setTimeout(r, 120));
         renderer.render(scene, camera);
 
-        const cfgKey = key.replace('_CLUSTER','');
+        const cfgKey = key.replace('_CLUSTER','').replace('_DRAGONFLY','');
         const cfg = CONFIGS[cfgKey] || CONFIGS.DP2;
         const m = computeMetrics(cfg);
         const imgData = renderer.domElement.toDataURL('image/png', 0.85);
