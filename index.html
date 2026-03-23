@@ -527,11 +527,11 @@ const CONFIGS = {
         gpuMemBwTBs: 8.0, gpuInterconnect: "D2D chiplet mesh + CXL 3.0",
         gpuNvlinkBwGBs: 0, gpuProcess: "Samsung 2nm GAA (rad-hard)",
         oruSize: [0.5, 0.4, 0.04],
-        oruThermalInterface: "Vapor chamber + loop heat pipe to radiator spine",
+        oruThermalInterface: "Vapor chamber + direct-bond to radiator plate",
         oruVRM: "48V→0.65V integrated voltage regulator (IVR)",
         oruPackaging: "Foveros 3D stacked chiplets, 16-HBM4 stack",
         orbit: "Dawn-dusk SSO, 625 km", altitude: 625,
-        isPhotonic: false, isDP3: true, spineLen: 30,
+        isPhotonic: false, isDP3: false, spineLen: 0,  // no spine — flat bus like DP2, just bigger
         solarCell: "Perovskite/Si tandem (CsPbI₃/c-Si)", solarCellEff: 0.234, solarCellGen: "Perovskite tandem",
         // Economics (2030 non-photonic spreadsheet) — satLife 5yr
         year: 2030, satLife: 5, waccOrbital: 0.15,
