@@ -3253,72 +3253,75 @@ function buildDP2(cfg) {
         addPart(hinge, "structure", "PV Deployment Hinge");
     }
 
-    // Radiator — flat panel in XY plane, deployed below bus along -Y
-    // Long dimension along X (same as solar wings) → edge-on to velocity (Y)
-    //   → minimizes drag cross-section in ram direction
-    // Normal ±Z → edge-on to sun in dawn-dusk SSO → minimal solar absorption
-    // Both ±Z faces radiate to space
-    // Gravity gradient: mass distributed along velocity axis aids passive stabilization
-    const radAspect = 4;  // long-and-skinny, matching panel aesthetic
-    const rS = Math.sqrt(cfg.radM2 * radAspect);   // X dimension (long, along wingspan)
-    const rC = cfg.radM2 / rS;                       // Y dimension (short, along velocity)
+    // Radiator — flat panel in XZ plane, deployed below bus along -Y
+    // Perpendicular to solar panels (which are in XY plane)
+    //
+    // Orientation rationale (dawn-dusk SSO):
+    //   Normal ±Y (along-track/anti-track) → both faces see deep space
+    //   Edge-on to sun (thin in Z) → minimal solar absorption
+    //   Long axis along X (nadir) → gravity gradient stabilization
+    //   Drag penalty: acceptable because radiator area << solar panel area
+    //
+    // This matches the SpaceX AI Sat Mini: radiator fins fold out
+    // perpendicular to the main solar panel body
+    const radAspect = 4;  // long-and-skinny
+    const rS = Math.sqrt(cfg.radM2 * radAspect);   // X dimension (long, toward nadir)
+    const rC = cfg.radM2 / rS;                       // Z dimension (short, toward sun)
     const radThick = 0.04;
-    const rY = -(hubY / 2 + rC / 2 + 0.5);     // positioned below bus
+    const rY = -(hubY / 2 + 0.3);     // just below bus (thin panel sticks down in Z)
 
-    // Main radiator panel
-    const rad = new THREE.Mesh(box(rS, rC, radThick), MAT.rad);
+    // Main radiator panel — in XZ plane (normal ±Y)
+    const rad = new THREE.Mesh(box(rS, radThick, rC), MAT.rad);
     rad.position.set(0, rY, 0);
     addPart(rad, "radiator", `Main Radiator — ${cfg.radM2}m² (${rS.toFixed(0)}m × ${rC.toFixed(1)}m, carbon black)`);
 
-    // Heat pipe channels (running along X span — long dimension)
+    // Heat pipe channels (running along X — long dimension, in XZ plane)
     const hpMat = new THREE.MeshStandardMaterial({color: 0xd0d0dd, roughness: 0.35, metalness: 0.4});
     const hpCount = Math.max(3, Math.floor(rC / 2));
     for (let i = 0; i < hpCount; i++) {
-        const hpY2 = -rC / 2 + rC * (i + 1) / (hpCount + 1);
-        const hp = new THREE.Mesh(box(rS * 0.92, 0.012, radThick + 0.005), hpMat);
-        hp.position.set(0, rY + hpY2, 0);
+        const hpZ = -rC / 2 + rC * (i + 1) / (hpCount + 1);
+        const hp = new THREE.Mesh(box(rS * 0.92, radThick + 0.005, 0.012), hpMat);
+        hp.position.set(0, rY, hpZ);
         stationGroup.add(hp);
     }
 
-    // Radiator edge frame
+    // Radiator edge frame (XZ plane)
     const frameMat = new THREE.MeshStandardMaterial({color: 0xaaaabc, roughness: 0.4, metalness: 0.5});
-    for (const [fw, fh, fx, fy] of [
-        [rS + 0.06, 0.03, 0, rC / 2],    // top edge
-        [rS + 0.06, 0.03, 0, -rC / 2],   // bottom edge
-        [0.03, rC, rS / 2, 0],            // right edge
-        [0.03, rC, -rS / 2, 0],           // left edge
+    for (const [fw, fd, fx, fz] of [
+        [rS + 0.06, 0.03, 0, rC / 2],     // +Z edge
+        [rS + 0.06, 0.03, 0, -rC / 2],    // -Z edge
+        [0.03, rC, rS / 2, 0],             // +X edge
+        [0.03, rC, -rS / 2, 0],            // -X edge
     ]) {
-        const frame = new THREE.Mesh(box(fw, fh, radThick + 0.01), frameMat);
-        frame.position.set(fx, rY + fy, 0);
+        const frame = new THREE.Mesh(box(fw, radThick + 0.01, fd), frameMat);
+        frame.position.set(fx, rY, fz);
         stationGroup.add(frame);
     }
 
-    // Structural stiffening (longerons along X span)
-    buildRadStiff([0, rY, 0], rS, rC, 'Z');
+    // Structural stiffening (longerons along X, spaced along Z)
+    for (const frac of [-0.25, 0.25]) {
+        const lg = new THREE.Mesh(box(rS * 0.95, 0.06, 0.06), MAT.truss);
+        lg.position.set(0, rY - radThick / 2 - 0.04, frac * rC);
+        addPart(lg, "structure", "Radiator Longeron");
+    }
 
-    // Deployment boom connecting bus to radiator
-    const boomLen = 0.5;
-    const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, boomLen, 8), MAT.truss);
-    boom.position.set(0, -(hubY / 2 + boomLen / 2), 0);
-    addPart(boom, "structure", "Radiator Deployment Boom");
-
-    // Deployment hinge at boom-radiator joint
-    const radHinge = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.08, 12), MAT.pipe);
-    radHinge.position.set(0, -(hubY / 2 + boomLen), 0);
+    // Deployment hinge at bus-radiator joint
+    const radHinge = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, rS * 0.3, 12), MAT.pipe);
+    radHinge.position.set(0, rY + radThick / 2 + 0.04, 0);
     radHinge.rotation.z = Math.PI / 2;
-    addPart(radHinge, "structure", "Radiator Hinge");
+    addPart(radHinge, "structure", "Radiator Deployment Hinge");
 
     if (!cfg.centralized) {
         const oc=Math.min(Math.floor(cfg.computeKw*1000/cfg.gpuPowerW),300);
         const [ow,oh,od]=cfg.oruSize;
-        // ORU grid on radiator: cols along X (rS), rows along Y (rC)
+        // ORU grid on radiator +Y face (XZ plane): cols along X (rS), rows along Z (rC)
         const cols=Math.max(1,Math.floor(Math.sqrt(oc*radAspect))),rows=Math.max(1,Math.floor(oc/cols));
-        const sw=rS/(cols+1),sh=rC/(rows+1);
+        const sw=rS/(cols+1),sz=rC/(rows+1);
         for(let c=0;c<cols;c++) for(let r=0;r<rows;r++) {
             const oruIdx = c * rows + r;
             const role = getORURole(oruIdx, cfg.oruPrimaryRole || 'decode');
-            const ox=-rS/2+sw*(c+1),oy=-rC/2+sh*(r+1);
-            const oru=new THREE.Mesh(box(ow,oh,od),role.mat); oru.position.set(ox,rY+oy,radThick/2+od/2);
+            const ox=-rS/2+sw*(c+1),oz=-rC/2+sz*(r+1);
+            const oru=new THREE.Mesh(box(ow,od,oh),role.mat); oru.position.set(ox,rY+radThick/2+od/2,oz);
             addPart(oru,"oru",`ORU [${c},${r}] — ${role.label}`);
         }
     } else {
