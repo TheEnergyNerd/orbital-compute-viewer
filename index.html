@@ -2992,60 +2992,62 @@ function buildDP1B(cfg) {
     // ── DEPLOYABLE RADIATOR FINS (same architecture as DP2) ──
     // Vertical fin panels fold out from ±Z bus edges
     // Tall along Y, wide along X, thin along Z — like vertical walls
-    const nFins1B = 2;  // one per ±Z side, facing outward
-    const finArea1B = cfg.radM2 / nFins1B;
-    const finAspect1B = 3;
-    const finH1B = Math.sqrt(finArea1B * finAspect1B);
-    const finLen1B = finArea1B / finH1B;
+    // Single radiator panel on anti-sun side (-Z), same as DP2
+    const radArea1B = cfg.radM2;
+    const radAspect1B = 4;
+    const radLen1B = Math.sqrt(radArea1B * radAspect1B);
+    const radH1B = radArea1B / radLen1B;
     const radThick = 0.025;
-    const finGap1B = 0.15;
+    const radGap1B = 0.15;
 
     const hpMat1B = new THREE.MeshStandardMaterial({color: 0xd0d0dd, roughness: 0.35, metalness: 0.4});
 
     const gpuCount = cfg.gpuCount || 48;
-    const orusPerFin1B = Math.ceil(gpuCount / nFins1B);
     const [ow,oh,od] = cfg.oruSize || [0.6, 0.4, 0.06];
 
-    let fi1B = 0;
-    for (const zSide of [1, -1]) {
-        const fX = 0;
-        const fY = -(bH / 2 + finH1B / 2 + finGap1B);
-        const fZ = zSide * (bD / 2 + radThick / 2 + finGap1B);
+    const radX1B = 0;
+    const radY1B = -(bH / 2 + radH1B / 2 + radGap1B);
+    const radZ1B = -(bD / 2 + radThick / 2 + radGap1B);
 
-        // Hinge
-        const hinge = new THREE.Mesh(box(finLen1B * 0.3, 0.04, 0.03), MAT.truss);
-        hinge.position.set(0, -(bH / 2 + 0.02), zSide * (bD / 2 + finGap1B / 2));
-        stationGroup.add(hinge);
+    // Hinge
+    const hinge1B = new THREE.Mesh(box(radLen1B * 0.3, 0.04, 0.03), MAT.truss);
+    hinge1B.position.set(0, -(bH / 2 + 0.02), -(bD / 2 + radGap1B / 2));
+    stationGroup.add(hinge1B);
 
-        // Vertical fin panel (XY plane, thin in Z) — faces OUTWARD
-        const fin = new THREE.Mesh(box(finLen1B, finH1B, radThick), MAT.rad);
-        fin.position.set(fX, fY, fZ);
-        addPart(fin, "radiator", `Radiator Fin ${fi1B + 1} — ${finArea1B.toFixed(0)}m²`);
+    // Single radiator panel (XY plane, -Z face to deep space)
+    const radPanel1B = new THREE.Mesh(box(radLen1B, radH1B, radThick), MAT.rad);
+    radPanel1B.position.set(radX1B, radY1B, radZ1B);
+    addPart(radPanel1B, "radiator", `Deployable Radiator — ${radArea1B.toFixed(0)}m² (${radLen1B.toFixed(1)}m × ${radH1B.toFixed(1)}m)`);
 
-        // Heat pipes
-        for (let hp = 0; hp < 3; hp++) {
-            const hpX = -finLen1B / 2 + finLen1B * (hp + 1) / 4;
-            const hpM = new THREE.Mesh(box(0.006, finH1B * 0.9, radThick + 0.003), hpMat1B);
-            hpM.position.set(fX + hpX, fY, fZ);
-            stationGroup.add(hpM);
-        }
+    // Heat pipes
+    for (let hp = 0; hp < 3; hp++) {
+        const hpX = -radLen1B / 2 + radLen1B * (hp + 1) / 4;
+        const hpM = new THREE.Mesh(box(0.006, radH1B * 0.9, radThick + 0.003), hpMat1B);
+        hpM.position.set(hpX, radY1B, radZ1B);
+        stationGroup.add(hpM);
+    }
 
-        // ORUs on outward-facing side
-        const fCols = Math.max(1, Math.floor(Math.sqrt(orusPerFin1B / finAspect1B)));
-        const fRows = Math.max(1, Math.floor(orusPerFin1B / fCols));
-        const fsw = finLen1B / (fCols + 1), fsh = finH1B / (fRows + 1);
-        for (let c = 0; c < fCols; c++) for (let r = 0; r < fRows; r++) {
-            const oruIdx = fi1B * orusPerFin1B + c * fRows + r;
-            if (oruIdx >= gpuCount) break;
-            const role = getORURole(oruIdx, cfg.oruPrimaryRole || 'decode');
-            const ox = -finLen1B / 2 + fsw * (c + 1);
-            const oy = -finH1B / 2 + fsh * (r + 1);
-            const oru = new THREE.Mesh(box(ow, oh, od), role.mat);
-            oru.position.set(fX + ox, fY + oy, fZ + zSide * (radThick / 2 + od / 2));
-            addPart(oru, "oru", `ORU [F${fi1B + 1},${c},${r}] — ${role.label}`);
-        }
+    // Fold seams
+    for (let f = 1; f <= 3; f++) {
+        const foldY = -radH1B / 2 + radH1B * f / 4;
+        const foldLine = new THREE.Mesh(box(radLen1B * 0.95, 0.008, radThick + 0.004), MAT.seam);
+        foldLine.position.set(0, radY1B + foldY, radZ1B);
+        stationGroup.add(foldLine);
+    }
 
-        fi1B++;
+    // ORUs on -Z face
+    const fCols1B = Math.max(1, Math.floor(Math.sqrt(gpuCount * radAspect1B)));
+    const fRows1B = Math.max(1, Math.floor(gpuCount / fCols1B));
+    const fsw1B = radLen1B / (fCols1B + 1), fsh1B = radH1B / (fRows1B + 1);
+    for (let c = 0; c < fCols1B; c++) for (let r = 0; r < fRows1B; r++) {
+        const oruIdx = c * fRows1B + r;
+        if (oruIdx >= gpuCount) break;
+        const role = getORURole(oruIdx, cfg.oruPrimaryRole || 'decode');
+        const ox = -radLen1B / 2 + fsw1B * (c + 1);
+        const oy = -radH1B / 2 + fsh1B * (r + 1);
+        const oru = new THREE.Mesh(box(ow, oh, od), role.mat);
+        oru.position.set(ox, radY1B + oy, radZ1B - (radThick / 2 + od / 2));
+        addPart(oru, "oru", `ORU [${c},${r}] — ${role.label}`);
     }
 
     // Manifolds on bus
@@ -3270,87 +3272,84 @@ function buildDP2(cfg) {
 
     // ── DEPLOYABLE RADIATOR FINS ──
     // SpaceX AI Sat Mini style: vertical fin panels fold out from ±Z bus edges
-    // Multi-axis fold-out radiator based on v3 D2C phased array structure
+    // Single radiator panel on anti-sun side (-Z), deployed below bus
+    // One continuous panel (folds for launch, deploys as one piece)
     //
-    // Fins are VERTICAL walls — tall along Y, long along X, thin along Z
-    // Normal ±Z: edge-on to sun in dawn-dusk SSO, both ±Z faces see deep space
-    // Gravity gradient: tall vertical fins help passive stabilization
-    // Drag: thin in Z (ram direction in dawn-dusk), minimal cross-section
-    //
-    // 2 fins total: one per ±Z side of bus (matching SpaceX render)
-    // Each fin hangs vertically below the bus, OUTWARD from the bus edge
-    // so they face away from each other (not toward each other)
-    const nFins = 2;
-    const finArea = cfg.radM2 / nFins;
-    const finAspect = 3;  // height:width ratio
-    const finH = Math.sqrt(finArea * finAspect);     // Y dimension (tall, vertical)
-    const finLen = finArea / finH;                     // X dimension (width)
+    // -Z face radiates to deep space (VF ≈ 1.0)
+    // +Z face sees bus underside (acceptable — bus is small)
+    // No mutual view factor issues — single panel, not split
+    // XY plane, normal ±Z, same orientation as solar wings
+    const radArea = cfg.radM2;
+    const radAspect = 4;  // long along X, shorter along Y
+    const radLen = Math.sqrt(radArea * radAspect);   // X (long, same as wings)
+    const radH = radArea / radLen;                     // Y (hanging down)
     const radThick = 0.03;
-    const finGap = 0.15;
+    const radGap = 0.2;
 
     const hpMat = new THREE.MeshStandardMaterial({color: 0xd0d0dd, roughness: 0.35, metalness: 0.4});
     const frameMat = new THREE.MeshStandardMaterial({color: 0xaaaabc, roughness: 0.4, metalness: 0.5});
 
     const oc = Math.min(Math.floor(cfg.computeKw * 1000 / cfg.gpuPowerW), 300);
-    const orusPerFin = Math.ceil(oc / nFins);
     const [ow, oh, od] = cfg.oruSize;
 
-    let finIdx = 0;
-    for (const zSide of [1, -1]) {
-        // Each fin hangs below the bus, offset outward in ±Z
-        // The outward-facing side (-Z for +Z fin, +Z for -Z fin) sees deep space
-        const fX = 0;
-        const fY = -(hubY / 2 + finH / 2 + finGap);
-        const fZ = zSide * (hubZ / 2 + radThick / 2 + finGap);
+    // Position: centered on X, hanging below bus in -Y, on anti-sun side (-Z)
+    const radX = 0;
+    const radY2 = -(hubY / 2 + radH / 2 + radGap);
+    const radZ = -(hubZ / 2 + radThick / 2 + radGap);
 
-        // Hinge bracket along bus ±Z edge
-        const hinge = new THREE.Mesh(box(finLen * 0.3, 0.06, 0.04), MAT.truss);
-        hinge.position.set(0, -(hubY / 2 + 0.03), zSide * (hubZ / 2 + finGap / 2));
-        stationGroup.add(hinge);
+    // Hinge rail along bus -Z edge
+    const hinge = new THREE.Mesh(box(radLen * 0.4, 0.06, 0.04), MAT.truss);
+    hinge.position.set(0, -(hubY / 2 + 0.03), -(hubZ / 2 + radGap / 2));
+    stationGroup.add(hinge);
 
-        // Radiator fin panel — VERTICAL wall (XY plane, thin in Z)
-        const fin = new THREE.Mesh(box(finLen, finH, radThick), MAT.rad);
-        fin.position.set(fX, fY, fZ);
-        addPart(fin, "radiator", `Radiator Fin ${finIdx + 1} — ${finArea.toFixed(0)}m² (${finLen.toFixed(1)}m × ${finH.toFixed(1)}m)`);
+    // Main radiator panel (XY plane, thin in Z)
+    const radPanel = new THREE.Mesh(box(radLen, radH, radThick), MAT.rad);
+    radPanel.position.set(radX, radY2, radZ);
+    addPart(radPanel, "radiator", `Deployable Radiator — ${radArea.toFixed(0)}m² (${radLen.toFixed(1)}m × ${radH.toFixed(1)}m)`);
 
-        // Heat pipe lines running vertically (along Y)
-        for (let hp = 0; hp < 3; hp++) {
-            const hpX = -finLen / 2 + finLen * (hp + 1) / 4;
-            const hpMesh = new THREE.Mesh(box(0.008, finH * 0.9, radThick + 0.003), hpMat);
-            hpMesh.position.set(fX + hpX, fY, fZ);
-            stationGroup.add(hpMesh);
+    // Heat pipe lines running vertically (along Y)
+    for (let hp = 0; hp < 4; hp++) {
+        const hpX = -radLen / 2 + radLen * (hp + 1) / 5;
+        const hpMesh = new THREE.Mesh(box(0.008, radH * 0.9, radThick + 0.003), hpMat);
+        hpMesh.position.set(hpX, radY2, radZ);
+        stationGroup.add(hpMesh);
+    }
+
+    // Edge frame
+    for (const [fw, fh, fx2, fy2] of [
+        [radLen + 0.03, 0.02, 0, radH / 2],
+        [radLen + 0.03, 0.02, 0, -radH / 2],
+        [0.02, radH, radLen / 2, 0],
+        [0.02, radH, -radLen / 2, 0],
+    ]) {
+        const fr = new THREE.Mesh(box(fw, fh, radThick + 0.006), frameMat);
+        fr.position.set(fx2, radY2 + fy2, radZ);
+        stationGroup.add(fr);
+    }
+
+    // Fold lines (panel was folded for launch — show 3 fold seams)
+    for (let f = 1; f <= 3; f++) {
+        const foldY = -radH / 2 + radH * f / 4;
+        const foldLine = new THREE.Mesh(box(radLen * 0.95, 0.01, radThick + 0.005), MAT.seam);
+        foldLine.position.set(0, radY2 + foldY, radZ);
+        stationGroup.add(foldLine);
+    }
+
+    // ORUs on -Z face (anti-sun, deep space facing)
+    if (!cfg.centralized) {
+        const finCols = Math.max(1, Math.floor(Math.sqrt(oc * radAspect)));
+        const finRows = Math.max(1, Math.floor(oc / finCols));
+        const sw = radLen / (finCols + 1), sh = radH / (finRows + 1);
+        for (let c = 0; c < finCols; c++) for (let r = 0; r < finRows; r++) {
+            const oruIdx = c * finRows + r;
+            if (oruIdx >= oc) break;
+            const role = getORURole(oruIdx, cfg.oruPrimaryRole || 'decode');
+            const ox = -radLen / 2 + sw * (c + 1);
+            const oy = -radH / 2 + sh * (r + 1);
+            const oru = new THREE.Mesh(box(ow, oh, od), role.mat);
+            oru.position.set(ox, radY2 + oy, radZ - (radThick / 2 + od / 2));
+            addPart(oru, "oru", `ORU [${c},${r}] — ${role.label}`);
         }
-
-        // Edge frame
-        for (const [fw, fh, fx2, fy2] of [
-            [finLen + 0.03, 0.02, 0, finH / 2],
-            [finLen + 0.03, 0.02, 0, -finH / 2],
-            [0.02, finH, finLen / 2, 0],
-            [0.02, finH, -finLen / 2, 0],
-        ]) {
-            const fr = new THREE.Mesh(box(fw, fh, radThick + 0.006), frameMat);
-            fr.position.set(fX + fx2, fY + fy2, fZ);
-            stationGroup.add(fr);
-        }
-
-        // ORUs on outward-facing side of fin (away from bus)
-        if (!cfg.centralized) {
-            const finCols = Math.max(1, Math.floor(Math.sqrt(orusPerFin / finAspect)));
-            const finRows = Math.max(1, Math.floor(orusPerFin / finCols));
-            const sw = finLen / (finCols + 1), sh = finH / (finRows + 1);
-            for (let c = 0; c < finCols; c++) for (let r = 0; r < finRows; r++) {
-                const oruIdx = finIdx * orusPerFin + c * finRows + r;
-                if (oruIdx >= oc) break;
-                const role = getORURole(oruIdx, cfg.oruPrimaryRole || 'decode');
-                const ox = -finLen / 2 + sw * (c + 1);
-                const oy = -finH / 2 + sh * (r + 1);
-                const oru = new THREE.Mesh(box(ow, oh, od), role.mat);
-                oru.position.set(fX + ox, fY + oy, fZ + zSide * (radThick / 2 + od / 2));
-                addPart(oru, "oru", `ORU [F${finIdx + 1},${c},${r}] — ${role.label}`);
-            }
-        }
-
-        finIdx++;
     }
 
     if (!cfg.centralized) {
