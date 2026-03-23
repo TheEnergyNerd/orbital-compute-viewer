@@ -3824,9 +3824,11 @@ function buildDragonfly(cfgKey) {
     const baseCfg = CONFIGS[cfgKey.replace('_DRAGONFLY','')];
     const nodeCount = baseCfg.clusterSize || 4;
     const edgeCount = nodeCount - 1;
-    // Size the cluster radius based on station wingspan to prevent overlap
-    // DP2 wingspan ≈ 30m (15m per PV wing), DP3 wingspan ≈ 120m (60m spine + panels)
-    const clusterR = baseCfg.isDP3 ? 500 : 160;
+    // Size the cluster radius based on actual panel wingspan to prevent overlap
+    const dfPvC = baseCfg.isDP3 ? Math.sqrt(baseCfg.solarM2 / 2 / 1.5) : 3.5;
+    const dfPvS = baseCfg.isDP3 ? 1.5 * dfPvC : Math.ceil(baseCfg.solarM2 / 2 / dfPvC);
+    const dfWingspan = dfPvS * 2 + 5;
+    const clusterR = dfWingspan * 1.1;
 
     // ================================================================
     // DRAGONFLY TOPOLOGY (Kim, Dally, Abts 2008) — ring-of-groups layout
@@ -3861,7 +3863,7 @@ function buildDragonfly(cfgKey) {
     const positions = [[0, 0, 0]];
     const nodeRoles = ['routing'];
     const nodeGroupIdx = [-1];
-    const groupSpread = baseCfg.isDP3 ? 120 : 50;
+    const groupSpread = dfWingspan * 0.5;  // nodes within a group spaced at half wingspan
 
     for (let g = 0; g < numGroups; g++) {
         const groupAngle = (2 * Math.PI * g) / numGroups;
@@ -3983,7 +3985,13 @@ function buildDragonfly(cfgKey) {
 function buildCluster(cfgKey) {
     const baseCfg = CONFIGS[cfgKey.replace('_CLUSTER','')];
     const nodeCount = baseCfg.clusterSize || 4;
-    const hexR = baseCfg.isDP3 ? 300 : 90;  // distance between adjacent hex-cells (increased 50% to prevent panel overlap)
+    // Calculate spacing from actual panel wingspan so nodes never overlap
+    // DP2: pvC=3.5, pvS = solarM2/2/pvC ≈ 103m per side → total wingspan ~210m
+    // DP3: pvC from sqrt(solarM2/2/1.5), pvS = 1.5*pvC → wingspan ~2*pvS ≈ 160m
+    const pvC = baseCfg.isDP3 ? Math.sqrt(baseCfg.solarM2 / 2 / 1.5) : 3.5;
+    const pvS = baseCfg.isDP3 ? 1.5 * pvC : Math.ceil(baseCfg.solarM2 / 2 / pvC);
+    const wingspan = pvS * 2 + 5;  // total wingspan + margin
+    const hexR = wingspan * 1.1;  // nodes spaced wider than wingspan to prevent overlap
 
     // ================================================================
     // HEX-CELL BRANCHING TOPOLOGY
