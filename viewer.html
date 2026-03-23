@@ -3253,43 +3253,48 @@ function buildDP2(cfg) {
         addPart(hinge, "structure", "PV Deployment Hinge");
     }
 
-    // Radiator — big flat white panel extending -Y from bus
-    // SMAD 2.5:1 aspect (span along Y : chord along X)
-    // Normal +Z (zenith) — ORUs mounted on +Z face
-    const rC = Math.sqrt(cfg.radM2 / 2.5);   // chord (X dimension)
-    const rS = 2.5 * rC;                       // span (Y dimension)
-    const radThick = 0.04;                      // thicker for visibility (40mm Al honeycomb)
-    const rY = -(hubY / 2 + rS / 2 + 0.5);     // positioned below bus with gap
+    // Radiator — flat panel in XY plane, deployed below bus along -Y
+    // Long dimension along X (same as solar wings) → edge-on to velocity (Y)
+    //   → minimizes drag cross-section in ram direction
+    // Normal ±Z → edge-on to sun in dawn-dusk SSO → minimal solar absorption
+    // Both ±Z faces radiate to space
+    // Gravity gradient: mass distributed along velocity axis aids passive stabilization
+    const radAspect = 4;  // long-and-skinny, matching panel aesthetic
+    const rS = Math.sqrt(cfg.radM2 * radAspect);   // X dimension (long, along wingspan)
+    const rC = cfg.radM2 / rS;                       // Y dimension (short, along velocity)
+    const radThick = 0.04;
+    const rY = -(hubY / 2 + rC / 2 + 0.5);     // positioned below bus
 
-    // Main radiator panel — bright white, prominent
-    const rad = new THREE.Mesh(box(rC, rS, radThick), MAT.rad);
+    // Main radiator panel
+    const rad = new THREE.Mesh(box(rS, rC, radThick), MAT.rad);
     rad.position.set(0, rY, 0);
-    addPart(rad, "radiator", `Main Radiator — ${cfg.radM2}m² (carbon black)`);
+    addPart(rad, "radiator", `Main Radiator — ${cfg.radM2}m² (${rS.toFixed(0)}m × ${rC.toFixed(1)}m, carbon black)`);
 
-    // Heat pipe channels (visible lines running along Y span)
+    // Heat pipe channels (running along X span — long dimension)
     const hpMat = new THREE.MeshStandardMaterial({color: 0xd0d0dd, roughness: 0.35, metalness: 0.4});
-    for (let i = 0; i < 6; i++) {
-        const hpX = -rC / 2 + rC * (i + 1) / 7;
-        const hp = new THREE.Mesh(box(0.012, rS * 0.92, radThick + 0.005), hpMat);
-        hp.position.set(hpX, rY, 0);
+    const hpCount = Math.max(3, Math.floor(rC / 2));
+    for (let i = 0; i < hpCount; i++) {
+        const hpY2 = -rC / 2 + rC * (i + 1) / (hpCount + 1);
+        const hp = new THREE.Mesh(box(rS * 0.92, 0.012, radThick + 0.005), hpMat);
+        hp.position.set(0, rY + hpY2, 0);
         stationGroup.add(hp);
     }
 
-    // Radiator edge frame (thin border showing panel extent)
+    // Radiator edge frame
     const frameMat = new THREE.MeshStandardMaterial({color: 0xaaaabc, roughness: 0.4, metalness: 0.5});
     for (const [fw, fh, fx, fy] of [
-        [rC + 0.06, 0.03, 0, rS / 2],    // top edge
-        [rC + 0.06, 0.03, 0, -rS / 2],   // bottom edge
-        [0.03, rS, rC / 2, 0],            // right edge
-        [0.03, rS, -rC / 2, 0],           // left edge
+        [rS + 0.06, 0.03, 0, rC / 2],    // top edge
+        [rS + 0.06, 0.03, 0, -rC / 2],   // bottom edge
+        [0.03, rC, rS / 2, 0],            // right edge
+        [0.03, rC, -rS / 2, 0],           // left edge
     ]) {
         const frame = new THREE.Mesh(box(fw, fh, radThick + 0.01), frameMat);
         frame.position.set(fx, rY + fy, 0);
         stationGroup.add(frame);
     }
 
-    // Structural stiffening (longerons behind radiator)
-    buildRadStiff([0, rY, 0], rC, rS, 'Z');
+    // Structural stiffening (longerons along X span)
+    buildRadStiff([0, rY, 0], rS, rC, 'Z');
 
     // Deployment boom connecting bus to radiator
     const boomLen = 0.5;
@@ -3306,12 +3311,13 @@ function buildDP2(cfg) {
     if (!cfg.centralized) {
         const oc=Math.min(Math.floor(cfg.computeKw*1000/cfg.gpuPowerW),300);
         const [ow,oh,od]=cfg.oruSize;
-        const cols=Math.max(1,Math.floor(Math.sqrt(oc/2.5))),rows=Math.max(1,Math.floor(oc/cols));
-        const sw=rC/(cols+1),sh=rS/(rows+1);
+        // ORU grid on radiator: cols along X (rS), rows along Y (rC)
+        const cols=Math.max(1,Math.floor(Math.sqrt(oc*radAspect))),rows=Math.max(1,Math.floor(oc/cols));
+        const sw=rS/(cols+1),sh=rC/(rows+1);
         for(let c=0;c<cols;c++) for(let r=0;r<rows;r++) {
             const oruIdx = c * rows + r;
             const role = getORURole(oruIdx, cfg.oruPrimaryRole || 'decode');
-            const ox=-rC/2+sw*(c+1),oy=-rS/2+sh*(r+1);
+            const ox=-rS/2+sw*(c+1),oy=-rC/2+sh*(r+1);
             const oru=new THREE.Mesh(box(ow,oh,od),role.mat); oru.position.set(ox,rY+oy,radThick/2+od/2);
             addPart(oru,"oru",`ORU [${c},${r}] — ${role.label}`);
         }
@@ -3505,8 +3511,9 @@ function buildDP3(cfg) {
     }
 
     // ── PV ARRAYS at +Y end ──
-    const pvC = Math.sqrt(cfg.solarM2 / 2 / 1.5);
-    const pvS = 1.5 * pvC;
+    // Skinny roll-out panels: chord ~5m (wider spool for MW-class), span grows with area
+    const pvC = 5;  // Z chord — spool width (wider than DP2's 3.5m for structural stiffness at scale)
+    const pvS = Math.ceil(cfg.solarM2 / 2 / pvC);  // X span per wing (~419m for 4188 m²)
     const pvY = halfSpine;
     const pvOff = 0.25; // spine half-width offset
 
@@ -3823,8 +3830,8 @@ function buildDragonfly(cfgKey) {
     const nodeCount = baseCfg.clusterSize || 4;
     const edgeCount = nodeCount - 1;
     // Size the cluster radius based on actual panel wingspan to prevent overlap
-    const dfPvC = baseCfg.isDP3 ? Math.sqrt(baseCfg.solarM2 / 2 / 1.5) : 3.5;
-    const dfPvS = baseCfg.isDP3 ? 1.5 * dfPvC : Math.ceil(baseCfg.solarM2 / 2 / dfPvC);
+    const dfPvC = baseCfg.isPhotonic ? 5 : 3.5;
+    const dfPvS = Math.ceil(baseCfg.solarM2 / 2 / dfPvC);
     const dfWingspan = dfPvS * 2 + 5;
     const clusterR = dfWingspan * 1.1;
 
@@ -3990,9 +3997,9 @@ function buildCluster(cfgKey) {
     const nodeCount = baseCfg.clusterSize || 4;
     // Calculate spacing from actual panel wingspan so nodes never overlap
     // DP2: pvC=3.5, pvS = solarM2/2/pvC ≈ 103m per side → total wingspan ~210m
-    // DP3: pvC from sqrt(solarM2/2/1.5), pvS = 1.5*pvC → wingspan ~2*pvS ≈ 160m
-    const pvC = baseCfg.isDP3 ? Math.sqrt(baseCfg.solarM2 / 2 / 1.5) : 3.5;
-    const pvS = baseCfg.isDP3 ? 1.5 * pvC : Math.ceil(baseCfg.solarM2 / 2 / pvC);
+    // Skinny roll-out panels: DP3 uses 5m chord, everything else 3.5m
+    const pvC = baseCfg.isPhotonic ? 5 : 3.5;
+    const pvS = Math.ceil(baseCfg.solarM2 / 2 / pvC);
     const wingspan = pvS * 2 + 5;  // total wingspan + margin
     const hexR = wingspan * 1.1;  // nodes spaced wider than wingspan to prevent overlap
 
