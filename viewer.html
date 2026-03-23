@@ -252,10 +252,8 @@ body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', 
             <button class="config-tab" data-config="DP2B">DP2B<span class="sub">VR Hub</span></button>
             <button class="config-tab" data-config="DP3">DP3<span class="sub">D3 Photonic</span></button>
             <button class="config-tab" data-config="DP3B">DP3B<span class="sub">D3 Electrical</span></button>
-            <button class="config-tab" data-config="DP2_DRAGONFLY">Dragonfly<span class="sub">DP2 ×5</span></button>
-            <button class="config-tab" data-config="DP3_DRAGONFLY">Dragonfly<span class="sub">DP3 ×10</span></button>
-            <button class="config-tab" data-config="DP2_CLUSTER">Hex-Cell<span class="sub">DP2 ×5</span></button>
-            <button class="config-tab" data-config="DP3_CLUSTER">Hex-Cell<span class="sub">DP3 ×10</span></button>
+            <button class="config-tab" data-config="DP2_CLUSTER">Cluster<span class="sub">DP2 ×5</span></button>
+            <button class="config-tab" data-config="DP3_CLUSTER">Cluster<span class="sub">DP3 ×10</span></button>
         </div>
         <div style="flex:1"></div>
         <span class="badge orbital">Dawn-Dusk SSO</span>
@@ -3903,13 +3901,18 @@ function buildDragonfly(cfgKey) {
         stationGroup = group;
 
         const nodeCfg = { ...baseCfg, oruPrimaryRole: role };
-        if (baseCfg.isDP3) buildDP3(nodeCfg); else buildDP2(nodeCfg);
+        // Route to correct builder: only DP3 photonic uses spine, everything else is flat-bus
+        if (baseCfg.isPhotonic) buildDP3(nodeCfg);
+        else if (nodeCfg.isDP1B) buildDP1B(nodeCfg);
+        else if (nodeCfg.isHexpack) buildT1(nodeCfg);
+        else if (nodeCfg.isDP1) buildDP1(nodeCfg);
+        else buildDP2(nodeCfg);
         saved.add(group);
     }
     stationGroup = saved;
 
     // ISL links
-    const linkR = baseCfg.isDP3 ? 1.5 : 0.5;
+    const linkR = baseCfg.isDP3 || baseCfg.solarM2 > 2000 ? 1.5 : 0.5;
     const intraLinkMat = new THREE.MeshStandardMaterial({
         color: 0x00ffcc, transparent: true, opacity: 0.5,
         emissive: 0x00ffcc, emissiveIntensity: 0.3
@@ -4124,7 +4127,12 @@ function buildCluster(cfgKey) {
         } else {
             nodeCfg.oruPrimaryRole = role;
         }
-        if (baseCfg.isDP3) buildDP3(nodeCfg); else buildDP2(nodeCfg);
+        // Route to correct builder: only DP3 photonic uses spine
+        if (baseCfg.isPhotonic) buildDP3(nodeCfg);
+        else if (nodeCfg.isDP1B) buildDP1B(nodeCfg);
+        else if (nodeCfg.isHexpack) buildT1(nodeCfg);
+        else if (nodeCfg.isDP1) buildDP1(nodeCfg);
+        else buildDP2(nodeCfg);
         saved.add(group);
     }
     stationGroup = saved;
@@ -4539,7 +4547,7 @@ animate();
 // =====================================================================
 async function exportDebugReference() {
     const singles = ['DP1','DP1B','T1','DP2','DP2B','DP3','DP3B'];
-    const clusters = ['DP2_DRAGONFLY','DP3_DRAGONFLY','DP2_CLUSTER','DP3_CLUSTER'];
+    const clusters = ['DP2_CLUSTER','DP3_CLUSTER'];
     const allConfigs = [...singles, ...clusters];
     const captures = {};
 
