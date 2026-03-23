@@ -2989,13 +2989,13 @@ function buildDP1B(cfg) {
         tr.position.set(dir*(bW/2+wingSpan*0.2+0.06),wingY+0.018,0);stationGroup.add(tr);
     }
 
-    // ── RADIATOR PANEL (vertical wall, perpendicular to solar wings) ──
-    // YZ plane: radC along Z, radS along Y (hanging down). Normal ±X.
-    // Perpendicular to solar wings (±X) — edge-on to sun in dawn-dusk SSO.
-    // Both ±X faces radiate to deep space. ORUs on +X face.
+    // ── RADIATOR PANEL (XY plane — same orientation as solar panels) ──
+    // Normal ±Z, same as DP2. -Z face (anti-sun) radiates to deep space (VF ≈ 1.0).
+    // Long dimension along X (wingspan direction), short along Y (below bus).
+    // ORUs on -Z face for direct thermal coupling to radiating surface.
     const radThick = 0.03;
-    const boomLen = 0.4;
-    const rY = -(bH/2 + boomLen + radS/2 + 0.1);
+    const boomLen = 0.3;
+    const rY = -(bH/2 + boomLen + radC/2 + 0.05);
 
     // Deployment boom
     const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,boomLen,8),MAT.truss);
@@ -3005,31 +3005,32 @@ function buildDP1B(cfg) {
     const radHinge = new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,0.06,12),MAT.pipe);
     radHinge.position.set(0,-(bH/2+boomLen),0);radHinge.rotation.z=Math.PI/2;stationGroup.add(radHinge);
 
-    // Main radiator panel (carbon black) — YZ plane: thin along X, radS along Y, radC along Z
-    const rad = new THREE.Mesh(box(radThick,radS,radC),MAT.rad);
+    // Main radiator panel (carbon black) — XY plane: radS along X, radC along Y, thin in Z
+    const rad = new THREE.Mesh(box(radS,radC,radThick),MAT.rad);
     rad.position.set(0,rY,0);
-    addPart(rad,"radiator",`Main Radiator — ${cfg.radM2}m² (${radS.toFixed(1)}m × ${radC.toFixed(1)}m)`);
+    addPart(rad,"radiator",`Main Radiator — ${cfg.radM2}m² (${radS.toFixed(1)}m × ${radC.toFixed(1)}m, carbon black)`);
 
-    // Heat pipe channels running along Y (vertical)
-    for(let i=0;i<4;i++){const hpZ=-radC/2+radC*(i+1)/5;const hp=new THREE.Mesh(box(radThick+0.004,radS*0.92,0.008),MAT.pipe);hp.position.set(0,rY,hpZ);stationGroup.add(hp);}
+    // Heat pipe channels running along X (long dimension)
+    const hpCount2 = Math.max(2, Math.floor(radC / 1.5));
+    for(let i=0;i<hpCount2;i++){const hpY2=-radC/2+radC*(i+1)/(hpCount2+1);const hp=new THREE.Mesh(box(radS*0.92,0.008,radThick+0.004),MAT.pipe);hp.position.set(0,rY+hpY2,0);stationGroup.add(hp);}
 
     // Radiator edge frame
     const frameMat=new THREE.MeshStandardMaterial({color:0xaaaabc,roughness:0.4,metalness:0.5});
-    for(const [fd,fh,fz,fy] of [[radC+0.04,0.02,0,radS/2],[radC+0.04,0.02,0,-radS/2],[0.02,radS,radC/2,0],[0.02,radS,-radC/2,0]]){
-        const fr=new THREE.Mesh(box(radThick+0.008,fh,fd),frameMat);fr.position.set(0,rY+fy,fz);stationGroup.add(fr);
+    for(const [fw,fh,fx,fy] of [[radS+0.04,0.02,0,radC/2],[radS+0.04,0.02,0,-radC/2],[0.02,radC,radS/2,0],[0.02,radC,-radS/2,0]]){
+        const fr=new THREE.Mesh(box(fw,fh,radThick+0.008),frameMat);fr.position.set(fx,rY+fy,0);stationGroup.add(fr);
     }
 
-    // ORU grid on radiator +X face
+    // ORU grid on radiator -Z face (anti-sun side)
     const gpuCount=cfg.gpuCount||48;
     const [ow,oh,od]=cfg.oruSize||[0.6,0.4,0.06];
-    const cols2=Math.max(1,Math.floor(Math.sqrt(gpuCount/4)));
+    const cols2=Math.max(1,Math.floor(Math.sqrt(gpuCount*4)));
     const rows2=Math.max(1,Math.floor(gpuCount/cols2));
-    const sw2=radC/(cols2+1),sh2=radS/(rows2+1);
+    const sw2=radS/(cols2+1),sh2=radC/(rows2+1);
     let gi=0;
     for(let c=0;c<cols2&&gi<gpuCount;c++)for(let r=0;r<rows2&&gi<gpuCount;r++){
         const role=getORURole(gi,cfg.oruPrimaryRole||'decode');
-        const oz=-radC/2+sw2*(c+1),oy=-radS/2+sh2*(r+1);
-        const oru=new THREE.Mesh(box(od,oh,ow),role.mat);oru.position.set(radThick/2+od/2,rY+oy,oz);
+        const ox=-radS/2+sw2*(c+1),oy=-radC/2+sh2*(r+1);
+        const oru=new THREE.Mesh(box(ow,oh,od),role.mat);oru.position.set(ox,rY+oy,-radThick/2-od/2);
         addPart(oru,"oru",`ORU [${c},${r}] — ${role.label}`);gi++;
     }
 
