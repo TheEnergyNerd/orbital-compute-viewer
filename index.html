@@ -3563,31 +3563,53 @@ function buildDP2(cfg) {
         addPart(flange,"structure","Radiator Interface Plate");
 
         // ── EXTERNAL FLUID TRANSPORT LINES ──
-        // Visible plumbing from compute bay to radiator panel
-        // Hot supply (red) and cold return (blue) run from bay bottom to radiator
-        const radYPos = -(hubY / 2 + radH / 2 + radGap);  // where radiator is
+        // Visible thermal loop plumbing from compute bay down to radiator panel
+        // Hot supply (red) and cold return (blue) run from bay bottom to radiator top
+        // These are the main visible thermal loops the user should see
+        const radYPos = -(hubY / 2 + radH / 2 + radGap);
         const bayBottom = bayY - bayH/2;
-        const pipeLen = Math.abs(bayBottom - (radYPos + radH/2));
-        if (pipeLen > 0.1) {
-            const pipeMidY = (bayBottom + radYPos + radH/2) / 2;
-            // Hot supply line (red/orange)
-            const hotPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, pipeLen, 8),
-                new THREE.MeshStandardMaterial({color:0xcc4422, metalness:0.5, roughness:0.4, emissive:0xaa2211, emissiveIntensity:0.15}));
-            hotPipe.position.set(-0.12, pipeMidY, 0);
-            addPart(hotPipe, "structure", "Hot Fluid Supply Line (PAO-2)");
-            // Cold return line (blue)
-            const coldPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, pipeLen, 8),
-                new THREE.MeshStandardMaterial({color:0x3366aa, metalness:0.5, roughness:0.4, emissive:0x1133aa, emissiveIntensity:0.15}));
-            coldPipe.position.set(0.12, pipeMidY, 0);
-            addPart(coldPipe, "structure", "Cold Fluid Return Line (PAO-2)");
-            // MLI insulation wrap around pipes (gold)
-            for (const px of [-0.12, 0.12]) {
-                const mli = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, pipeLen * 0.9, 8),
-                    new THREE.MeshStandardMaterial({color:0xe0c020, metalness:0.6, roughness:0.4, transparent:true, opacity:0.3}));
-                mli.position.set(px, pipeMidY, 0);
-                stationGroup.add(mli);
-            }
+        const radTop = radYPos + radH/2;
+        const pipeRunLen = Math.max(0.5, Math.abs(bayBottom - radTop) + radH * 0.6);
+        const pipeMidY = bayBottom - pipeRunLen / 2;
+
+        // Hot supply line (red/orange — carries warm coolant from compute bay to radiator)
+        const hotPipeMat = new THREE.MeshStandardMaterial({color:0xee4422, metalness:0.5, roughness:0.3, emissive:0xcc3311, emissiveIntensity:0.25});
+        const hotPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, pipeRunLen, 8), hotPipeMat);
+        hotPipe.position.set(-0.18, pipeMidY, 0.08);
+        addPart(hotPipe, "structure", "Hot Fluid Supply Line (PAO-2) — GPU heat → radiator");
+
+        // Cold return line (blue — carries chilled coolant back from radiator to compute bay)
+        const coldPipeMat = new THREE.MeshStandardMaterial({color:0x2255cc, metalness:0.5, roughness:0.3, emissive:0x1144bb, emissiveIntensity:0.25});
+        const coldPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, pipeRunLen, 8), coldPipeMat);
+        coldPipe.position.set(0.18, pipeMidY, 0.08);
+        addPart(coldPipe, "structure", "Cold Fluid Return Line (PAO-2) — radiator → GPU cold plates");
+
+        // Second pair of pipes on other side (redundant loop)
+        const hotPipe2 = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, pipeRunLen, 8), hotPipeMat);
+        hotPipe2.position.set(-0.18, pipeMidY, -0.08);
+        addPart(hotPipe2, "structure", "Hot Supply Line B (redundant loop)");
+
+        const coldPipe2 = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, pipeRunLen, 8), coldPipeMat);
+        coldPipe2.position.set(0.18, pipeMidY, -0.08);
+        addPart(coldPipe2, "structure", "Cold Return Line B (redundant loop)");
+
+        // MLI insulation wrap around all pipes (gold/amber, semi-transparent)
+        for (const [px, pz] of [[-0.18, 0.08], [0.18, 0.08], [-0.18, -0.08], [0.18, -0.08]]) {
+            const mli = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, pipeRunLen * 0.92, 8),
+                new THREE.MeshStandardMaterial({color:0xe0c020, metalness:0.6, roughness:0.4, transparent:true, opacity:0.2}));
+            mli.position.set(px, pipeMidY, pz);
+            stationGroup.add(mli);
         }
+
+        // Header manifold at radiator interface (where pipes connect to radiator channels)
+        const headerMat = new THREE.MeshStandardMaterial({color:0x778899, metalness:0.6, roughness:0.3});
+        const header = new THREE.Mesh(box(0.6, 0.06, 0.15), headerMat);
+        header.position.set(0, radTop + 0.05, 0.08);
+        addPart(header, "structure", "Radiator Header Manifold — hot/cold distribution");
+
+        const header2 = new THREE.Mesh(box(0.6, 0.06, 0.15), headerMat);
+        header2.position.set(0, radTop + 0.05, -0.08);
+        addPart(header2, "structure", "Radiator Header Manifold B (redundant)");
     }
     // Laser terminals
     for (let i=0;i<4;i++) {
