@@ -2622,24 +2622,7 @@ grad.addColorStop(0, '#0c1020'); grad.addColorStop(0.5, '#0a0e1a'); grad.addColo
 bgCtx.fillStyle = grad; bgCtx.fillRect(0, 0, 2, 512);
 scene.background = new THREE.CanvasTexture(bgCanvas);
 
-// Stars — varied brightness
-const starGeo = new THREE.BufferGeometry();
-const starCount = 4000;
-const starPos = new Float32Array(starCount * 3);
-const starColors = new Float32Array(starCount * 3);
-for (let i = 0; i < starCount; i++) {
-    starPos[i*3] = (Math.random()-0.5)*500;
-    starPos[i*3+1] = (Math.random()-0.5)*500;
-    starPos[i*3+2] = (Math.random()-0.5)*500;
-    const brightness = 0.4 + Math.random() * 0.6;
-    const tint = Math.random(); // warm vs cool
-    starColors[i*3] = brightness * (0.85 + tint*0.15);
-    starColors[i*3+1] = brightness * (0.85 + tint*0.1);
-    starColors[i*3+2] = brightness;
-}
-starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-starGeo.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
-scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ size: 0.2, vertexColors: true })));
+// No starfield — clean background
 
 const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 5000);
 camera.position.set(30, 20, 30);
@@ -3054,11 +3037,11 @@ function buildDP1B(cfg) {
 
     const radX1B = 0;
     const radY1B = -(bH / 2 + radH1B / 2 + radGap1B);
-    const radZ1B = -(bD / 2 + radThick / 2 + radGap1B);
+    const radZ1B = 0;  // centered — T-shape: radiator hangs straight down from bus
 
     // Hinge
     const hinge1B = new THREE.Mesh(box(radLen1B * 0.3, 0.04, 0.03), MAT.truss);
-    hinge1B.position.set(0, -(bH / 2 + 0.02), -(bD / 2 + radGap1B / 2));
+    hinge1B.position.set(0, -(bH / 2 + 0.02), 0);  // centered for T-shape
     stationGroup.add(hinge1B);
 
     // Single radiator panel (XY plane, -Z face to deep space)
@@ -3342,11 +3325,11 @@ function buildDP2(cfg) {
     // Position: centered on X, hanging below bus in -Y, on anti-sun side (-Z)
     const radX = 0;
     const radY2 = -(hubY / 2 + radH / 2 + radGap);
-    const radZ = -(hubZ / 2 + radThick / 2 + radGap);
+    const radZ = 0;  // centered — T-shape: radiator hangs straight down from bus
 
-    // Hinge rail along bus -Z edge
+    // Hinge rail along bus bottom (centered for T-shape)
     const hinge = new THREE.Mesh(box(radLen * 0.4, 0.06, 0.04), MAT.truss);
-    hinge.position.set(0, -(hubY / 2 + 0.03), -(hubZ / 2 + radGap / 2));
+    hinge.position.set(0, -(hubY / 2 + 0.03), 0);
     stationGroup.add(hinge);
 
     // Main radiator panel (XY plane, thin in Z)
