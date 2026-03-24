@@ -812,6 +812,107 @@ function getModelServing(cfg, m) {
 // =====================================================================
 function fmt(n, d=1) { return n >= 1e6 ? (n/1e6).toFixed(d)+'M' : n >= 1e3 ? (n/1e3).toFixed(d)+'k' : n.toFixed(d); }
 
+function renderThermalPathSVG(cfg, tJunction, tCase, tRad, heatFlux) {
+    if (cfg.centralized) {
+        return '<div class="svg-diagram"><svg viewBox="0 0 500 400" xmlns="http://www.w3.org/2000/svg">' +
+            '<defs>' +
+            '<linearGradient id="thHot" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e05555" stop-opacity="0.3"/><stop offset="1" stop-color="#e05555" stop-opacity="0.05"/></linearGradient>' +
+            '<linearGradient id="thWarm" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e8a838" stop-opacity="0.2"/><stop offset="1" stop-color="#e8a838" stop-opacity="0.05"/></linearGradient>' +
+            '<linearGradient id="thCool" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5cb8e6" stop-opacity="0.2"/><stop offset="1" stop-color="#5cb8e6" stop-opacity="0.05"/></linearGradient>' +
+            '<linearGradient id="thCold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4ecdc4" stop-opacity="0.2"/><stop offset="1" stop-color="#4ecdc4" stop-opacity="0.05"/></linearGradient>' +
+            '<marker id="flow_ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#e8a838"/></marker>' +
+            '</defs>' +
+            '<rect x="0" y="0" width="500" height="400" fill="#080a0f"/>' +
+            '<text x="250" y="18" text-anchor="middle" fill="#556" font-size="9" font-style="italic">Centralized compute bay — pumped fluid loop to remote radiator</text>' +
+            '<rect x="30" y="28" width="200" height="160" rx="6" fill="#0a0e14" stroke="#556" stroke-width="1" stroke-dasharray="4,2"/>' +
+            '<text x="130" y="44" text-anchor="middle" fill="#667" font-size="8">PRESSURE VESSEL</text>' +
+            '<rect x="50" y="52" width="160" height="30" rx="3" fill="url(#thHot)" stroke="#e05555" stroke-width="1.5"/>' +
+            '<rect x="80" y="58" width="100" height="14" rx="2" fill="#e05555" opacity="0.6"/>' +
+            '<text x="130" y="69" text-anchor="middle" fill="#fff" font-size="8" font-weight="600">GPU RACK (' + cfg.gpuCount + '×)</text>' +
+            '<text x="250" y="62" fill="#e05555" font-size="9" font-weight="600">T_j = ' + tJunction + '°C</text>' +
+            '<text x="250" y="76" fill="#556" font-size="7">' + cfg.gpuPowerW + 'W × ' + cfg.gpuCount + '</text>' +
+            '<rect x="50" y="88" width="160" height="28" rx="3" fill="url(#thCool)" stroke="#5cb8e6" stroke-width="1"/>' +
+            '<text x="60" y="106" fill="#d0d4dc" font-size="9" font-weight="600">Cold plate array</text>' +
+            '<text x="250" y="106" fill="#5cb8e6" font-size="8">T_case = ' + tCase + '°C</text>' +
+            '<rect x="60" y="126" width="130" height="28" rx="3" fill="#1a1420" stroke="#b080e0" stroke-width="1.5"/>' +
+            '<text x="125" y="144" text-anchor="middle" fill="#b080e0" font-size="9" font-weight="600">PUMP (redundant ×2)</text>' +
+            '<text x="250" y="142" fill="#778" font-size="8">PAO-2 fluid, 2 L/min</text>' +
+            '<rect x="60" y="162" width="130" height="20" rx="3" fill="url(#thWarm)" stroke="#e8a838" stroke-width="1"/>' +
+            '<text x="125" y="176" text-anchor="middle" fill="#e8a838" font-size="8" font-weight="600">HOT MANIFOLD OUT</text>' +
+            '<line x1="125" y1="188" x2="125" y2="210" stroke="#e8a838" stroke-width="2" marker-end="url(#flow_ah)"/>' +
+            '<text x="145" y="204" fill="#778" font-size="7">~15m fluid transport</text>' +
+            '<rect x="50" y="215" width="160" height="30" rx="3" fill="url(#thWarm)" stroke="#e8a838" stroke-width="1"/>' +
+            '<text x="130" y="234" text-anchor="middle" fill="#d0d4dc" font-size="9" font-weight="600">Heat exchanger</text>' +
+            '<text x="250" y="234" fill="#778" font-size="8">ΔT = 5°C penalty</text>' +
+            '<line x1="50" y1="230" x2="20" y2="230" stroke="#5cb8e6" stroke-width="1.5"/>' +
+            '<line x1="20" y1="230" x2="20" y2="100" stroke="#5cb8e6" stroke-width="1.5"/>' +
+            '<line x1="20" y1="100" x2="50" y2="100" stroke="#5cb8e6" stroke-width="1.5" marker-end="url(#flow_ah)"/>' +
+            '<text x="10" y="165" fill="#5cb8e6" font-size="7" writing-mode="tb">COLD RETURN</text>' +
+            '<rect x="50" y="252" width="160" height="42" rx="4" fill="url(#thCold)" stroke="#4ecdc4" stroke-width="1.5"/>' +
+            '<text x="60" y="272" fill="#d0d4dc" font-size="9" font-weight="600">Radiator panel (remote)</text>' +
+            '<text x="60" y="286" fill="#778" font-size="8">Al 6061-T6 + carbon black · ε = 0.95</text>' +
+            '<text x="250" y="272" fill="#4ecdc4" font-size="9" font-weight="600">T_rad = ' + tRad + '°C</text>' +
+            '<text x="250" y="286" fill="#556" font-size="8">' + cfg.radTempK + 'K</text>' +
+            [80,110,140,170,200].map(x => '<line x1="'+x+'" y1="298" x2="'+x+'" y2="325" stroke="#4ecdc4" stroke-width="1.5" stroke-dasharray="3,3"/>').join('') +
+            '<rect x="260" y="148" width="220" height="85" rx="4" fill="#0a0e14" stroke="#334" stroke-width="0.5"/>' +
+            '<text x="270" y="165" fill="#b080e0" font-size="8" font-weight="600">PUMPED LOOP TRADEOFFS</text>' +
+            '<text x="270" y="180" fill="#778" font-size="7">✓ Compute bay thermally isolated</text>' +
+            '<text x="270" y="193" fill="#778" font-size="7">✓ Serviceable (swap GPUs w/o radiator)</text>' +
+            '<text x="270" y="206" fill="#778" font-size="7">✓ Uniform cooling across rack</text>' +
+            '<text x="270" y="219" fill="#778" font-size="7">✗ +5°C ΔT penalty, pump power, complexity</text>' +
+            '<text x="130" y="345" text-anchor="middle" fill="#4ecdc4" font-size="10" font-weight="600">IR emission → deep space (3K)</text>' +
+            '<text x="130" y="360" text-anchor="middle" fill="#556" font-size="8">Stefan-Boltzmann: q = εσT⁴ · ' + cfg.radM2 + 'm² @ ' + cfg.radTempK + 'K</text>' +
+            '</svg></div>';
+    }
+    // Direct-mount (DP1, DP1B, DP2, DP3, DP3B)
+    return '<div class="svg-diagram"><svg viewBox="0 0 500 320" xmlns="http://www.w3.org/2000/svg">' +
+        '<defs>' +
+        '<linearGradient id="thHot" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e05555" stop-opacity="0.3"/><stop offset="1" stop-color="#e05555" stop-opacity="0.05"/></linearGradient>' +
+        '<linearGradient id="thWarm" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e8a838" stop-opacity="0.2"/><stop offset="1" stop-color="#e8a838" stop-opacity="0.05"/></linearGradient>' +
+        '<linearGradient id="thCool" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5cb8e6" stop-opacity="0.2"/><stop offset="1" stop-color="#5cb8e6" stop-opacity="0.05"/></linearGradient>' +
+        '<linearGradient id="thCold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4ecdc4" stop-opacity="0.2"/><stop offset="1" stop-color="#4ecdc4" stop-opacity="0.05"/></linearGradient>' +
+        '</defs>' +
+        '<rect x="0" y="0" width="500" height="320" fill="#080a0f"/>' +
+        '<text x="250" y="18" text-anchor="middle" fill="#556" font-size="9" font-style="italic">ORU direct-mount — zero-length thermal path to radiator</text>' +
+        '<rect x="40" y="28" width="280" height="42" rx="4" fill="url(#thHot)" stroke="#e05555" stroke-width="1.5"/>' +
+        '<rect x="80" y="38" width="200" height="14" rx="2" fill="#e05555" opacity="0.6"/>' +
+        '<text x="180" y="49" text-anchor="middle" fill="#fff" font-size="8" font-weight="600">GPU DIE</text>' +
+        '<text x="50" y="62" fill="#d0d4dc" font-size="9" font-weight="600">Die junction</text>' +
+        '<text x="340" y="42" fill="#e05555" font-size="9" font-weight="600">T_j = ' + tJunction + '°C</text>' +
+        '<text x="340" y="56" fill="#556" font-size="8">' + cfg.gpuPowerW + 'W · ' + heatFlux.toFixed(1) + ' W/cm²</text>' +
+        '<rect x="40" y="74" width="280" height="24" rx="3" fill="url(#thWarm)" stroke="#e8a838" stroke-width="1"/>' +
+        '<text x="50" y="90" fill="#d0d4dc" font-size="9" font-weight="600">TIM-1</text>' +
+        '<text x="150" y="90" fill="#778" font-size="8">Indium foil 25μm</text>' +
+        '<text x="340" y="90" fill="#778" font-size="8">0.5°C/W</text>' +
+        '<rect x="40" y="102" width="280" height="38" rx="3" fill="url(#thWarm)" stroke="#e8a838" stroke-width="1"/>' +
+        '<text x="50" y="120" fill="#d0d4dc" font-size="9" font-weight="600">IHS / Spreader</text>' +
+        '<text x="50" y="134" fill="#778" font-size="8">' + (cfg.oruThermalInterface||'Direct-bond copper').split(',')[0].trim().substring(0,35) + '</text>' +
+        '<text x="340" y="124" fill="#778" font-size="8">Cu / vapor chamber</text>' +
+        '<rect x="40" y="144" width="280" height="24" rx="3" fill="url(#thCool)" stroke="#5cb8e6" stroke-width="1"/>' +
+        '<text x="50" y="160" fill="#d0d4dc" font-size="9" font-weight="600">TIM-2</text>' +
+        '<text x="150" y="160" fill="#778" font-size="8">Thermal pad 100μm</text>' +
+        '<text x="340" y="160" fill="#778" font-size="8">1.2°C/W</text>' +
+        '<rect x="40" y="172" width="280" height="38" rx="3" fill="url(#thCool)" stroke="#5cb8e6" stroke-width="1"/>' +
+        '<text x="50" y="190" fill="#d0d4dc" font-size="9" font-weight="600">Cold plate (bolted to radiator)</text>' +
+        '<text x="50" y="204" fill="#778" font-size="8">Zero-length: ORU → Al plate conduction</text>' +
+        '<text x="340" y="190" fill="#5cb8e6" font-size="9">T_case = ' + tCase + '°C</text>' +
+        '<rect x="40" y="214" width="280" height="42" rx="4" fill="url(#thCold)" stroke="#4ecdc4" stroke-width="1.5"/>' +
+        '<text x="50" y="232" fill="#d0d4dc" font-size="9" font-weight="600">Radiator panel</text>' +
+        '<text x="50" y="248" fill="#778" font-size="8">Al 6061-T6 + carbon black · ε = 0.95</text>' +
+        '<text x="340" y="232" fill="#4ecdc4" font-size="9" font-weight="600">T_rad = ' + tRad + '°C</text>' +
+        '<text x="340" y="248" fill="#556" font-size="8">' + cfg.radTempK + 'K</text>' +
+        [80,130,180,230,280].map(x => '<line x1="'+x+'" y1="260" x2="'+x+'" y2="285" stroke="#4ecdc4" stroke-width="1.5" stroke-dasharray="3,3"/>').join('') +
+        '<rect x="380" y="28" width="14" height="228" rx="3" fill="none" stroke="#333" stroke-width="0.5"/>' +
+        '<rect x="381" y="29" width="12" height="226" rx="2" fill="url(#thHot)"/>' +
+        '<rect x="381" y="115" width="12" height="140" rx="0" fill="url(#thCool)"/>' +
+        '<text x="405" y="45" fill="#e05555" font-size="7">' + tJunction + '°C</text>' +
+        '<text x="405" y="240" fill="#4ecdc4" font-size="7">' + tRad + '°C</text>' +
+        '<text x="397" y="142" fill="#556" font-size="7">ΔT</text>' +
+        '<text x="180" y="300" text-anchor="middle" fill="#4ecdc4" font-size="10" font-weight="600">IR emission → deep space (3K)</text>' +
+        '<text x="180" y="314" text-anchor="middle" fill="#556" font-size="8">Stefan-Boltzmann: q = εσT⁴ · ' + cfg.radM2 + 'm² @ ' + cfg.radTempK + 'K</text>' +
+        '</svg></div>';
+}
+
 function renderOverview(cfg, m) {
     return `
     <div class="card">
@@ -998,62 +1099,8 @@ function renderCompute(cfg, m) {
         <div class="metric-row"><span class="metric-label">Packaging</span><span class="metric-value" style="font-size:10px">${cfg.oruPackaging || 'Standard'}</span></div>
         <div class="metric-row"><span class="metric-label">Thermal interface</span><span class="metric-value" style="font-size:10px">${cfg.oruThermalInterface || 'Bolted to radiator'}</span></div>
         <div class="metric-row"><span class="metric-label">Power delivery</span><span class="metric-value" style="font-size:10px">${cfg.oruVRM || '48V bus'}</span></div>
-        <div class="section-header">Thermal Path</div>
-        <div class="svg-diagram"><svg viewBox="0 0 500 320" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-                <linearGradient id="thHot" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e05555" stop-opacity="0.3"/><stop offset="1" stop-color="#e05555" stop-opacity="0.05"/></linearGradient>
-                <linearGradient id="thWarm" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e8a838" stop-opacity="0.2"/><stop offset="1" stop-color="#e8a838" stop-opacity="0.05"/></linearGradient>
-                <linearGradient id="thCool" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5cb8e6" stop-opacity="0.2"/><stop offset="1" stop-color="#5cb8e6" stop-opacity="0.05"/></linearGradient>
-                <linearGradient id="thCold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4ecdc4" stop-opacity="0.2"/><stop offset="1" stop-color="#4ecdc4" stop-opacity="0.05"/></linearGradient>
-            </defs>
-            <rect x="0" y="0" width="500" height="320" fill="#080a0f"/>
-            <text x="250" y="18" text-anchor="middle" fill="#556" font-size="9" font-style="italic">ORU cross-section — heat flow to radiator surface</text>
-            <!-- Die junction -->
-            <rect x="40" y="28" width="280" height="42" rx="4" fill="url(#thHot)" stroke="#e05555" stroke-width="1.5"/>
-            <rect x="80" y="38" width="200" height="14" rx="2" fill="#e05555" opacity="0.6"/>
-            <text x="180" y="49" text-anchor="middle" fill="#fff" font-size="8" font-weight="600">GPU DIE</text>
-            <text x="50" y="62" fill="#d0d4dc" font-size="9" font-weight="600">Die junction</text>
-            <text x="340" y="42" fill="#e05555" font-size="9" font-weight="600">T_j = ${tJunction}°C</text>
-            <text x="340" y="56" fill="#556" font-size="8">${cfg.gpuPowerW}W · ${heatFlux.toFixed(1)} W/cm²</text>
-            <!-- TIM-1 -->
-            <rect x="40" y="74" width="280" height="24" rx="3" fill="url(#thWarm)" stroke="#e8a838" stroke-width="1"/>
-            <text x="50" y="90" fill="#d0d4dc" font-size="9" font-weight="600">TIM-1</text>
-            <text x="150" y="90" fill="#778" font-size="8">Indium foil 25μm</text>
-            <text x="340" y="90" fill="#778" font-size="8">0.5°C/W</text>
-            <!-- IHS / Spreader -->
-            <rect x="40" y="102" width="280" height="38" rx="3" fill="url(#thWarm)" stroke="#e8a838" stroke-width="1"/>
-            <text x="50" y="120" fill="#d0d4dc" font-size="9" font-weight="600">IHS / Spreader</text>
-            <text x="50" y="134" fill="#778" font-size="8">${(cfg.oruThermalInterface||'Direct-bond copper').split(',')[0].trim().substring(0,35)}</text>
-            <text x="340" y="124" fill="#778" font-size="8">Cu / vapor chamber</text>
-            <!-- TIM-2 -->
-            <rect x="40" y="144" width="280" height="24" rx="3" fill="url(#thCool)" stroke="#5cb8e6" stroke-width="1"/>
-            <text x="50" y="160" fill="#d0d4dc" font-size="9" font-weight="600">TIM-2</text>
-            <text x="150" y="160" fill="#778" font-size="8">Thermal pad 100μm</text>
-            <text x="340" y="160" fill="#778" font-size="8">1.2°C/W</text>
-            <!-- Cold plate -->
-            <rect x="40" y="172" width="280" height="38" rx="3" fill="url(#thCool)" stroke="#5cb8e6" stroke-width="1"/>
-            <text x="50" y="190" fill="#d0d4dc" font-size="9" font-weight="600">Cold plate / Manifold</text>
-            <text x="50" y="204" fill="#778" font-size="8">Heat pipe or LHP transport</text>
-            <text x="340" y="190" fill="#5cb8e6" font-size="9">T_case = ${tCase}°C</text>
-            <!-- Radiator -->
-            <rect x="40" y="214" width="280" height="42" rx="4" fill="url(#thCold)" stroke="#4ecdc4" stroke-width="1.5"/>
-            <text x="50" y="232" fill="#d0d4dc" font-size="9" font-weight="600">Radiator panel</text>
-            <text x="50" y="248" fill="#778" font-size="8">Al 6061-T6 + carbon black · ε = 0.95</text>
-            <text x="340" y="232" fill="#4ecdc4" font-size="9" font-weight="600">T_rad = ${tRad}°C</text>
-            <text x="340" y="248" fill="#556" font-size="8">${cfg.radTempK}K</text>
-            <!-- IR emission arrows -->
-            ${[80,130,180,230,280].map(x => `<line x1="${x}" y1="260" x2="${x}" y2="285" stroke="#4ecdc4" stroke-width="1.5" stroke-dasharray="3,3"/>`).join('')}
-            <!-- Temperature gradient bar -->
-            <rect x="380" y="28" width="14" height="228" rx="3" fill="none" stroke="#333" stroke-width="0.5"/>
-            <rect x="381" y="29" width="12" height="226" rx="2" fill="url(#thHot)"/>
-            <rect x="381" y="115" width="12" height="140" rx="0" fill="url(#thCool)"/>
-            <text x="405" y="45" fill="#e05555" font-size="7">${tJunction}°C</text>
-            <text x="405" y="240" fill="#4ecdc4" font-size="7">${tRad}°C</text>
-            <text x="397" y="142" fill="#556" font-size="7">ΔT</text>
-            <!-- Deep space label -->
-            <text x="180" y="300" text-anchor="middle" fill="#4ecdc4" font-size="10" font-weight="600">IR emission → deep space (3K)</text>
-            <text x="180" y="314" text-anchor="middle" fill="#556" font-size="8">Stefan-Boltzmann: q = εσT⁴ · ${cfg.radM2}m² @ ${cfg.radTempK}K</text>
-        </svg></div>
+        <div class="section-header">Thermal Path <span class="chip ${cfg.centralized ? 'chip-orange' : 'chip-green'}">${cfg.centralized ? 'PUMPED LOOP' : 'DIRECT MOUNT'}</span></div>
+        ${renderThermalPathSVG(cfg, tJunction, tCase, tRad, heatFlux)}
         <div class="section-header">Power Delivery</div>
         <div class="svg-diagram"><svg viewBox="0 0 560 160" xmlns="http://www.w3.org/2000/svg">
             <defs><marker id="pwr_ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#e8a838"/></marker></defs>
@@ -2994,7 +3041,7 @@ function buildDP1B(cfg) {
     // Tall along Y, wide along X, thin along Z — like vertical walls
     // Single radiator panel on anti-sun side (-Z), same as DP2
     const radArea1B = cfg.radM2;
-    const radAspect1B = 4;
+    const radAspect1B = 8;  // skinny and long, like solar panels
     const radLen1B = Math.sqrt(radArea1B * radAspect1B);
     const radH1B = radArea1B / radLen1B;
     const radThick = 0.025;
@@ -3280,7 +3327,7 @@ function buildDP2(cfg) {
     // No mutual view factor issues — single panel, not split
     // XY plane, normal ±Z, same orientation as solar wings
     const radArea = cfg.radM2;
-    const radAspect = 4;  // long along X, shorter along Y
+    const radAspect = 8;  // skinny and long, matching solar panel proportions
     const radLen = Math.sqrt(radArea * radAspect);   // X (long, same as wings)
     const radH = radArea / radLen;                     // Y (hanging down)
     const radThick = 0.03;
@@ -3457,6 +3504,33 @@ function buildDP2(cfg) {
             new THREE.MeshStandardMaterial({color:0x889999,metalness:0.6,roughness:0.3}));
         flange.position.set(0, bayY - bayH/2 - 0.01, 0);
         addPart(flange,"structure","Radiator Interface Plate");
+
+        // ── EXTERNAL FLUID TRANSPORT LINES ──
+        // Visible plumbing from compute bay to radiator panel
+        // Hot supply (red) and cold return (blue) run from bay bottom to radiator
+        const radYPos = -(hubY / 2 + radH / 2 + radGap);  // where radiator is
+        const bayBottom = bayY - bayH/2;
+        const pipeLen = Math.abs(bayBottom - (radYPos + radH/2));
+        if (pipeLen > 0.1) {
+            const pipeMidY = (bayBottom + radYPos + radH/2) / 2;
+            // Hot supply line (red/orange)
+            const hotPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, pipeLen, 8),
+                new THREE.MeshStandardMaterial({color:0xcc4422, metalness:0.5, roughness:0.4, emissive:0xaa2211, emissiveIntensity:0.15}));
+            hotPipe.position.set(-0.12, pipeMidY, 0);
+            addPart(hotPipe, "structure", "Hot Fluid Supply Line (PAO-2)");
+            // Cold return line (blue)
+            const coldPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, pipeLen, 8),
+                new THREE.MeshStandardMaterial({color:0x3366aa, metalness:0.5, roughness:0.4, emissive:0x1133aa, emissiveIntensity:0.15}));
+            coldPipe.position.set(0.12, pipeMidY, 0);
+            addPart(coldPipe, "structure", "Cold Fluid Return Line (PAO-2)");
+            // MLI insulation wrap around pipes (gold)
+            for (const px of [-0.12, 0.12]) {
+                const mli = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, pipeLen * 0.9, 8),
+                    new THREE.MeshStandardMaterial({color:0xe0c020, metalness:0.6, roughness:0.4, transparent:true, opacity:0.3}));
+                mli.position.set(px, pipeMidY, 0);
+                stationGroup.add(mli);
+            }
+        }
     }
     // Laser terminals
     for (let i=0;i<4;i++) {
