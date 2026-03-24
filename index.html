@@ -1064,6 +1064,61 @@ function renderOverview(cfg, m) {
         <div class="metric-row"><span class="metric-label">Integrator</span><span class="metric-value">SpaceX (direct) / Momentus (rideshare)</span></div>
         <div class="metric-row"><span class="metric-label">Dispenser</span><span class="metric-value">${cfg.dryMassKg > 5000 ? 'Payload adapter ring (RUAG)' : 'ESPA ring (Moog) / flat-sat stack'}</span></div>
         <div class="metric-row"><span class="metric-label">Separation system</span><span class="metric-value">Lightband (PSC) / Motorized (RUAG)</span></div>
+
+        <div class="section-header">Aluminum & Raw Materials</div>
+        <div class="metric-row"><span class="metric-label">Al 6061-T6 plate</span><span class="metric-value">Alcoa / Kaiser Aluminum (USA)</span></div>
+        <div class="metric-row"><span class="metric-label">Al 7075 (structure)</span><span class="metric-value">Constellium / Aleris (EU/USA)</span></div>
+        <div class="metric-row"><span class="metric-label">Ti-6Al-4V (fasteners)</span><span class="metric-value">TIMET / VSMPO-AVISMA</span></div>
+        <div class="metric-row"><span class="metric-label">CFRP prepreg</span><span class="metric-value">Toray T800 / Hexcel HexPly</span></div>
+        <div class="metric-row"><span class="metric-label">Kapton film</span><span class="metric-value">DuPont (USA)</span></div>
+        <div class="metric-row"><span class="metric-label">Indium solder TIM</span><span class="metric-value">Indium Corporation (USA)</span></div>
+        <div class="metric-row"><span class="metric-label">GaN substrates</span><span class="metric-value">Wolfspeed / II-VI (USA)</span></div>
+
+        <div class="section-header">Thermal Management</div>
+        <div class="metric-row"><span class="metric-label">Carbon black coating</span><span class="metric-value">Acktar (Israel) / MAP (USA)</span></div>
+        <div class="metric-row"><span class="metric-label">Heat pipes</span><span class="metric-value">Advanced Cooling Tech (ACT) / Thermacore</span></div>
+        <div class="metric-row"><span class="metric-label">Loop heat pipes</span><span class="metric-value">Northrop Grumman / IberEspacio (EU)</span></div>
+        <div class="metric-row"><span class="metric-label">Vapor chambers</span><span class="metric-value">Boyd Corp / Aavid (thermal solutions)</span></div>
+        ${cfg.centralized ? `
+        <div class="metric-row"><span class="metric-label">Pumped fluid loop</span><span class="metric-value accent">Northrop TCS / Collins Aerospace</span></div>
+        <div class="metric-row"><span class="metric-label">PAO-2 coolant</span><span class="metric-value">Nye Lubricants / Chemours</span></div>
+        <div class="metric-row"><span class="metric-label">Fluid pump</span><span class="metric-value">Micropump (IDEX) / Atos Space</span></div>
+        <div class="metric-row"><span class="metric-label">Heat exchanger</span><span class="metric-value">Lytron / API Heat Transfer</span></div>
+        ` : ''}
+        ${cfg.isPhotonic ? `
+        <div class="metric-row"><span class="metric-label">Cryocooler (4K)</span><span class="metric-value accent">Sunpower CryoTel (Ametek)</span></div>
+        <div class="metric-row"><span class="metric-label">Cryocooler (77K)</span><span class="metric-value">Thales Cryogenics / Ricor</span></div>
+        <div class="metric-row"><span class="metric-label">MLI blankets</span><span class="metric-value">Sheldahl / Dunmore / Quest Thermal</span></div>
+        <div class="metric-row"><span class="metric-label">Cryo harness</span><span class="metric-value">Tekdata / PhoenixTM (cryo-rated)</span></div>
+        ` : ''}
+        <div class="metric-row"><span class="metric-label">Thermal interface</span><span class="metric-value">Indium Corp (solder TIM) / Henkel (thermal pads)</span></div>
+
+        <div class="section-header">Semiconductor Supply Chain</div>
+        <div class="metric-row"><span class="metric-label">Wafer fabrication</span><span class="metric-value">${cfg.gpuProcess.includes('TSMC') ? 'TSMC (Taiwan — Tainan/Hsinchu)' : 'Samsung (Pyeongtaek P3, Korea)'}</span></div>
+        <div class="metric-row"><span class="metric-label">Advanced packaging</span><span class="metric-value">${cfg.gpuProcess.includes('TSMC') ? 'TSMC CoWoS-L (Taiwan)' : 'Samsung I-Cube4 / ASE Group'}</span></div>
+        <div class="metric-row"><span class="metric-label">HBM memory</span><span class="metric-value">SK Hynix (Icheon) / Samsung (Hwaseong)</span></div>
+        <div class="metric-row"><span class="metric-label">Organic substrate</span><span class="metric-value">Ibiden / Shinko Electric (Japan)</span></div>
+        <div class="metric-row"><span class="metric-label">Photomask</span><span class="metric-value">HOYA / Dai Nippon Printing</span></div>
+        <div class="metric-row"><span class="metric-label">EUV lithography</span><span class="metric-value">ASML (Netherlands) — sole supplier</span></div>
+        <div class="metric-row"><span class="metric-label">Testing/burn-in</span><span class="metric-value">Advantest / Teradyne</span></div>
+
+        <div class="section-header">Key Publicly-Traded Suppliers</div>
+        <div style="font-size:10px;color:var(--muted);margin:4px 0">Investors can gain exposure to orbital compute through these supply chain companies:</div>
+        <div class="metric-row"><span class="metric-label">NVDA</span><span class="metric-value">GPU silicon (B300, Vera Rubin)</span></div>
+        <div class="metric-row"><span class="metric-label">TSM</span><span class="metric-value">Wafer fab + advanced packaging</span></div>
+        <div class="metric-row"><span class="metric-label">ASML</span><span class="metric-value">EUV lithography (sole source)</span></div>
+        <div class="metric-row"><span class="metric-label">000660.KS</span><span class="metric-value">SK Hynix — HBM3E/HBM4 memory</span></div>
+        <div class="metric-row"><span class="metric-label">WOLF</span><span class="metric-value">Wolfspeed — SiC/GaN power semiconductors</span></div>
+        <div class="metric-row"><span class="metric-label">AA</span><span class="metric-value">Alcoa — Al 6061-T6 radiator plate</span></div>
+        <div class="metric-row"><span class="metric-label">HXL</span><span class="metric-value">Hexcel — CFRP composites, Al honeycomb</span></div>
+        <div class="metric-row"><span class="metric-label">AME</span><span class="metric-value">Ametek — Sunpower cryocoolers (DP3)</span></div>
+        <div class="metric-row"><span class="metric-label">MYNA</span><span class="metric-value">Mynaric — laser ISL terminals</span></div>
+        <div class="metric-row"><span class="metric-label">RKLB</span><span class="metric-value">Rocket Lab — reaction wheels, star trackers, solar</span></div>
+        <div class="metric-row"><span class="metric-label">NOC</span><span class="metric-value">Northrop Grumman — thermal control systems</span></div>
+        <div class="metric-row"><span class="metric-label">LMT</span><span class="metric-value">Lockheed Martin — space bus heritage</span></div>
+        <div class="metric-row"><span class="metric-label">KTOS</span><span class="metric-value">Kratos — ground station networks</span></div>
+        <div class="metric-row"><span class="metric-label">MOG.A</span><span class="metric-value">Moog — deployment mechanisms, ESPA rings</span></div>
+        <div class="metric-row"><span class="metric-label">TEL</span><span class="metric-value">TE Connectivity — space-rated connectors/harness</span></div>
     </div>
     `;
 }
@@ -3383,7 +3438,26 @@ function buildDP2(cfg) {
     }
 
     if (!cfg.centralized) {
-        // ORUs already placed on fins above
+        // ORUs already placed on radiator panel above
+        // Add thermal manifold pipes from bus to radiator (visible plumbing)
+        const manifoldMat = new THREE.MeshStandardMaterial({color:0xcc4422,metalness:0.5,roughness:0.4,emissive:0xaa2211,emissiveIntensity:0.12});
+        const returnMat = new THREE.MeshStandardMaterial({color:0x3366aa,metalness:0.5,roughness:0.4,emissive:0x1133aa,emissiveIntensity:0.12});
+        const pipeLen = Math.abs(radY2) - hubY/2;
+        if (pipeLen > 0.5) {
+            const pipeMidY = -(hubY/2 + pipeLen/2);
+            // Hot manifold (red) — heat from ORUs to radiator
+            const hotM = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, pipeLen, 8), manifoldMat);
+            hotM.position.set(-radLen * 0.15, pipeMidY, 0);
+            addPart(hotM, "structure", "Thermal Manifold (hot)");
+            // Cold return (blue) — cooled fluid returns
+            const coldM = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, pipeLen, 8), returnMat);
+            coldM.position.set(radLen * 0.15, pipeMidY, 0);
+            addPart(coldM, "structure", "Thermal Manifold (cold return)");
+            // Cross manifold at bus interface
+            const xManifold = new THREE.Mesh(box(radLen * 0.4, 0.02, 0.02), manifoldMat);
+            xManifold.position.set(0, -(hubY/2 + 0.04), 0);
+            stationGroup.add(xManifold);
+        }
     } else {
         // === Centralized compute bay (space-adapted rack architecture) ===
         // Pressurized compute enclosure mounted between bus and radiator
