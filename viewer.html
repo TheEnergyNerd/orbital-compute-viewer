@@ -3041,7 +3041,7 @@ function buildDP1B(cfg) {
     // Tall along Y, wide along X, thin along Z — like vertical walls
     // Single radiator panel on anti-sun side (-Z), same as DP2
     const radArea1B = cfg.radM2;
-    const radAspect1B = 8;  // skinny and long, like solar panels
+    const radAspect1B = 3;  // wider than tall, matching SpaceX render proportions
     const radLen1B = Math.sqrt(radArea1B * radAspect1B);
     const radH1B = radArea1B / radLen1B;
     const radThick = 0.025;
@@ -3327,7 +3327,7 @@ function buildDP2(cfg) {
     // No mutual view factor issues — single panel, not split
     // XY plane, normal ±Z, same orientation as solar wings
     const radArea = cfg.radM2;
-    const radAspect = 8;  // skinny and long, matching solar panel proportions
+    const radAspect = 3;  // wider than tall, matching SpaceX render proportions
     const radLen = Math.sqrt(radArea * radAspect);   // X (long, same as wings)
     const radH = radArea / radLen;                     // Y (hanging down)
     const radThick = 0.03;
