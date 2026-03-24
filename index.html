@@ -3041,7 +3041,7 @@ function buildDP1B(cfg) {
     // Tall along Y, wide along X, thin along Z — like vertical walls
     // Single radiator panel on anti-sun side (-Z), same as DP2
     const radArea1B = cfg.radM2;
-    const radAspect1B = 3;  // wider than tall, matching SpaceX render proportions
+    const radAspect1B = 10;  // skinny and long, like solar panels
     const radLen1B = Math.sqrt(radArea1B * radAspect1B);
     const radH1B = radArea1B / radLen1B;
     const radThick = 0.025;
@@ -3327,7 +3327,7 @@ function buildDP2(cfg) {
     // No mutual view factor issues — single panel, not split
     // XY plane, normal ±Z, same orientation as solar wings
     const radArea = cfg.radM2;
-    const radAspect = 3;  // wider than tall, matching SpaceX render proportions
+    const radAspect = 10;  // skinny and long, like solar panels
     const radLen = Math.sqrt(radArea * radAspect);   // X (long, same as wings)
     const radH = radArea / radLen;                     // Y (hanging down)
     const radThick = 0.03;
@@ -3644,9 +3644,9 @@ function buildDP3(cfg) {
     buildWingStructure([pvOff, pvY, 0], pvS, pvC, [1, 0, 0], [0, 0, 1], [0, 1, 0]);
     buildWingStructure([-pvOff, pvY, 0], pvS, pvC, [-1, 0, 0], [0, 0, 1], [0, 1, 0]);
 
-    // ── RADIATOR PANEL dimensions (SMAD 2.5:1 aspect) ──
-    const radPanelSpan = Math.sqrt(cfg.radM2 * 2.5);   // long dimension
-    const radPanelChord = Math.sqrt(cfg.radM2 / 2.5);   // short dimension
+    // ── RADIATOR PANEL dimensions ──
+    const radPanelSpan = Math.sqrt(cfg.radM2 * 10);   // long dimension (skinny, 10:1)
+    const radPanelChord = Math.sqrt(cfg.radM2 / 10);   // short dimension
 
     if (cfg.isPhotonic) {
         // ================================================================
