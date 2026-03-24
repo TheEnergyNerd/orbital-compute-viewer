@@ -3543,361 +3543,202 @@ function buildDP2(cfg) {
     partRegistry.push({mesh: refPanel2DP2, partType: 'scale_ref', label: slLabelDP2, originalMaterial: refPanel2DP2.material});
 }
 
+
 function buildDP3(cfg) {
     // ================================================================
-    // DP3 SPINE ARCHITECTURE — matches Onshape FeatureScript exactly
-    //
-    // PHOTONIC (60m spine):
-    //   SUN → [PV at +Y=30m] → [Radiator YZ-plane at Y=18m] → [Cryo at Y=10m] → [4K cold at Y=0m] → [77K rad at Y=-6m]
-    //   Radiator is a vertical WALL in YZ plane (normal ±X), both faces radiate to space
-    //   ORUs on +X face of radiator (warm electronics: PMAD, I/O)
-    //   Photonic compute is in 4K cryo section, NOT on radiator
-    //
-    // ELECTRICAL (30m spine):
-    //   SUN → [PV at +Y=15m] → [Spine] → [Radiator YZ-plane at Y=-10m]
-    //   Radiator is a VERTICAL WALL in YZ plane (normal ±X), same as photonic
-    //   Both ±X faces radiate to space (perpendicular to sun in dawn-dusk SSO)
-    //   ORUs on +X face, no cryo section
+    // DP3 — FLAT BUS + T-SHAPE RADIATOR (same architecture as DP2)
+    // No spine. Scaled-up flat bus with skinny roll-out solar wings
+    // and a tall narrow radiator hanging straight down (T-shape).
+    // DP3 photonic adds a cryo section below the radiator.
+    // DP3B electrical is just a bigger DP2.
     // ================================================================
-    const halfSpine = cfg.spineLen / 2;
 
-    // Y positions from FeatureScript
-    let radY, cryoStartY, coldY, cryoRadY, spineBottom;
-    if (cfg.isPhotonic) {
-        radY       = halfSpine - 12;       // 30-12 = 18m
-        cryoStartY = radY - 8;             // 10m
-        coldY      = cryoStartY - 10;      // 0m
-        cryoRadY   = coldY - 6;            // -6m
-        spineBottom = cryoRadY - 2;        // -8m
-    } else {
-        radY       = -halfSpine + 5;       // -10m
-        spineBottom = radY - 1;            // -11m
-    }
+    const hubX = 3.0, hubY = 2.0, hubZ = 1.5;
+    const hub = new THREE.Mesh(box(hubX, hubY, hubZ), MAT.hub);
+    addPart(hub, "hub", "Spacecraft Bus");
+    const pmad = new THREE.Mesh(box(hubX*0.7, hubY*0.6, hubZ*0.3), MAT.gold);
+    pmad.position.set(0, 0, hubZ/2 + hubZ*0.15);
+    addPart(pmad, "hub", "PMAD + Power Distribution");
+    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.2, 16), MAT.antenna);
+    ant.rotation.z = Math.PI/2;
+    ant.position.set(hubX/2 + 0.15, 0, 0);
+    addPart(ant, "hub", "Ground Antenna Array");
 
-    // Shared materials
-    const pipeMat = new THREE.MeshStandardMaterial({color:0xcc4422,metalness:0.5,roughness:0.4,emissive:0xaa2211,emissiveIntensity:0.1});
-    const copperMat = new THREE.MeshStandardMaterial({color:0xb87333,metalness:0.8,roughness:0.3,emissive:0xb87333,emissiveIntensity:0.08});
-    const cxlMat = new THREE.MeshStandardMaterial({color:0xffaa00,emissive:0xffaa00,emissiveIntensity:0.3,transparent:true,opacity:0.5});
-    const hbmMat = new THREE.MeshStandardMaterial({color:0x4466cc,emissive:0x2244aa,emissiveIntensity:0.15});
-    const cryoMat = new THREE.MeshStandardMaterial({color:0x88ccff,emissive:0x2266aa,emissiveIntensity:0.2,metalness:0.3,roughness:0.4});
-    const mliMat = new THREE.MeshStandardMaterial({color:0xd4af37,metalness:0.3,roughness:0.6,transparent:true,opacity:0.35,side:THREE.DoubleSide});
-    const waveguideMat = new THREE.MeshStandardMaterial({color:0x00ff88,emissive:0x00ff88,emissiveIntensity:0.4,transparent:true,opacity:0.6});
-    const snspMat = new THREE.MeshStandardMaterial({color:0xff4488,emissive:0xff2266,emissiveIntensity:0.3});
-
-    // ── SPINE TRUSS ──
-    const spH = halfSpine - spineBottom;
-    const sp = new THREE.Mesh(box(0.5, spH, 0.5), MAT.truss);
-    sp.position.set(0, (halfSpine + spineBottom) / 2, 0);
-    addPart(sp, "spine", `Spine Truss (${cfg.spineLen}m)`);
-
-    // Cross-bracing (X-pattern every 5m on XY and ZY faces)
-    buildSpineBracing(spineBottom, halfSpine, 5);
-
-    // 4 heat pipes at spine corners (full length)
-    for (const [hx, hz] of [[0.3,0],[-0.3,0],[0,0.3],[0,-0.3]]) {
-        const hp = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, spH * 0.95, 6), pipeMat);
-        hp.position.set(hx, (halfSpine + spineBottom) / 2, hz);
-        addPart(hp, "structure", "Heat Pipe");
-    }
-
-    // ── PV ARRAYS at +Y end ──
-    // Skinny roll-out panels: chord ~5m (wider spool for MW-class), span grows with area
-    const pvC = 5;  // Z chord — spool width (wider than DP2's 3.5m for structural stiffness at scale)
-    const pvS = Math.ceil(cfg.solarM2 / 2 / pvC);  // X span per wing (~419m for 4188 m²)
-    const pvY = halfSpine;
-    const pvOff = 0.25; // spine half-width offset
+    // ── SKINNY ROLL-OUT SOLAR WINGS ±X ──
+    const pvC = 5;
+    const pvS = Math.ceil(cfg.solarM2 / 2 / pvC);
+    const pvY = hubY/2 + 0.02;
 
     for (const s of [1, -1]) {
         const f = new THREE.Mesh(box(pvS, 0.02, pvC), MAT.pv);
-        f.position.set(s * (pvOff + pvS / 2), pvY + 0.015, 0);
-        addPart(f, "pv_wing", `PV ${s > 0 ? '+' : '-'}X (cells)`);
-
+        f.position.set(s * pvS/2, pvY + 0.015, 0);
+        addPart(f, "pv_wing", `PV ${s>0?'+':'-'}X`);
         const b = new THREE.Mesh(box(pvS, 0.02, pvC), MAT.pvBack);
-        b.position.set(s * (pvOff + pvS / 2), pvY - 0.015, 0);
-        addPart(b, "pv_wing", `PV ${s > 0 ? '+' : '-'}X (back)`);
-
-        // Seam lines (ISRA tile joints every 4m)
+        b.position.set(s * pvS/2, pvY - 0.015, 0);
+        addPart(b, "pv_wing", `PV Back ${s>0?'+':'-'}X`);
         for (let x = 4; x < pvS; x += 4) {
             const sm = new THREE.Mesh(box(0.03, 0.015, pvC), MAT.seam);
-            sm.position.set(s * (pvOff + x), pvY + 0.016, 0);
+            sm.position.set(s * x, pvY + 0.015, 0);
             stationGroup.add(sm);
         }
     }
-    // Wing structural stiffening (longerons + battens)
-    buildWingStructure([pvOff, pvY, 0], pvS, pvC, [1, 0, 0], [0, 0, 1], [0, 1, 0]);
-    buildWingStructure([-pvOff, pvY, 0], pvS, pvC, [-1, 0, 0], [0, 0, 1], [0, 1, 0]);
+    buildWingStructure([0, pvY, 0], pvS, pvC, [1,0,0], [0,0,1], [0,1,0]);
+    buildWingStructure([0, pvY, 0], pvS, pvC, [-1,0,0], [0,0,1], [0,1,0]);
 
-    // ── RADIATOR PANEL dimensions (tall and narrow, T-shape) ──
-    const radPanelAspect = 1/6;  // height = 6× width
-    const radPanelSpan = Math.sqrt(cfg.radM2 * radPanelAspect);   // short (width)
-    const radPanelChord = cfg.radM2 / radPanelSpan;                // tall (height)
+    // Deployment hinges
+    for (const s of [1, -1]) {
+        const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.15, 12), MAT.pipe);
+        hinge.position.set(s * hubX/2, pvY, 0);
+        hinge.rotation.z = Math.PI/2;
+        addPart(hinge, "structure", "PV Deployment Hinge");
+    }
 
+    // ── T-SHAPE RADIATOR — tall narrow panel hanging straight down ──
+    const radArea = cfg.radM2;
+    const radAspect3 = 1/6;
+    const radLen3 = Math.sqrt(radArea * radAspect3);
+    const radH3 = radArea / radLen3;
+    const radThick = 0.03;
+    const radGap3 = 0.3;
+
+    const radY3 = -(hubY/2 + radH3/2 + radGap3);
+
+    const hpMat3 = new THREE.MeshStandardMaterial({color: 0xd0d0dd, roughness: 0.35, metalness: 0.4});
+    const frameMat3 = new THREE.MeshStandardMaterial({color: 0xaaaabc, roughness: 0.4, metalness: 0.5});
+
+    // Hinge
+    const hinge3 = new THREE.Mesh(box(radLen3*0.5, 0.08, 0.06), MAT.truss);
+    hinge3.position.set(0, -(hubY/2+0.04), 0);
+    stationGroup.add(hinge3);
+
+    // Main radiator panel (XY plane, normal ±Z, centered for T-shape)
+    const radPanel3 = new THREE.Mesh(box(radLen3, radH3, radThick), MAT.rad);
+    radPanel3.position.set(0, radY3, 0);
+    addPart(radPanel3, "radiator", `Radiator — ${radArea.toFixed(0)}m² (${radLen3.toFixed(1)}m × ${radH3.toFixed(1)}m)`);
+
+    // Heat pipes
+    for (let hp = 0; hp < 6; hp++) {
+        const hpX = -radLen3/2 + radLen3*(hp+1)/7;
+        const hpMesh = new THREE.Mesh(box(0.012, radH3*0.9, radThick+0.004), hpMat3);
+        hpMesh.position.set(hpX, radY3, 0);
+        stationGroup.add(hpMesh);
+    }
+
+    // Edge frame
+    for (const [fw, fh, fx2, fy2] of [
+        [radLen3+0.04, 0.03, 0, radH3/2],
+        [radLen3+0.04, 0.03, 0, -radH3/2],
+        [0.03, radH3, radLen3/2, 0],
+        [0.03, radH3, -radLen3/2, 0],
+    ]) {
+        const fr = new THREE.Mesh(box(fw, fh, radThick+0.008), frameMat3);
+        fr.position.set(fx2, radY3+fy2, 0);
+        stationGroup.add(fr);
+    }
+
+    // Fold seams
+    for (let f = 1; f <= 5; f++) {
+        const foldY = -radH3/2 + radH3*f/6;
+        const foldLine = new THREE.Mesh(box(radLen3*0.95, 0.012, radThick+0.005), MAT.seam);
+        foldLine.position.set(0, radY3+foldY, 0);
+        stationGroup.add(foldLine);
+    }
+
+    // ORUs on -Z face (anti-sun)
+    const oc3 = Math.min(300, Math.floor(cfg.computeKw * 1000 / cfg.gpuPowerW));
+    const [ow3, oh3, od3] = cfg.oruSize;
+    const finCols3 = Math.max(1, Math.floor(Math.sqrt(oc3 / 6)));
+    const finRows3 = Math.max(1, Math.floor(oc3 / finCols3));
+    const sw3 = radLen3 / (finCols3+1), sh3 = radH3 / (finRows3+1);
+    for (let c = 0; c < finCols3; c++) for (let r = 0; r < finRows3; r++) {
+        const oruIdx = c * finRows3 + r;
+        if (oruIdx >= oc3) break;
+        const role = getORURole(oruIdx, cfg.oruPrimaryRole || (cfg.isPhotonic ? 'prefill' : 'decode'));
+        const ox = -radLen3/2 + sw3*(c+1);
+        const oy = -radH3/2 + sh3*(r+1);
+        const oru = new THREE.Mesh(box(ow3, oh3, od3), role.mat);
+        oru.position.set(ox, radY3+oy, -(radThick/2+od3/2));
+        const lbl = `ORU [${c},${r}] — ${role.label}`;
+        if (c===0 && r===0) addPart(oru,"oru",lbl);
+        else { oru.userData={partType:"oru",label:lbl}; stationGroup.add(oru); partRegistry.push({mesh:oru,partType:"oru",label:lbl,originalMaterial:oru.material}); }
+    }
+
+    // ── CRYOGENIC SECTION (photonic only) ──
     if (cfg.isPhotonic) {
-        // ================================================================
-        // DP3 PHOTONIC — Radiator in YZ plane (vertical thermal wall)
-        // Matching Onshape FeatureScript buildNodeDP3 exactly:
-        //   Panel in YZ plane, normal ±X
-        //   Height along Y = branchPanelH (aspect × chord), Width along Z = branchPanelW (chord)
-        //   ORUs on +X face (warm I/O + memory electronics)
-        //   -X face radiates freely to deep space
-        // ================================================================
-        // Traced from FeatureScript buildRadPanel(rpCenter, vector(1,0,0), cfg.branchPanelH, cfg.branchPanelW):
-        //   X-normal → Y extent = w = branchPanelH = sqrt(radM2/2.5) ≈ 11.5m
-        //              Z extent = h = branchPanelW = sqrt(radM2*2.5) ≈ 28.9m
-        // Panel is WIDER (Z=29m) than tall (Y=11.5m)
-        const rH = radPanelChord;  // branchPanelH ≈ 11.5m (Y extent, short)
-        const rW = radPanelSpan;   // branchPanelW ≈ 28.9m (Z extent, wide)
+        const cryoMat = new THREE.MeshStandardMaterial({color:0x88ccff,emissive:0x2266aa,emissiveIntensity:0.2,metalness:0.3,roughness:0.4});
+        const mliMat = new THREE.MeshStandardMaterial({color:0xd4af37,metalness:0.3,roughness:0.6,transparent:true,opacity:0.35,side:THREE.DoubleSide});
+        const waveguideMat = new THREE.MeshStandardMaterial({color:0x00ff88,emissive:0x00ff88,emissiveIntensity:0.4,transparent:true,opacity:0.6});
+        const snspMat = new THREE.MeshStandardMaterial({color:0xff4488,emissive:0xff2266,emissiveIntensity:0.3});
+        const copperMat = new THREE.MeshStandardMaterial({color:0xb87333,metalness:0.8,roughness:0.3,emissive:0xb87333,emissiveIntensity:0.08});
 
-        // Main radiator panel (thin slab in YZ plane — 15mm thick)
-        const radThick = 0.015;
-        const rd = new THREE.Mesh(box(radThick, rH, rW), MAT.rad);
-        rd.position.set(0, radY, 0);
-        addPart(rd, "radiator", `Main Radiator (370K) — ${Math.round(cfg.radM2)}m² YZ-plane [${rH.toFixed(1)}m×${rW.toFixed(1)}m]`);
+        const cryoTopY = radY3 - radH3/2 - 1;
 
-        // Heat pipe channel lines on +X face (6 lines along Y, spaced along Z)
-        const pipeChanMat = new THREE.MeshStandardMaterial({color:0xd8d8e0,roughness:0.4,emissive:0x101015,emissiveIntensity:0.2});
-        for (let i = 0; i < 6; i++) {
-            const zPos = -rW / 2 + rW * (i + 1) / 7;
-            const pLine = new THREE.Mesh(box(0.004, rH * 0.92, 0.01), pipeChanMat);
-            pLine.position.set(radThick / 2 + 0.003, radY, zPos);
-            stationGroup.add(pLine);
-        }
-
-        // Radiator stiffening — 2 longerons at ±25% of Z extent on -X face
-        for (const frac of [-0.25, 0.25]) {
-            const lg = new THREE.Mesh(box(0.06, rH * 0.95, 0.06), MAT.truss);
-            lg.position.set(-radThick / 2 - 0.04, radY, frac * rW);
-            addPart(lg, "structure", "Radiator Longeron");
-        }
-
-        // ORU grid on +X face — matching FeatureScript buildORUsOnPanel
-        // panelW=branchPanelH(Y)=11.5m, panelH=branchPanelW(Z)=29m
-        // oruCols=floor(sqrt(N/2.5))≈10 → along Y (short dim)
-        // oruRows=floor(N/cols)≈30 → along Z (wide dim)
-        const oruCount = Math.min(300, Math.floor(cfg.computeKw * 1000 / cfg.gpuPowerW));
-        const panelAspect = 2.5;
-        const oruCols = Math.max(1, Math.floor(Math.sqrt(oruCount / panelAspect)));  // ~10 along Y
-        const oruRows = Math.max(1, Math.floor(oruCount / oruCols));                  // ~30 along Z
-        const dispCols = Math.min(oruCols, 10);
-        const dispRows = Math.min(oruRows, 25);
-
-        // ORU display size to fill ~75% of panel face
-        const oruDisplayH = (rH * 0.85) / dispCols;   // Y size per ORU
-        const oruDisplayW = (rW * 0.85) / dispRows;   // Z size per ORU
-        const oruDisplayD = 0.08;                       // X protrusion
-        const gapH = rH / (dispCols + 1);   // spacing along Y
-        const gapW = rW / (dispRows + 1);   // spacing along Z
-
-        for (let ci = 0; ci < dispCols; ci++) {
-            for (let ri = 0; ri < dispRows; ri++) {
-                const oy = -rH / 2 + gapH * (ci + 1);
-                const oz = -rW / 2 + gapW * (ri + 1);
-                const oruX = radThick / 2 + oruDisplayD / 2;
-
-                const oruIdx = ci * dispRows + ri;
-                const role = getORURole(oruIdx, cfg.oruPrimaryRole || 'prefill');  // photonic default: prefill-biased
-
-                const oru = new THREE.Mesh(box(oruDisplayD, oruDisplayH * 0.82, oruDisplayW * 0.82), role.mat);
-                oru.position.set(oruX, radY + oy, oz);
-                const lbl = `ORU [${ci},${ri}] — ${role.label}`;
-                if (ci === 0 && ri === 0) addPart(oru, "oru", lbl);
-                else { oru.userData = {partType: "oru", label: lbl}; stationGroup.add(oru); partRegistry.push({mesh: oru, partType: "oru", label: lbl, originalMaterial: oru.material}); }
-            }
-        }
-
-        // ================================================================
-        // CRYOGENIC COLD CHAIN — JWST-style, progressively colder toward -Y
-        // Matching Onshape FeatureScript positions exactly
-        // ================================================================
-
-        // Stage 1: Cryocooler machinery (300K→77K→4K)
-        // FeatureScript: fCuboid 3m × 4m × 3m at cryoStartY
-        const crMach = new THREE.Mesh(box(3, 4, 3), MAT.pipe);
-        crMach.position.set(0, cryoStartY, 0);
+        // Cryocooler
+        const crMach = new THREE.Mesh(box(2.5, 3, 2.5), MAT.pipe);
+        crMach.position.set(0, cryoTopY-1.5, 0);
         addPart(crMach, "cryo_section", "Cryocooler (300K→77K→4K)");
 
-        // Pulse-tube compressor cylinders inside
         for (let i = 0; i < 4; i++) {
-            const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 1.8, 12), MAT.pipe);
-            cyl.position.set(-0.9 + i * 0.6, cryoStartY, 0);
-            cyl.rotation.x = Math.PI / 2;
-            addPart(cyl, "cryo_section", `PT Compressor ${i + 1}`);
+            const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 1.5, 12), MAT.pipe);
+            cyl.position.set(-0.75+i*0.5, cryoTopY-1.5, 0);
+            cyl.rotation.x = Math.PI/2;
+            addPart(cyl, "cryo_section", `PT Compressor ${i+1}`);
         }
 
-        // He-4 transfer lines from cryocooler to cold section
-        for (const gz of [-0.8, 0.8]) {
-            const heLine = new THREE.Mesh(box(0.06, Math.abs(cryoStartY - coldY) + 2, 0.06), copperMat);
-            heLine.position.set(gz, (cryoStartY + coldY) / 2, 0);
+        // He-4 transfer lines
+        const coldY = cryoTopY - 6;
+        for (const gz of [-0.7, 0.7]) {
+            const heLine = new THREE.Mesh(box(0.05, 5, 0.05), copperMat);
+            heLine.position.set(gz, (cryoTopY-3+coldY)/2, 0);
             addPart(heLine, "cryo_section", "He-4 Transfer Line");
         }
 
-        // Stage 2: 4K Cold Section — MLI-wrapped enclosure
-        // FeatureScript: coldExtent = SPINE_W/2 + 500mm = 0.75m
-        // MLI box: 1.5m × 10m × 1.5m
-        const coldExtent = 0.75;
-        const coldBusH = 10;
-        const coldMLI = new THREE.Mesh(box(coldExtent * 2, coldBusH, coldExtent * 2), mliMat);
+        // 4K Cold Section
+        const coldMLI = new THREE.Mesh(box(1.5, 8, 1.5), mliMat);
         coldMLI.position.set(0, coldY, 0);
-        addPart(coldMLI, "cryo_section", "4K Cold Section (MLI blanket)");
+        addPart(coldMLI, "cryo_section", "4K Cold Section (MLI)");
 
-        // Vacuum cryostat shell (semi-transparent cylinder inside MLI)
-        const cryostatGeo = new THREE.CylinderGeometry(coldExtent * 0.9, coldExtent * 0.9, coldBusH * 0.95, 16, 1, true);
-        const cryostatMat = new THREE.MeshStandardMaterial({color:0xaaccee,metalness:0.4,roughness:0.2,transparent:true,opacity:0.15,side:THREE.DoubleSide});
-        const cryostat = new THREE.Mesh(cryostatGeo, cryostatMat);
+        const cryostatGeo = new THREE.CylinderGeometry(0.65, 0.65, 7.5, 16, 1, true);
+        const cryostatMat2 = new THREE.MeshStandardMaterial({color:0xaaccee,metalness:0.4,roughness:0.2,transparent:true,opacity:0.15,side:THREE.DoubleSide});
+        const cryostat = new THREE.Mesh(cryostatGeo, cryostatMat2);
         cryostat.position.set(0, coldY, 0);
         addPart(cryostat, "cryo_section", "4K Vacuum Cryostat");
 
-        // 3 Photonic processor modules inside cold section
-        // FeatureScript: fCuboid 2m × 1m × 2m each, spaced 3m apart
+        // 3 Photonic IC modules
         for (let ci = 0; ci < 3; ci++) {
-            const cmY = coldY - 3 + ci * 3;
-
-            // Si₃N₄ PIC — FeatureScript: fCuboid ±1m X/Z, ±0.5m Y → 2m × 1m × 2m
-            const pic = new THREE.Mesh(box(2.0, 1.0, 2.0),
+            const cmY = coldY - 2.5 + ci*2.5;
+            const pic = new THREE.Mesh(box(1.6, 0.8, 1.6),
                 new THREE.MeshStandardMaterial({color:0x1a1a3a,metalness:0.6,roughness:0.2,emissive:0x0a0a2a,emissiveIntensity:0.2}));
             pic.position.set(0, cmY, 0);
-            addPart(pic, "oru", `Photonic IC ${ci + 1} (Si₃N₄ PIC)`);
-
-            // SNSPD arrays (pink, ±X)
-            for (const side of [-1, 1]) {
-                const snspd = new THREE.Mesh(box(0.3, 0.8, 1.2), snspMat);
-                snspd.position.set(side * 1.3, cmY, 0);
-                addPart(snspd, "oru", `SNSPD Array ${ci + 1}${side > 0 ? 'R' : 'L'}`);
+            addPart(pic, "oru", `Photonic IC ${ci+1} (Si₃N₄)`);
+            for (const side of [-1,1]) {
+                const snspd = new THREE.Mesh(box(0.25, 0.6, 1.0), snspMat);
+                snspd.position.set(side*1.1, cmY, 0);
+                addPart(snspd, "oru", `SNSPD ${ci+1}${side>0?'R':'L'}`);
             }
-
-            // LiNbO₃ modulators (amber, ±Z)
-            for (const side of [-1, 1]) {
-                const mod = new THREE.Mesh(box(1.0, 0.2, 0.15),
-                    new THREE.MeshStandardMaterial({color:0xdd8844,metalness:0.4,roughness:0.3,emissive:0xaa6622,emissiveIntensity:0.15}));
-                mod.position.set(0, cmY, side * 1.3);
-                addPart(mod, "oru", `LiNbO₃ Modulator ${ci + 1}${side > 0 ? 'B' : 'A'}`);
-            }
-
-            // Waveguide bus between modules (green)
             if (ci < 2) {
-                for (const xOff of [-0.6, 0.6]) {
-                    const wg = new THREE.Mesh(box(0.03, 2.5, 0.03), waveguideMat);
-                    wg.position.set(xOff, cmY + 1.5, 0);
-                    stationGroup.add(wg);
-                }
+                const wg = new THREE.Mesh(box(0.03, 2.0, 0.03), waveguideMat);
+                wg.position.set(0, cmY+1.2, 0);
+                stationGroup.add(wg);
             }
         }
 
-        // Stage 3: 77K Cryo radiator at bottom (XZ plane, 2.5m × 2.5m)
-        const cryoRad = new THREE.Mesh(box(2.5, 0.015, 2.5), cryoMat);
+        // 77K Cryo radiator
+        const cryoRadY = coldY - 5;
+        const cryoRad = new THREE.Mesh(box(2.0, 0.015, 2.0), cryoMat);
         cryoRad.position.set(0, cryoRadY, 0);
-        addPart(cryoRad, "cryo_radiator", "Cryo Radiator (77K) — 2.5m × 2.5m");
-
-        // Cryo radiator stiffeners
-        for (let i = 0; i < 3; i++) {
-            const rib = new THREE.Mesh(box(2.3, 0.06, 0.04), MAT.truss);
-            rib.position.set(0, cryoRadY, -0.8 + i * 0.8);
-            stationGroup.add(rib);
-        }
-
-        // Docking port on spine mid-section
-        const dock = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.5, 12), MAT.rcs);
-        dock.position.set(0, 0, 0.5);
-        dock.rotation.x = Math.PI / 2;
-        addPart(dock, "structure", "Docking Port");
-
-    } else {
-        // ================================================================
-        // DP3B ELECTRICAL — Radiator in YZ plane (vertical thermal wall)
-        // Same orientation as DP3 photonic — perpendicular to sun vector
-        //
-        // Why vertical wall, not flat like DP2:
-        //   1. Zero direct solar absorption (normal ±X, sun along +Y)
-        //   2. Both ±X faces radiate to deep space → ~1.8× sidedness
-        //   3. Zero mutual view factor with horizontal PV wings
-        //   4. Dawn-dusk SSO: sun always edge-on to wall
-        //
-        // DP2 uses flat XZ because it's small (no spine). DP3B has a spine,
-        // so the vertical wall is strictly better thermally.
-        //
-        // Normal ±X. Height along Y = radPanelChord, Width along Z = radPanelSpan
-        // ORUs on +X face (outward), -X face radiates freely
-        // No cryo section (room-temp compute)
-        // ================================================================
-        const rH = radPanelChord;  // ~18m (Y extent, height along spine)
-        const rW = radPanelSpan;   // ~46m (Z extent, width)
-
-        // Main radiator panel (thin slab in YZ plane — 15mm thick)
-        const radThick = 0.015;
-        const rd = new THREE.Mesh(box(radThick, rH, rW), MAT.rad);
-        rd.position.set(0, radY, 0);
-        addPart(rd, "radiator", `Main Radiator (370K) — ${Math.round(cfg.radM2)}m² YZ-plane [${rH.toFixed(1)}m×${rW.toFixed(1)}m]`);
-
-        // Heat pipe channel lines on +X face (6 lines along Y, spaced along Z)
-        for (let i = 0; i < 6; i++) {
-            const zPos = -rW / 2 + rW * (i + 1) / 7;
-            const pLine = new THREE.Mesh(box(0.004, rH * 0.92, 0.01), pipeMat);
-            pLine.position.set(radThick / 2 + 0.003, radY, zPos);
-            stationGroup.add(pLine);
-        }
-
-        // Radiator stiffening — 2 longerons at ±25% of Z extent on -X face
-        for (const frac of [-0.25, 0.25]) {
-            const lg = new THREE.Mesh(box(0.06, rH * 0.95, 0.06), MAT.truss);
-            lg.position.set(-radThick / 2 - 0.04, radY, frac * rW);
-            addPart(lg, "structure", "Radiator Longeron");
-        }
-
-        // ORU grid on +X face — same layout as photonic but decode-biased
-        const oruCount = Math.min(300, Math.floor(cfg.computeKw * 1000 / cfg.gpuPowerW));
-        const panelAspect = 2.5;
-        const oruCols = Math.max(1, Math.floor(Math.sqrt(oruCount / panelAspect)));
-        const oruRows = Math.max(1, Math.floor(oruCount / oruCols));
-        const dispCols = Math.min(oruCols, 10);
-        const dispRows = Math.min(oruRows, 25);
-
-        const oruDisplayH = (rH * 0.85) / dispCols;
-        const oruDisplayW = (rW * 0.85) / dispRows;
-        const oruDisplayD = 0.08;
-        const gapH = rH / (dispCols + 1);
-        const gapW2 = rW / (dispRows + 1);
-
-        for (let ci = 0; ci < dispCols; ci++) {
-            for (let ri = 0; ri < dispRows; ri++) {
-                const oy = -rH / 2 + gapH * (ci + 1);
-                const oz = -rW / 2 + gapW2 * (ri + 1);
-                const oruX = radThick / 2 + oruDisplayD / 2;
-
-                const oruIdx = ci * dispRows + ri;
-                const role = getORURole(oruIdx, cfg.oruPrimaryRole || 'decode');
-
-                const oru = new THREE.Mesh(box(oruDisplayD, oruDisplayH * 0.82, oruDisplayW * 0.82), role.mat);
-                oru.position.set(oruX, radY + oy, oz);
-                const lbl = `ORU [${ci},${ri}] — ${role.label}`;
-                if (ci === 0 && ri === 0) addPart(oru, "oru", lbl);
-                else { oru.userData = {partType: "oru", label: lbl}; stationGroup.add(oru); partRegistry.push({mesh: oru, partType: "oru", label: lbl, originalMaterial: oru.material}); }
-            }
-        }
-
-        // Power bus bar along spine (gold)
-        const bbLen = Math.abs(halfSpine - radY) * 0.8;
-        const bb = new THREE.Mesh(box(0.05, bbLen, 0.02),
-            new THREE.MeshStandardMaterial({color:0xd4a820,metalness:0.7,roughness:0.3}));
-        bb.position.set(0.3, (halfSpine + radY) / 2, 0);
-        addPart(bb, "structure", "Power Bus Bar");
-
-        // Loop heat pipe headers along radiator edges (on +X face, running along Z)
-        for (const yOff of [-rH * 0.2, rH * 0.2]) {
-            const lhp = new THREE.Mesh(box(0.06, 0.04, rW * 0.8), pipeMat);
-            lhp.position.set(radThick / 2 + 0.04, radY + yOff, 0);
-            addPart(lhp, "structure", "Loop Heat Pipe Header");
-        }
+        addPart(cryoRad, "cryo_radiator", "Cryo Radiator (77K)");
     }
 
     // ── ISL LASER TERMINALS ──
     for (let i = 0; i < cfg.islCount; i++) {
         const a = i * 2 * Math.PI / cfg.islCount;
         const lt = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.4, 8), MAT.antenna);
-        lt.position.set(Math.cos(a) * 1, halfSpine - 2, Math.sin(a) * 1);
-        addPart(lt, "dragonfly_link", "ISL Terminal " + (i + 1));
+        lt.position.set(Math.cos(a)*1.2, hubY/2+0.2, Math.sin(a)*1.0);
+        addPart(lt, "dragonfly_link", "ISL Terminal "+(i+1));
     }
 
-    // Scale reference: Starlink V2 mini (7m x 3.5m)
+    // Scale reference
     const refGroupDP3 = new THREE.Group();
     const refBodyDP3 = new THREE.Mesh(box(1.3, 0.05, 0.8), new THREE.MeshStandardMaterial({color: 0xff8800, transparent: true, opacity: 0.5}));
     const refPanel1DP3 = new THREE.Mesh(box(3.5, 0.01, 1.7), new THREE.MeshStandardMaterial({color: 0xff8800, transparent: true, opacity: 0.3}));
@@ -3906,11 +3747,10 @@ function buildDP3(cfg) {
     refPanel2DP3.position.set(-2.4, 0, 0);
     refGroupDP3.add(refBodyDP3, refPanel1DP3, refPanel2DP3);
     const bboxDP3 = new THREE.Box3().setFromObject(stationGroup);
-    const bsizeDP3 = bboxDP3.getSize(new THREE.Vector3());
-    refGroupDP3.position.set(-bsizeDP3.x * 0.4, bboxDP3.min.y - 3, bsizeDP3.z * 0.3);
-    refGroupDP3.userData = { partType: 'scale_ref', label: 'Starlink V2 mini (7m \u00d7 3.5m) \u2014 scale reference' };
+    refGroupDP3.position.set(-pvS*0.3, bboxDP3.min.y - 5, pvC*0.8);
+    refGroupDP3.userData = { partType: 'scale_ref', label: 'Starlink V2 mini (7m × 3.5m) — scale reference' };
     stationGroup.add(refGroupDP3);
-    const slLabelDP3 = 'Starlink V2 mini (7m \u00d7 3.5m) \u2014 scale reference';
+    const slLabelDP3 = 'Starlink V2 mini (7m × 3.5m) — scale reference';
     partRegistry.push({mesh: refBodyDP3, partType: 'scale_ref', label: slLabelDP3, originalMaterial: refBodyDP3.material});
     partRegistry.push({mesh: refPanel1DP3, partType: 'scale_ref', label: slLabelDP3, originalMaterial: refPanel1DP3.material});
     partRegistry.push({mesh: refPanel2DP3, partType: 'scale_ref', label: slLabelDP3, originalMaterial: refPanel2DP3.material});
@@ -4367,8 +4207,8 @@ function switchConfig(key) {
     const distV = (size.y / 2) / Math.tan(vFov / 2);
     const distH = (Math.max(size.x, size.z) / 2) / Math.tan(hFov / 2);
     const fitDist = Math.max(distV, distH) * 1.4;
-    // Elevated 3/4 view — good for flat structures in wide viewport
-    camera.position.set(center.x + fitDist*0.35, center.y + fitDist*0.55, center.z + fitDist*0.7);
+    // 3/4 view from anti-sun side — shows ORU face of radiator
+    camera.position.set(center.x + fitDist*0.35, center.y + fitDist*0.45, center.z - fitDist*0.7);
     controls.target.copy(center);
     camera.near = Math.max(0.05, fitDist * 0.002);
     camera.far = fitDist * 20;
