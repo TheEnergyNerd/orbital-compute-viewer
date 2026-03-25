@@ -2706,13 +2706,25 @@ ${mod.name} (${mod.quant}): ${gpusNeeded} GPUs/copy × ${copies} copies
     const tokLifetime = tokPerYear * satLife;
 
     // ── PRICING MODEL ──
-    // Reference: Claude Sonnet output = $15/MTok, GPT-4o = $10/MTok
-    // Orbital discount to attract customers (lower cooling cost advantage)
+    // Orbital compute sells wholesale GPU-hours, not retail API tokens.
+    // Convert GPU-hr pricing to $/MTok for comparison.
+    //
+    // Reference GPU-hr rates (2025):
+    //   H100: $2.50/GPU-hr (spot), $3.50 (on-demand)
+    //   B300: ~$4-6/GPU-hr (projected)
+    //   Vera Rubin: ~$6-10/GPU-hr (projected)
+    //
+    // Orbital pricing: slight discount to ground (free energy offsets launch cost)
+    // Start with target GPU-hr rate, derive $/MTok from throughput
+    const targetGpuHrRate = cfg.year <= 2027 ? 3.5 : cfg.year <= 2029 ? 5.0 : 4.0;  // $/GPU-hr
+    const effectiveTokPerGpuHr = (blendedTokS * utilization * radPenalty) / gpuCount * 3600;
+    const impliedPricePerMTok = targetGpuHrRate / (effectiveTokPerGpuHr / 1e6);
+
     const priceTiers = [
-        { name: 'Premium (real-time, SLA)', pricePerMTok: 12.0, fraction: 0.15 },
-        { name: 'Standard (API, batch)', pricePerMTok: 5.0, fraction: 0.45 },
-        { name: 'Economy (async, off-peak)', pricePerMTok: 1.5, fraction: 0.30 },
-        { name: 'Training compute (FLOPS)', pricePerMTok: 0.8, fraction: 0.10 },
+        { name: 'Premium (real-time, SLA)', pricePerMTok: impliedPricePerMTok * 2.0, fraction: 0.10 },
+        { name: 'Standard (API, batch)', pricePerMTok: impliedPricePerMTok * 1.0, fraction: 0.45 },
+        { name: 'Economy (async, off-peak)', pricePerMTok: impliedPricePerMTok * 0.5, fraction: 0.35 },
+        { name: 'Training compute (FLOPS)', pricePerMTok: impliedPricePerMTok * 0.3, fraction: 0.10 },
     ];
 
     let blendedPrice = 0;
@@ -2746,21 +2758,61 @@ ${mod.name} (${mod.quant}): ${gpusNeeded} GPUs/copy × ${copies} copies
     // ── ROIC ──
     const netIncome = revenueLifetime - totalCost;
     const roic = netIncome / totalCapex;
-    const paybackYears = totalCapex / (revenuePerYear - annualOpex);
-    const irr = Math.pow(1 + roic, 1/satLife) - 1;  // approximate IRR
+    const annualNetCashFlow = revenuePerYear - annualOpex;
+    const paybackYears = annualNetCashFlow > 0 ? totalCapex / annualNetCashFlow : Infinity;
+
+    // Sanity check: GPU-hour revenue vs. market rate
+    // Ground H100 rents for ~$2-3/GPU-hr. Our implied rate:
+    const impliedGpuHrRate = revenuePerYear / (gpuCount * 8760 * utilization);
+
+    // IRR calculation using Newton's method
+    // CF = -totalCapex at t=0, then annualNetCashFlow each year for satLife
+    let irr = 0;
+    if (annualNetCashFlow > 0 && totalCapex > 0) {
+        let irrGuess = 0.15;
+        for (let iter = 0; iter < 100; iter++) {
+            let npv = -totalCapex;
+            let dnpv = 0;
+            for (let t = 1; t <= satLife; t++) {
+                const disc = Math.pow(1 + irrGuess, -t);
+                npv += annualNetCashFlow * disc;
+                dnpv += -t * annualNetCashFlow * disc / (1 + irrGuess);
+            }
+            if (Math.abs(npv) < 100) break;  // converged within $100
+            if (Math.abs(dnpv) < 1e-10) break;  // flat — can't converge
+            irrGuess -= npv / dnpv;
+            if (irrGuess < -0.95) { irrGuess = -0.95; break; }
+            if (irrGuess > 5) { irrGuess = 5; break; }
+        }
+        irr = irrGuess;
+    } else {
+        irr = annualNetCashFlow <= 0 ? -1 : 0;  // negative cash flow → IRR undefined
+    }
 
     // ── GROUND COMPARISON ──
-    // Ground H100 cluster with equivalent GPU count
-    // H100 SXM: 700W TDP, 3958 TFLOPS FP8, 3.35 TB/s HBM3, 80GB, $25-30k
-    const groundGpuCost = 25000;
+    // Use the GROUND equivalent of whatever GPU the orbital config uses
+    // Each orbital GPU has a ground counterpart with same arch but no rad-hardening
+    // Ground version: higher clock, no radiation penalty, but needs cooling + power
+    const groundGpuSpecs = {
+        // GPU type → { name, cost, tdpW, memGB, memBwTBs, tflops_fp8 }
+        'NVIDIA B300':       { name: 'B300 (ground)',      cost: 35000, tdpW: 1000, memGB: 192, memBwTBs: 8.0,  tflops: 9000 },
+        'NVIDIA Vera Rubin': { name: 'Vera Rubin (ground)', cost: 50000, tdpW: 1200, memGB: 288, memBwTBs: 12.0, tflops: 15000 },
+        'Tesla D3 Photonic': { name: 'D3 Photonic (ground)', cost: 40000, tdpW: 300,  memGB: 64,  memBwTBs: 12.0, tflops: 18000 },
+        'Tesla D3':          { name: 'D3 Electrical (ground)', cost: 30000, tdpW: 350, memGB: 256, memBwTBs: 8.0,  tflops: 6000 },
+    };
+    // Match ground GPU to orbital GPU type
+    const gpuTypeKey = Object.keys(groundGpuSpecs).find(k => cfg.gpuType.includes(k)) || 'NVIDIA B300';
+    const gSpec = groundGpuSpecs[gpuTypeKey];
+
+    const groundGpuCost = gSpec.cost;
     const groundPowerCostKwh = 0.08;
     const groundPUE = 1.35;
-    const groundGpuTDP = 700;  // H100 SXM TDP in watts
-    const groundMemBwTBs = 3.35;  // H100 HBM3 bandwidth
-    const groundGpuMemGB = 80;    // H100 memory
-    const groundTFLOPS_FP8 = 3958;  // H100 FP8 TFLOPS (peak)
-    const groundMFU = 0.35;  // ground achieves ~35% MFU (better than orbital)
-    const groundEffTFLOPS = groundTFLOPS_FP8 * groundMFU;
+    const groundGpuTDP = gSpec.tdpW;
+    const groundMemBwTBs = gSpec.memBwTBs;
+    const groundGpuMemGB = gSpec.memGB;
+    const groundPeakTFLOPS = gSpec.tflops;
+    const groundMFU = 0.40;  // ground achieves ~40% MFU (better cooling, no radiation)
+    const groundEffTFLOPS = groundPeakTFLOPS * groundMFU;
 
     const groundTotalCapex = gpuCount * groundGpuCost;
     const groundAnnualPower = gpuCount * (groundGpuTDP / 1000) * groundPUE * 8760 * groundPowerCostKwh;
@@ -2768,7 +2820,7 @@ ${mod.name} (${mod.quant}): ${gpusNeeded} GPUs/copy × ${copies} copies
     const groundAnnualOpex2 = groundAnnualPower + (groundTotalCapex + groundFacilityCost) * 0.08;  // 8% maintenance
     const groundLifetimeCost = groundTotalCapex + groundFacilityCost + groundAnnualOpex2 * satLife;
 
-    // Ground token throughput (same model mix but H100 specs)
+    // Ground token throughput (same model mix but ground GPU specs)
     let groundTokS = 0;
     for (const mod of models) {
         const gMemNeeded = mod.params * mod.bytesPerParam / 1e9;
@@ -2851,13 +2903,16 @@ Lifetime: <span class="highlight">${(tokLifetime/1e12).toFixed(2)} T tokens</spa
         <div class="metric-row"><span class="metric-label">Blended price</span><span class="metric-value">$${blendedPrice.toFixed(2)}/MTok</span></div>
         <div class="metric-row"><span class="metric-label">Gross margin</span><span class="metric-value ${grossMargin > 0 ? 'orbital' : 'ground'}">${(grossMargin*100).toFixed(1)}%</span></div>
         <div class="metric-row"><span class="metric-label">Cost per GPU-hour</span><span class="metric-value">$${costPerGpuHour.toFixed(2)}</span></div>
+        <div class="metric-row"><span class="metric-label">Target GPU-hr rate</span><span class="metric-value orbital">$${targetGpuHrRate.toFixed(2)}/GPU-hr</span></div>
+        <div class="metric-row"><span class="metric-label">Tok/GPU-hr</span><span class="metric-value">${(effectiveTokPerGpuHr/1e6).toFixed(1)}M tok</span></div>
+        <div class="metric-row"><span class="metric-label">Ground GPU-hr rate</span><span class="metric-value">~$2.50-6.00/GPU-hr (market)</span></div>
         <div class="metric-row"><span class="metric-label">LCOC (gross)</span><span class="metric-value">${m.lcocGross ? '$'+m.lcocGross.toFixed(2)+'/GPU-hr' : 'N/A'}</span></div>
 
         <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
         <div class="metric-row"><span class="metric-label">Lifetime net income</span><span class="metric-value ${netIncome > 0 ? 'orbital' : 'ground'}">$${(netIncome/1e6).toFixed(1)}M</span></div>
         <div class="metric-row"><span class="metric-label">ROIC</span><span class="metric-value ${roic > 0 ? 'orbital' : 'ground'}">${(roic*100).toFixed(0)}%</span></div>
         <div class="metric-row"><span class="metric-label">Payback period</span><span class="metric-value ${paybackYears < satLife ? 'orbital' : 'ground'}">${paybackYears > 0 && paybackYears < 100 ? paybackYears.toFixed(1)+' years' : 'N/A'}</span></div>
-        <div class="metric-row"><span class="metric-label">Approx IRR</span><span class="metric-value ${irr > 0.15 ? 'orbital' : irr > 0 ? 'warning' : 'ground'}">${(irr*100).toFixed(1)}%</span></div>
+        <div class="metric-row"><span class="metric-label">IRR</span><span class="metric-value ${irr > 0.15 ? 'orbital' : irr > 0 ? 'warning' : 'ground'}">${irr <= -0.95 ? 'N/A (negative CF)' : (irr*100).toFixed(1)+'%'}</span></div>
         </div>
     </div>
 
@@ -2866,12 +2921,12 @@ Lifetime: <span class="highlight">${(tokLifetime/1e12).toFixed(2)} T tokens</spa
             <span class="card-title">Orbital vs Ground</span>
             <span class="card-badge" style="background:rgba(26,138,106,0.15);color:var(--orbital)">COMPARISON</span>
         </div>
-        <div class="calc-block"><span class="comment">// Ground baseline: ${gpuCount} × H100 SXM (700W, 80GB, 3.35 TB/s)</span>
-<span class="comment">// $${(groundGpuCost/1000).toFixed(0)}k/GPU, $${groundPowerCostKwh}/kWh, PUE ${groundPUE}</span>
+        <div class="calc-block"><span class="comment">// Ground baseline: ${gpuCount} × ${gSpec.name}</span>
+<span class="comment">// $${(groundGpuCost/1000).toFixed(0)}k/GPU, ${groundGpuTDP}W TDP, $${groundPowerCostKwh}/kWh, PUE ${groundPUE}</span>
 
                     Ground         Orbital
 GPUs:           ${gpuCount.toLocaleString().padStart(8)}       ${gpuCount.toLocaleString().padStart(8)}
-GPU type:       H100 SXM       ${cfg.gpuType.substring(0,18)}
+GPU type:       ${gSpec.name.substring(0,16).padEnd(16)}${cfg.gpuType.substring(0,18)}
 CAPEX:          $${(groundTotalCapex/1e6).toFixed(1).padStart(6)}M      $${(totalCapex/1e6).toFixed(1).padStart(6)}M
 OPEX/yr:        $${(groundAnnualOpex2/1e6).toFixed(1).padStart(6)}M      $${(annualOpex/1e6).toFixed(1).padStart(6)}M
 TCO (${satLife}yr):     $${(groundLifetimeCost/1e6).toFixed(1).padStart(6)}M      $${(totalCost/1e6).toFixed(1).padStart(6)}M
