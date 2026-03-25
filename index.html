@@ -285,7 +285,7 @@ body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', 
             <button class="sidebar-tab active" data-tab="overview">Overview</button>
             <button class="sidebar-tab" data-tab="compute">Compute</button>
             <button class="sidebar-tab" data-tab="network">Network</button>
-            <button class="sidebar-tab" data-tab="models">Models</button>
+            <button class="sidebar-tab" data-tab="models">Tokenomics</button>
             <button class="sidebar-tab" data-tab="physics">Physics</button>
             <button class="sidebar-tab" data-tab="cluster">Cluster</button>
         </div>
@@ -1555,7 +1555,7 @@ window.applyCustomModel = function() {
     // Re-render the models tab
     const cfg = CONFIGS[currentConfig.replace('_CLUSTER','').replace('_DRAGONFLY','')] || CONFIGS.DP2;
     const m = computeMetrics(cfg);
-    document.getElementById('tab-models').innerHTML = renderModels(cfg, m);
+    document.getElementById('tab-models').innerHTML = renderModels(cfg, m) + renderTokenomics(cfg, m);
     // Scroll to results
     setTimeout(() => {
         const el = document.getElementById('custom-results');
@@ -2636,6 +2636,255 @@ Net delta/cluster:   <span class="${(radCostDelta + launchCostPenalty) < 0 ? 'hi
         <div class="metric-row"><span class="metric-label">SLA target</span><span class="metric-value orbital">99.9% (8.76 hr/yr downtime)</span></div>
         <div class="metric-row"><span class="metric-label">TTFT budget</span><span class="metric-value">${((2*70e9*cfg.seqLen/(m.effectiveTFLOPS*1e12))*1000 + m.totalLatencyMs).toFixed(0)} ms (70B)</span></div>
         <div class="metric-row"><span class="metric-label">TPS target</span><span class="metric-value accent">≥ 30 tok/s per stream</span></div>
+    </div>
+    `;
+}
+
+// =====================================================================
+// TOKENOMICS MODEL — SemiAnalysis-style for orbital compute
+// Hardware → Tokens → Revenue → ROIC
+// =====================================================================
+function renderTokenomics(cfg, m) {
+    const cs = cfg.clusterSize || 1;
+
+    // ── HARDWARE INPUTS ──
+    const gpuCount = m.oruCount * cs;
+    const satLife = cfg.satLife || 5;
+    const utilization = 0.85;  // 85% average utilization
+    const radPenalty = cfg.radHardening || 0.60;  // radiation performance retention
+    const totalGpuHours = gpuCount * satLife * 8760 * utilization;
+
+    // ── TOKEN THROUGHPUT MODEL ──
+    // Decode: memory-BW bound → tok/s = memBW / (params × bytesPerParam)
+    // Prefill: compute bound → tok/s = TFLOPS / (2 × params)
+    // Model mix: 70B (40%), 405B (30%), 8B (20%), 1T (10%)
+    const models = [
+        { name: '8B', params: 8e9, weight: 0.20, quant: 'INT8', bytesPerParam: 1 },
+        { name: '70B', params: 70e9, weight: 0.40, quant: 'FP8', bytesPerParam: 1 },
+        { name: '405B', params: 405e9, weight: 0.30, quant: 'FP8', bytesPerParam: 1 },
+        { name: '1T', params: 1e12, weight: 0.10, quant: 'FP4', bytesPerParam: 0.5 },
+    ];
+
+    const memBwPerGpu = cfg.gpuMemBwTBs * 1e12;  // bytes/s
+    const tflopsPerGpu = m.effectiveTFLOPS / gpuCount * cs * 1e12;  // FLOPS per GPU
+
+    let weightedDecodeTokS = 0;
+    let weightedPrefillTokS = 0;
+    let modelBreakdown = '';
+
+    for (const mod of models) {
+        // How many GPUs needed to hold model weights?
+        const modelMemGB = mod.params * mod.bytesPerParam / 1e9;
+        const gpusNeeded = Math.max(1, Math.ceil(modelMemGB / cfg.gpuMemGB));
+        const copies = Math.max(1, Math.floor(gpuCount / gpusNeeded));
+
+        // Decode: limited by memory bandwidth (autoregressive)
+        const decodeTokS = memBwPerGpu / (mod.params * mod.bytesPerParam) * gpusNeeded;
+        // Prefill: limited by compute (parallel)
+        const prefillTokS = tflopsPerGpu * gpusNeeded / (2 * mod.params);
+
+        // Throughput per copy, scaled by number of copies
+        const totalDecodeTokS = decodeTokS * copies;
+        const totalPrefillTokS = prefillTokS * copies;
+
+        weightedDecodeTokS += totalDecodeTokS * mod.weight;
+        weightedPrefillTokS += totalPrefillTokS * mod.weight;
+
+        modelBreakdown += `
+${mod.name} (${mod.quant}): ${gpusNeeded} GPUs/copy × ${copies} copies
+  Decode: <span class="highlight">${(totalDecodeTokS/1000).toFixed(1)}k tok/s</span>  Prefill: <span class="highlight">${(totalPrefillTokS/1000).toFixed(1)}k tok/s</span>
+`;
+    }
+
+    // Blended output (70% decode, 30% prefill by volume)
+    const blendedTokS = weightedDecodeTokS * 0.7 + weightedPrefillTokS * 0.3;
+
+    // Daily / Monthly / Annual token output
+    const tokPerDay = blendedTokS * 86400 * utilization * radPenalty;
+    const tokPerMonth = tokPerDay * 30;
+    const tokPerYear = tokPerDay * 365;
+    const tokLifetime = tokPerYear * satLife;
+
+    // ── PRICING MODEL ──
+    // Reference: Claude Sonnet output = $15/MTok, GPT-4o = $10/MTok
+    // Orbital discount to attract customers (lower cooling cost advantage)
+    const priceTiers = [
+        { name: 'Premium (real-time, SLA)', pricePerMTok: 12.0, fraction: 0.15 },
+        { name: 'Standard (API, batch)', pricePerMTok: 5.0, fraction: 0.45 },
+        { name: 'Economy (async, off-peak)', pricePerMTok: 1.5, fraction: 0.30 },
+        { name: 'Training compute (FLOPS)', pricePerMTok: 0.8, fraction: 0.10 },
+    ];
+
+    let blendedPrice = 0;
+    for (const tier of priceTiers) blendedPrice += tier.pricePerMTok * tier.fraction;
+
+    // Revenue calculations
+    const revenuePerDay = (tokPerDay / 1e6) * blendedPrice;
+    const revenuePerMonth = revenuePerDay * 30;
+    const revenuePerYear = revenuePerDay * 365;
+    const revenueLifetime = revenuePerYear * satLife;
+
+    // ── COST STRUCTURE ──
+    const launchCost = (cfg.dryMassKg || 1000) * (cfg.launchCostPerKg || 500) * cs;
+    const satBuildCost = (cfg.totalProgramCost || 10e6) * cs;
+    const totalCapex = launchCost + satBuildCost;
+
+    // Operating costs
+    const groundStationOpex = 2e6 * cs;  // $/year for ground segment
+    const missionControlOpex = 1.5e6;     // $/year shared
+    const insuranceOpex = totalCapex * 0.03;  // 3% of capex per year
+    const annualOpex = groundStationOpex + missionControlOpex + insuranceOpex;
+    const lifetimeOpex = annualOpex * satLife;
+
+    const totalCost = totalCapex + lifetimeOpex;
+
+    // ── UNIT ECONOMICS ──
+    const costPerMTok = totalCost / (tokLifetime / 1e6);
+    const grossMargin = (blendedPrice - costPerMTok) / blendedPrice;
+    const costPerGpuHour = totalCost / totalGpuHours;
+
+    // ── ROIC ──
+    const netIncome = revenueLifetime - totalCost;
+    const roic = netIncome / totalCapex;
+    const paybackYears = totalCapex / (revenuePerYear - annualOpex);
+    const irr = Math.pow(1 + roic, 1/satLife) - 1;  // approximate IRR
+
+    // ── GROUND COMPARISON ──
+    // Ground H100 cluster: ~$30k/GPU, $0.15/kWh power, 45% PUE overhead
+    const groundGpuCost = 30000;
+    const groundPowerCostKwh = 0.08;
+    const groundPUE = 1.35;
+    const groundTotalCapex = gpuCount * groundGpuCost;
+    const groundAnnualPower = gpuCount * (cfg.gpuPowerW/1000) * groundPUE * 8760 * groundPowerCostKwh;
+    const groundAnnualOpex2 = groundAnnualPower + groundTotalCapex * 0.10;  // 10% maintenance
+    const groundLifetimeCost = groundTotalCapex + groundAnnualOpex2 * satLife;
+    const groundCostPerMTok = groundLifetimeCost / (tokLifetime / 1e6);
+    const orbitalAdvantage = groundCostPerMTok / costPerMTok;
+
+    return `
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Token Throughput</span>
+            <span class="card-badge" style="background:rgba(58,122,184,0.15);color:var(--accent)">${cfg.shortName} × ${cs}</span>
+        </div>
+        <div class="calc-block"><span class="comment">// Weighted model mix → aggregate throughput</span>
+<span class="comment">// Decode: memory-BW bound | Prefill: compute bound</span>
+<span class="comment">// Radiation penalty: ${(radPenalty*100).toFixed(0)}% performance retention</span>
+
+${modelBreakdown}
+Blended (70/30 decode/prefill): <span class="highlight">${(blendedTokS/1000).toFixed(1)}k tok/s</span>
+After util (${(utilization*100).toFixed(0)}%) + radiation: <span class="highlight">${(blendedTokS*utilization*radPenalty/1000).toFixed(1)}k tok/s</span>
+
+Daily:    <span class="highlight">${(tokPerDay/1e9).toFixed(2)} B tokens</span>
+Monthly:  <span class="highlight">${(tokPerMonth/1e9).toFixed(1)} B tokens</span>
+Annual:   <span class="highlight">${(tokPerYear/1e12).toFixed(3)} T tokens</span>
+Lifetime: <span class="highlight">${(tokLifetime/1e12).toFixed(2)} T tokens</span> (${satLife} years)</div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Pricing & Revenue</span>
+            <span class="card-badge" style="background:rgba(26,138,106,0.15);color:var(--orbital)">$/MTok</span>
+        </div>
+        <div class="metric-row"><span class="metric-label">Blended price</span><span class="metric-value accent">$${blendedPrice.toFixed(2)}/MTok</span></div>
+        ${priceTiers.map(t => `
+        <div class="metric-row"><span class="metric-label">${t.name}</span><span class="metric-value">$${t.pricePerMTok.toFixed(2)}/MTok (${(t.fraction*100).toFixed(0)}%)</span></div>
+        `).join('')}
+        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+        <div class="metric-row"><span class="metric-label">Daily revenue</span><span class="metric-value orbital">$${(revenuePerDay/1000).toFixed(1)}k</span></div>
+        <div class="metric-row"><span class="metric-label">Monthly revenue</span><span class="metric-value orbital">$${(revenuePerMonth/1e6).toFixed(2)}M</span></div>
+        <div class="metric-row"><span class="metric-label">Annual revenue</span><span class="metric-value orbital">$${(revenuePerYear/1e6).toFixed(1)}M</span></div>
+        <div class="metric-row"><span class="metric-label">Lifetime revenue</span><span class="metric-value accent">$${(revenueLifetime/1e6).toFixed(1)}M</span></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Cost Structure</span>
+            <span class="card-badge" style="background:rgba(196,74,58,0.15);color:var(--ground)">TCO</span>
+        </div>
+        <div class="section-header">Capital Expenditure</div>
+        <div class="metric-row"><span class="metric-label">Satellite build (×${cs})</span><span class="metric-value">$${(satBuildCost/1e6).toFixed(1)}M</span></div>
+        <div class="metric-row"><span class="metric-label">Launch (${cfg.launchVehicle})</span><span class="metric-value">$${(launchCost/1e6).toFixed(1)}M</span></div>
+        <div class="metric-row"><span class="metric-label">Total CAPEX</span><span class="metric-value ground">$${(totalCapex/1e6).toFixed(1)}M</span></div>
+
+        <div class="section-header">Operating Expenditure</div>
+        <div class="metric-row"><span class="metric-label">Ground segment</span><span class="metric-value">$${(groundStationOpex/1e6).toFixed(1)}M/yr</span></div>
+        <div class="metric-row"><span class="metric-label">Mission control</span><span class="metric-value">$${(missionControlOpex/1e6).toFixed(1)}M/yr</span></div>
+        <div class="metric-row"><span class="metric-label">Insurance (3%)</span><span class="metric-value">$${(insuranceOpex/1e6).toFixed(1)}M/yr</span></div>
+        <div class="metric-row"><span class="metric-label">Annual OPEX</span><span class="metric-value ground">$${(annualOpex/1e6).toFixed(1)}M/yr</span></div>
+        <div class="metric-row"><span class="metric-label">Lifetime OPEX</span><span class="metric-value">$${(lifetimeOpex/1e6).toFixed(1)}M</span></div>
+
+        <div style="margin-top:8px;padding-top:8px;border-top:2px solid var(--border-dark)">
+        <div class="metric-row"><span class="metric-label">Total Cost of Ownership</span><span class="metric-value ground" style="font-size:14px;font-weight:700">$${(totalCost/1e6).toFixed(1)}M</span></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Unit Economics</span>
+            <span class="card-badge" style="background:rgba(122,75,168,0.15);color:var(--purple)">ROIC</span>
+        </div>
+        <div class="metric-row"><span class="metric-label">Cost per MTok</span><span class="metric-value accent">$${costPerMTok.toFixed(2)}</span></div>
+        <div class="metric-row"><span class="metric-label">Blended price</span><span class="metric-value">$${blendedPrice.toFixed(2)}/MTok</span></div>
+        <div class="metric-row"><span class="metric-label">Gross margin</span><span class="metric-value ${grossMargin > 0 ? 'orbital' : 'ground'}">${(grossMargin*100).toFixed(1)}%</span></div>
+        <div class="metric-row"><span class="metric-label">Cost per GPU-hour</span><span class="metric-value">$${costPerGpuHour.toFixed(2)}</span></div>
+        <div class="metric-row"><span class="metric-label">LCOC (gross)</span><span class="metric-value">${m.lcocGross ? '$'+m.lcocGross.toFixed(2)+'/GPU-hr' : 'N/A'}</span></div>
+
+        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+        <div class="metric-row"><span class="metric-label">Lifetime net income</span><span class="metric-value ${netIncome > 0 ? 'orbital' : 'ground'}">$${(netIncome/1e6).toFixed(1)}M</span></div>
+        <div class="metric-row"><span class="metric-label">ROIC</span><span class="metric-value ${roic > 0 ? 'orbital' : 'ground'}">${(roic*100).toFixed(0)}%</span></div>
+        <div class="metric-row"><span class="metric-label">Payback period</span><span class="metric-value ${paybackYears < satLife ? 'orbital' : 'ground'}">${paybackYears > 0 && paybackYears < 100 ? paybackYears.toFixed(1)+' years' : 'N/A'}</span></div>
+        <div class="metric-row"><span class="metric-label">Approx IRR</span><span class="metric-value ${irr > 0.15 ? 'orbital' : irr > 0 ? 'warning' : 'ground'}">${(irr*100).toFixed(1)}%</span></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Orbital vs Ground</span>
+            <span class="card-badge" style="background:rgba(26,138,106,0.15);color:var(--orbital)">COMPARISON</span>
+        </div>
+        <div class="calc-block"><span class="comment">// Ground baseline: ${gpuCount} × H100 cluster</span>
+<span class="comment">// $${(groundGpuCost/1000).toFixed(0)}k/GPU, $${groundPowerCostKwh}/kWh, PUE ${groundPUE}</span>
+
+Ground CAPEX:      $${(groundTotalCapex/1e6).toFixed(1)}M
+Ground OPEX/yr:    $${(groundAnnualOpex2/1e6).toFixed(1)}M (power + maintenance)
+Ground TCO (${satLife}yr): $${(groundLifetimeCost/1e6).toFixed(1)}M
+Ground $/MTok:     $${groundCostPerMTok.toFixed(2)}
+
+Orbital CAPEX:     $${(totalCapex/1e6).toFixed(1)}M
+Orbital OPEX/yr:   $${(annualOpex/1e6).toFixed(1)}M
+Orbital TCO (${satLife}yr): $${(totalCost/1e6).toFixed(1)}M
+Orbital $/MTok:    $${costPerMTok.toFixed(2)}
+
+<span class="${orbitalAdvantage > 1 ? 'highlight' : 'error'}">Orbital is ${orbitalAdvantage > 1 ? (orbitalAdvantage).toFixed(1)+'× cheaper' : (1/orbitalAdvantage).toFixed(1)+'× more expensive'} per token</span>
+
+<span class="comment">// Space advantages not captured in $/MTok:</span>
+<span class="comment">//   ✓ Zero cooling cost (radiate to 3K space)</span>
+<span class="comment">//   ✓ 24/7 solar (no grid, no night, no carbon)</span>
+<span class="comment">//   ✓ No land, no permitting, no water</span>
+<span class="comment">//   ✓ No power grid connection fees</span>
+<span class="comment">// Space disadvantages:</span>
+<span class="comment">//   ✗ Radiation damage (${(radPenalty*100).toFixed(0)}% retained)</span>
+<span class="comment">//   ✗ Bandwidth constraint (ISL + ground)</span>
+<span class="comment">//   ✗ No physical servicing</span>
+<span class="comment">//   ✗ Launch risk</span></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">Market Sizing</span></div>
+        <div class="calc-block"><span class="comment">// Bottom-up: inference demand growing ~45%/year</span>
+<span class="comment">// 2025: ~65 GW ground compute, ~$50B inference market</span>
+<span class="comment">// Orbital can capture niche where latency tolerance > 10ms</span>
+<span class="comment">// Target segments: async batch, training, non-real-time API</span>
+
+Addressable market (${cfg.year}): ~$${(50 * Math.pow(1.45, (cfg.year - 2025))).toFixed(0)}B
+  × Orbital-compatible fraction: ~15%
+  = Orbital TAM: ~$${(50 * Math.pow(1.45, (cfg.year - 2025)) * 0.15).toFixed(1)}B
+
+This ${cfg.shortName} constellation captures:
+  ${(revenuePerYear / (50e9 * Math.pow(1.45, (cfg.year - 2025)) * 0.15) * 100).toFixed(3)}% of orbital TAM
+  ${gpuCount.toLocaleString()} GPUs of ~${(65e6 * Math.pow(1.45, (cfg.year - 2025)) / 1000).toFixed(0)}k MW ground equiv</div>
     </div>
     `;
 }
@@ -4288,7 +4537,7 @@ function switchConfig(key) {
     document.getElementById('tab-overview').innerHTML = renderOverview(cfg, m);
     document.getElementById('tab-compute').innerHTML = renderCompute(cfg, m);
     document.getElementById('tab-network').innerHTML = renderNetwork(cfg, m);
-    document.getElementById('tab-models').innerHTML = renderModels(cfg, m);
+    document.getElementById('tab-models').innerHTML = renderModels(cfg, m) + renderTokenomics(cfg, m);
     document.getElementById('tab-physics').innerHTML = renderPhysics(cfg, m);
     document.getElementById('tab-cluster').innerHTML = renderCluster(cfg, m);
     // Reset camera
@@ -4605,8 +4854,8 @@ async function exportDebugReference() {
         captures[key] = { key, cfg, m, imgData, partGroups, partCount: partRegistry.length,
             tabs: {
                 Overview: renderOverview(cfg, m), Compute: renderCompute(cfg, m),
-                Network: renderNetwork(cfg, m), Models: renderModels(cfg, m),
-                Physics: renderPhysics(cfg, m), Cluster: renderCluster(cfg, m)
+                Network: renderNetwork(cfg, m), Tokenomics: renderModels(cfg, m) + renderTokenomics(cfg, m),
+                Physics: renderPhysics(cfg, m), Cluster: renderCluster(cfg, m), Tokenomics: renderTokenomics(cfg, m)
             }
         };
     }
@@ -4791,7 +5040,7 @@ table.cmp tr:hover{background:#151d28}
     html += `</tr></table></div>`;
 
     // ═══════ TAB DETAILS PER CONFIG ═══════
-    const tabNames = ['Overview','Compute','Network','Models','Physics','Cluster'];
+    const tabNames = ['Overview','Compute','Network','Tokenomics','Physics','Cluster'];
     for (const tabName of tabNames) {
         html += `<h2>${tabName} — All Configs</h2>`;
         // Show each config's tab content in a grid
