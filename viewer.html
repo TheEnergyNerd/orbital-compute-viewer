@@ -2750,15 +2750,37 @@ ${mod.name} (${mod.quant}): ${gpusNeeded} GPUs/copy × ${copies} copies
     const irr = Math.pow(1 + roic, 1/satLife) - 1;  // approximate IRR
 
     // ── GROUND COMPARISON ──
-    // Ground H100 cluster: ~$30k/GPU, $0.15/kWh power, 45% PUE overhead
-    const groundGpuCost = 30000;
+    // Ground H100 cluster with equivalent GPU count
+    // H100 SXM: 700W TDP, 3958 TFLOPS FP8, 3.35 TB/s HBM3, 80GB, $25-30k
+    const groundGpuCost = 25000;
     const groundPowerCostKwh = 0.08;
     const groundPUE = 1.35;
+    const groundGpuTDP = 700;  // H100 SXM TDP in watts
+    const groundMemBwTBs = 3.35;  // H100 HBM3 bandwidth
+    const groundGpuMemGB = 80;    // H100 memory
+    const groundTFLOPS_FP8 = 3958;  // H100 FP8 TFLOPS (peak)
+    const groundMFU = 0.35;  // ground achieves ~35% MFU (better than orbital)
+    const groundEffTFLOPS = groundTFLOPS_FP8 * groundMFU;
+
     const groundTotalCapex = gpuCount * groundGpuCost;
-    const groundAnnualPower = gpuCount * (cfg.gpuPowerW/1000) * groundPUE * 8760 * groundPowerCostKwh;
-    const groundAnnualOpex2 = groundAnnualPower + groundTotalCapex * 0.10;  // 10% maintenance
-    const groundLifetimeCost = groundTotalCapex + groundAnnualOpex2 * satLife;
-    const groundCostPerMTok = groundLifetimeCost / (tokLifetime / 1e6);
+    const groundAnnualPower = gpuCount * (groundGpuTDP / 1000) * groundPUE * 8760 * groundPowerCostKwh;
+    const groundFacilityCost = gpuCount * 2000;  // $2k/GPU for facility build
+    const groundAnnualOpex2 = groundAnnualPower + (groundTotalCapex + groundFacilityCost) * 0.08;  // 8% maintenance
+    const groundLifetimeCost = groundTotalCapex + groundFacilityCost + groundAnnualOpex2 * satLife;
+
+    // Ground token throughput (same model mix but H100 specs)
+    let groundTokS = 0;
+    for (const mod of models) {
+        const gMemNeeded = mod.params * mod.bytesPerParam / 1e9;
+        const gGpusNeeded = Math.max(1, Math.ceil(gMemNeeded / groundGpuMemGB));
+        const gCopies = Math.max(1, Math.floor(gpuCount / gGpusNeeded));
+        const gDecodeTokS = (groundMemBwTBs * 1e12) / (mod.params * mod.bytesPerParam) * gGpusNeeded * gCopies;
+        const gPrefillTokS = (groundEffTFLOPS * 1e12) * gGpusNeeded / (2 * mod.params) * gCopies;
+        groundTokS += (gDecodeTokS * 0.7 + gPrefillTokS * 0.3) * mod.weight;
+    }
+    const groundTokPerDay = groundTokS * 86400 * 0.90;  // 90% util (no radiation penalty)
+    const groundTokLifetime = groundTokPerDay * 365 * satLife;
+    const groundCostPerMTok = groundLifetimeCost / (groundTokLifetime / 1e6);
     const orbitalAdvantage = groundCostPerMTok / costPerMTok;
 
     return `
@@ -2844,47 +2866,45 @@ Lifetime: <span class="highlight">${(tokLifetime/1e12).toFixed(2)} T tokens</spa
             <span class="card-title">Orbital vs Ground</span>
             <span class="card-badge" style="background:rgba(26,138,106,0.15);color:var(--orbital)">COMPARISON</span>
         </div>
-        <div class="calc-block"><span class="comment">// Ground baseline: ${gpuCount} × H100 cluster</span>
+        <div class="calc-block"><span class="comment">// Ground baseline: ${gpuCount} × H100 SXM (700W, 80GB, 3.35 TB/s)</span>
 <span class="comment">// $${(groundGpuCost/1000).toFixed(0)}k/GPU, $${groundPowerCostKwh}/kWh, PUE ${groundPUE}</span>
 
-Ground CAPEX:      $${(groundTotalCapex/1e6).toFixed(1)}M
-Ground OPEX/yr:    $${(groundAnnualOpex2/1e6).toFixed(1)}M (power + maintenance)
-Ground TCO (${satLife}yr): $${(groundLifetimeCost/1e6).toFixed(1)}M
-Ground $/MTok:     $${groundCostPerMTok.toFixed(2)}
-
-Orbital CAPEX:     $${(totalCapex/1e6).toFixed(1)}M
-Orbital OPEX/yr:   $${(annualOpex/1e6).toFixed(1)}M
-Orbital TCO (${satLife}yr): $${(totalCost/1e6).toFixed(1)}M
-Orbital $/MTok:    $${costPerMTok.toFixed(2)}
-
+                    Ground         Orbital
+GPUs:           ${gpuCount.toLocaleString().padStart(8)}       ${gpuCount.toLocaleString().padStart(8)}
+GPU type:       H100 SXM       ${cfg.gpuType.substring(0,18)}
+CAPEX:          $${(groundTotalCapex/1e6).toFixed(1).padStart(6)}M      $${(totalCapex/1e6).toFixed(1).padStart(6)}M
+OPEX/yr:        $${(groundAnnualOpex2/1e6).toFixed(1).padStart(6)}M      $${(annualOpex/1e6).toFixed(1).padStart(6)}M
+TCO (${satLife}yr):     $${(groundLifetimeCost/1e6).toFixed(1).padStart(6)}M      $${(totalCost/1e6).toFixed(1).padStart(6)}M
+Throughput:     ${(groundTokS/1000).toFixed(0).padStart(6)}k t/s    ${(blendedTokS*utilization*radPenalty/1000).toFixed(0).padStart(6)}k t/s
+$/MTok:         $${groundCostPerMTok.toFixed(2).padStart(6)}       $${costPerMTok.toFixed(2).padStart(6)}
+───────────────────────────────────────
 <span class="${orbitalAdvantage > 1 ? 'highlight' : 'error'}">Orbital is ${orbitalAdvantage > 1 ? (orbitalAdvantage).toFixed(1)+'× cheaper' : (1/orbitalAdvantage).toFixed(1)+'× more expensive'} per token</span>
+${orbitalAdvantage > 1 ? '✓ Space cooling + free solar outweigh launch cost' : '✗ Launch cost dominates — need cheaper $/kg or more GPUs/sat'}
 
-<span class="comment">// Space advantages not captured in $/MTok:</span>
-<span class="comment">//   ✓ Zero cooling cost (radiate to 3K space)</span>
-<span class="comment">//   ✓ 24/7 solar (no grid, no night, no carbon)</span>
-<span class="comment">//   ✓ No land, no permitting, no water</span>
-<span class="comment">//   ✓ No power grid connection fees</span>
-<span class="comment">// Space disadvantages:</span>
-<span class="comment">//   ✗ Radiation damage (${(radPenalty*100).toFixed(0)}% retained)</span>
-<span class="comment">//   ✗ Bandwidth constraint (ISL + ground)</span>
-<span class="comment">//   ✗ No physical servicing</span>
-<span class="comment">//   ✗ Launch risk</span></div>
+<span class="comment">// Orbital advantages:</span>
+<span class="comment">//   ✓ Zero cooling (radiate to 3K) → no PUE overhead</span>
+<span class="comment">//   ✓ Free 24/7 solar → zero energy cost</span>
+<span class="comment">//   ✓ No land, permitting, water, grid connection</span>
+<span class="comment">// Orbital disadvantages:</span>
+<span class="comment">//   ✗ Radiation (${(radPenalty*100).toFixed(0)}% performance retained)</span>
+<span class="comment">//   ✗ Bandwidth bottleneck (ISL + ground contact)</span>
+<span class="comment">//   ✗ No physical servicing, 5yr design life</span>
+<span class="comment">//   ✗ Launch risk + insurance cost</span></div>
     </div>
 
     <div class="card">
-        <div class="card-header"><span class="card-title">Market Sizing</span></div>
-        <div class="calc-block"><span class="comment">// Bottom-up: inference demand growing ~45%/year</span>
+        <div class="card-header"><span class="card-title">Market Context</span></div>
+        <div class="calc-block"><span class="comment">// Global AI inference market growing ~45%/year</span>
 <span class="comment">// 2025: ~65 GW ground compute, ~$50B inference market</span>
-<span class="comment">// Orbital can capture niche where latency tolerance > 10ms</span>
-<span class="comment">// Target segments: async batch, training, non-real-time API</span>
 
-Addressable market (${cfg.year}): ~$${(50 * Math.pow(1.45, (cfg.year - 2025))).toFixed(0)}B
-  × Orbital-compatible fraction: ~15%
-  = Orbital TAM: ~$${(50 * Math.pow(1.45, (cfg.year - 2025)) * 0.15).toFixed(1)}B
+Total inference market (${cfg.year}): ~$${(50 * Math.pow(1.45, (cfg.year - 2025))).toFixed(0)}B
+Global GPU demand (${cfg.year}):      ~${(65e3 * Math.pow(1.45, (cfg.year - 2025)) / 1e3).toFixed(0)}k MW compute
+Global GPU count:              ~${(2e6 * Math.pow(1.45, (cfg.year - 2025)) / 1e6).toFixed(1)}M GPUs equiv
 
-This ${cfg.shortName} constellation captures:
-  ${(revenuePerYear / (50e9 * Math.pow(1.45, (cfg.year - 2025)) * 0.15) * 100).toFixed(3)}% of orbital TAM
-  ${gpuCount.toLocaleString()} GPUs of ~${(65e6 * Math.pow(1.45, (cfg.year - 2025)) / 1000).toFixed(0)}k MW ground equiv</div>
+This ${cfg.shortName} ${cs > 1 ? 'cluster' : 'station'}:
+  ${gpuCount.toLocaleString()} GPUs × ${satLife} years
+  Annual revenue: $${(revenuePerYear/1e6).toFixed(1)}M
+  ${(revenuePerYear / (50e9 * Math.pow(1.45, (cfg.year - 2025))) * 100).toFixed(4)}% of total market</div>
     </div>
     `;
 }
