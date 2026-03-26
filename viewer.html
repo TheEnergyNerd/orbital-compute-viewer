@@ -231,10 +231,83 @@ body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', 
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--border-dark); }
 
-/* Responsive */
-@media (max-width: 900px) {
-    .app { grid-template-columns: 1fr; }
-    .sidebar { max-height: 40vh; }
+/* Responsive — tablets and phones */
+@media (max-width: 768px) {
+    body { overflow: auto; height: auto; }
+    .app {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 40vh 1fr;
+        height: auto; min-height: 100vh;
+    }
+
+    /* Top bar: stack title above tabs */
+    .top-bar { flex-wrap: wrap; padding: 6px 10px; gap: 6px; }
+    .top-bar h1 { font-size: 14px; }
+    .top-bar .subtitle { font-size: 10px; }
+    .top-bar .badge { font-size: 9px; padding: 1px 6px; }
+
+    /* Config tabs: horizontal scroll */
+    .config-tabs {
+        margin-left: 0; width: 100%; order: 10;
+        overflow-x: auto; flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;          /* Firefox */
+        -ms-overflow-style: none;       /* IE/Edge */
+    }
+    .config-tabs::-webkit-scrollbar { display: none; }
+    .config-tab { padding: 6px 10px; font-size: 10px; white-space: nowrap; flex-shrink: 0; }
+    .config-tab .sub { font-size: 8px; }
+
+    /* Viewport */
+    .viewport { height: 40vh; border-right: none; border-bottom: 1px solid var(--border-dark); }
+    .viewport-hint { font-size: 9px; }
+    .role-legend { font-size: 9px; padding: 4px 8px; }
+
+    /* KPI row: wrap */
+    .kpi-row { flex-wrap: wrap; gap: 12px; }
+    .kpi .val { font-size: 15px; }
+    .kpi .unit { font-size: 8px; }
+
+    /* Info panel (click popup) */
+    .info-panel { width: calc(100% - 24px); left: 12px; top: 12px; max-height: calc(100% - 24px); }
+
+    /* Sidebar fills remaining height, scrollable */
+    .sidebar { overflow-y: auto; max-height: none; }
+
+    /* Sidebar tabs: smaller */
+    .sidebar-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .sidebar-tab { padding: 6px 3px; font-size: 10px; }
+
+    /* Cards */
+    .card { padding: 10px; margin-bottom: 8px; }
+    .card-title { font-size: 11px; }
+
+    /* Calc blocks: allow horizontal scroll for wide monospace */
+    .calc-block { font-size: 9.5px; overflow-x: auto; white-space: pre; word-break: normal; }
+    .diagram-block { font-size: 9px; }
+
+    /* Metric rows */
+    .metric-label { font-size: 11px; }
+    .metric-value { font-size: 11px; }
+
+    /* Model form */
+    .model-form .form-row { grid-template-columns: 1fr; }
+    .model-form .form-row-3 { grid-template-columns: 1fr 1fr; }
+
+    /* Model table */
+    .model-table { font-size: 10px; }
+    .model-table th, .model-table td { padding: 3px 4px; }
+
+    /* SVG diagrams */
+    .svg-diagram svg { max-width: 100%; height: auto; }
+}
+
+/* Slightly wider tablets: two-column but narrower sidebar */
+@media (min-width: 769px) and (max-width: 1024px) {
+    .app { grid-template-columns: 1fr 340px; }
+    .config-tab { padding: 6px 10px; font-size: 10px; }
+    .config-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+    .config-tabs::-webkit-scrollbar { display: none; }
 }
 </style>
 </head>
