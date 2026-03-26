@@ -2655,49 +2655,74 @@ function renderTokenomics(cfg, m) {
     const totalGpuHours = gpuCount * satLife * 8760 * utilization;
 
     // ── TOKEN THROUGHPUT MODEL ──
-    // Decode: memory-BW bound → tok/s = memBW / (params × bytesPerParam)
-    // Prefill: compute bound → tok/s = TFLOPS / (2 × params)
-    // Model mix: 70B (40%), 405B (30%), 8B (20%), 1T (10%)
+    // Real-world inference deployment with continuous batching.
+    //
+    // Decode: memory-BW bound → tok/s/GPU = memBW / (params × bytesPerParam)
+    //   This is the SINGLE-STREAM decode rate. With batching, you can serve
+    //   multiple streams but each stream still sees this rate.
+    //   Total system throughput = decode_rate × batch_size × copies
+    //
+    // Prefill: compute bound → tokens/s = TFLOPS / (2 × params)
+    //   Prefill is batch-friendly and parallelizable.
+    //
+    // Key: throughput ≠ single-user speed. System throughput = concurrent users × per-user rate.
+    // Realistic batch sizes: 8-64 concurrent requests per GPU copy.
+    //
+    // Model mix: weighted by typical API traffic
     const models = [
-        { name: '8B', params: 8e9, weight: 0.20, quant: 'INT8', bytesPerParam: 1 },
-        { name: '70B', params: 70e9, weight: 0.40, quant: 'FP8', bytesPerParam: 1 },
-        { name: '405B', params: 405e9, weight: 0.30, quant: 'FP8', bytesPerParam: 1 },
+        { name: '8B', params: 8e9, weight: 0.25, quant: 'INT8', bytesPerParam: 1 },
+        { name: '70B', params: 70e9, weight: 0.45, quant: 'FP8', bytesPerParam: 1 },
+        { name: '405B', params: 405e9, weight: 0.20, quant: 'FP8', bytesPerParam: 1 },
         { name: '1T', params: 1e12, weight: 0.10, quant: 'FP4', bytesPerParam: 0.5 },
     ];
 
-    const memBwPerGpu = cfg.gpuMemBwTBs * 1e12;  // bytes/s
-    const tflopsPerGpu = m.effectiveTFLOPS / gpuCount * cs * 1e12;  // FLOPS per GPU
+    const memBwPerGpu = cfg.gpuMemBwTBs * 1e12;  // bytes/s per GPU
+    const tflopsPerGpu = (m.effectiveTFLOPS / m.oruCount) * 1e12;  // FLOPS per GPU (node-level ÷ GPUs per node)
+    const batchSize = cfg.batchSize || 32;  // concurrent requests per copy
 
     let weightedDecodeTokS = 0;
     let weightedPrefillTokS = 0;
     let modelBreakdown = '';
 
     for (const mod of models) {
-        // How many GPUs needed to hold model weights?
+        // How many GPUs needed to hold model weights in memory?
         const modelMemGB = mod.params * mod.bytesPerParam / 1e9;
         const gpusNeeded = Math.max(1, Math.ceil(modelMemGB / cfg.gpuMemGB));
+        // How many independent model copies can we run?
         const copies = Math.max(1, Math.floor(gpuCount / gpusNeeded));
 
-        // Decode: limited by memory bandwidth (autoregressive)
-        const decodeTokS = memBwPerGpu / (mod.params * mod.bytesPerParam) * gpusNeeded;
-        // Prefill: limited by compute (parallel)
-        const prefillTokS = tflopsPerGpu * gpusNeeded / (2 * mod.params);
+        // Decode: memory-BW bound per stream
+        // Single-stream: memBW / (params × bytes) tok/s
+        // With TP across gpusNeeded GPUs: gpusNeeded × memBW / (params × bytes)
+        // With batching: batch_size concurrent streams, but memBW is shared
+        // Net throughput per copy = gpusNeeded × memBW / (params × bytes)
+        // (batching doesn't increase aggregate decode throughput — it's BW-limited)
+        const decodeTokSPerCopy = (memBwPerGpu * gpusNeeded) / (mod.params * mod.bytesPerParam);
 
-        // Throughput per copy, scaled by number of copies
-        const totalDecodeTokS = decodeTokS * copies;
-        const totalPrefillTokS = prefillTokS * copies;
+        // Prefill: compute-bound, benefits from batching
+        // tok/s per copy = TFLOPS × gpusNeeded / (2 × params)
+        const prefillTokSPerCopy = (tflopsPerGpu * gpusNeeded) / (2 * mod.params);
+
+        // Total system throughput = per-copy rate × number of copies
+        const totalDecodeTokS = decodeTokSPerCopy * copies;
+        const totalPrefillTokS = prefillTokSPerCopy * copies;
 
         weightedDecodeTokS += totalDecodeTokS * mod.weight;
         weightedPrefillTokS += totalPrefillTokS * mod.weight;
 
         modelBreakdown += `
-${mod.name} (${mod.quant}): ${gpusNeeded} GPUs/copy × ${copies} copies
-  Decode: <span class="highlight">${(totalDecodeTokS/1000).toFixed(1)}k tok/s</span>  Prefill: <span class="highlight">${(totalPrefillTokS/1000).toFixed(1)}k tok/s</span>
+${mod.name} (${mod.quant}): ${gpusNeeded} GPU/copy × ${copies} copies
+  Decode: <span class="highlight">${totalDecodeTokS.toFixed(0)} tok/s</span>  Prefill: <span class="highlight">${(totalPrefillTokS/1000).toFixed(1)}k tok/s</span>
 `;
     }
 
-    // Blended output (70% decode, 30% prefill by volume)
-    const blendedTokS = weightedDecodeTokS * 0.7 + weightedPrefillTokS * 0.3;
+    // Blended output: real inference is ~80% decode time, 20% prefill time
+    // But by TOKEN VOLUME prefill generates many tokens quickly (one prompt → many tokens)
+    // A typical request: 500 tok prefill + 500 tok decode
+    // Prefill time: 500 / prefill_rate, Decode time: 500 / decode_rate
+    // Since decode_rate << prefill_rate, decode dominates wall time
+    // System throughput ≈ decode throughput (decode is the bottleneck)
+    const blendedTokS = weightedDecodeTokS;  // decode-limited system
 
     // Daily / Monthly / Annual token output
     const tokPerDay = blendedTokS * 86400 * utilization * radPenalty;
@@ -2706,17 +2731,22 @@ ${mod.name} (${mod.quant}): ${gpusNeeded} GPUs/copy × ${copies} copies
     const tokLifetime = tokPerYear * satLife;
 
     // ── PRICING MODEL ──
-    // Orbital compute sells wholesale GPU-hours, not retail API tokens.
-    // Convert GPU-hr pricing to $/MTok for comparison.
+    // Two approaches to price orbital compute:
     //
-    // Reference GPU-hr rates (2025):
-    //   H100: $2.50/GPU-hr (spot), $3.50 (on-demand)
-    //   B300: ~$4-6/GPU-hr (projected)
-    //   Vera Rubin: ~$6-10/GPU-hr (projected)
+    // 1. GPU-hour pricing (wholesale): sell raw compute time
+    //    Reference rates (2025-2030):
+    //      H100: $2.00-3.50/GPU-hr
+    //      B300: $3.00-5.00/GPU-hr
+    //      Next-gen: $4.00-8.00/GPU-hr
     //
-    // Orbital pricing: slight discount to ground (free energy offsets launch cost)
-    // Start with target GPU-hr rate, derive $/MTok from throughput
-    const targetGpuHrRate = cfg.year <= 2027 ? 3.5 : cfg.year <= 2029 ? 5.0 : 4.0;  // $/GPU-hr
+    // 2. $/MTok pricing (retail API): sell inference results
+    //    Reference (2025): Claude Sonnet = $3/$15 in/out MTok, GPT-4o = $2.50/$10
+    //    These include model development costs, not just compute.
+    //    Pure compute cost is ~$0.50-2.00/MTok for 70B models.
+    //
+    // We price at the COMPUTE LAYER — what a cloud provider charges for raw GPU-hours.
+    // The $/MTok is derived from throughput at market GPU-hr rates.
+    const targetGpuHrRate = cfg.year <= 2027 ? 3.0 : cfg.year <= 2029 ? 4.0 : 3.5;  // $/GPU-hr
     const effectiveTokPerGpuHr = (blendedTokS * utilization * radPenalty) / gpuCount * 3600;
     const impliedPricePerMTok = targetGpuHrRate / (effectiveTokPerGpuHr / 1e6);
 
@@ -2820,15 +2850,15 @@ ${mod.name} (${mod.quant}): ${gpusNeeded} GPUs/copy × ${copies} copies
     const groundAnnualOpex2 = groundAnnualPower + (groundTotalCapex + groundFacilityCost) * 0.08;  // 8% maintenance
     const groundLifetimeCost = groundTotalCapex + groundFacilityCost + groundAnnualOpex2 * satLife;
 
-    // Ground token throughput (same model mix but ground GPU specs)
+    // Ground token throughput (same model mix, decode-limited, ground GPU specs)
     let groundTokS = 0;
     for (const mod of models) {
         const gMemNeeded = mod.params * mod.bytesPerParam / 1e9;
         const gGpusNeeded = Math.max(1, Math.ceil(gMemNeeded / groundGpuMemGB));
         const gCopies = Math.max(1, Math.floor(gpuCount / gGpusNeeded));
-        const gDecodeTokS = (groundMemBwTBs * 1e12) / (mod.params * mod.bytesPerParam) * gGpusNeeded * gCopies;
-        const gPrefillTokS = (groundEffTFLOPS * 1e12) * gGpusNeeded / (2 * mod.params) * gCopies;
-        groundTokS += (gDecodeTokS * 0.7 + gPrefillTokS * 0.3) * mod.weight;
+        // Ground decode: same formula, no radiation penalty, better utilization
+        const gDecodeTokS = (groundMemBwTBs * 1e12) * gGpusNeeded / (mod.params * mod.bytesPerParam) * gCopies;
+        groundTokS += gDecodeTokS * mod.weight;  // decode-limited
     }
     const groundTokPerDay = groundTokS * 86400 * 0.90;  // 90% util (no radiation penalty)
     const groundTokLifetime = groundTokPerDay * 365 * satLife;
@@ -2846,7 +2876,7 @@ ${mod.name} (${mod.quant}): ${gpusNeeded} GPUs/copy × ${copies} copies
 <span class="comment">// Radiation penalty: ${(radPenalty*100).toFixed(0)}% performance retention</span>
 
 ${modelBreakdown}
-Blended (70/30 decode/prefill): <span class="highlight">${(blendedTokS/1000).toFixed(1)}k tok/s</span>
+System throughput (decode-limited): <span class="highlight">${(blendedTokS/1000).toFixed(1)}k tok/s</span>
 After util (${(utilization*100).toFixed(0)}%) + radiation: <span class="highlight">${(blendedTokS*utilization*radPenalty/1000).toFixed(1)}k tok/s</span>
 
 Daily:    <span class="highlight">${(tokPerDay/1e9).toFixed(2)} B tokens</span>
