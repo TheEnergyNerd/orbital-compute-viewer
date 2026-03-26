@@ -2577,6 +2577,95 @@ function renderCluster(cfg, m) {
         <div class="metric-row"><span class="metric-label">Comm overhead</span><span class="metric-value ${commOverhead > 15 ? 'ground' : 'orbital'}">${commOverhead.toFixed(0)}%</span></div>
         <div class="metric-row"><span class="metric-label">Max model (TP×PP)</span><span class="metric-value">${(clusterMemTB*1024/2).toFixed(0)} GB (FP16)</span></div>
     </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">Inter-Node Traffic Flows</span><span class="card-badge" style="background:rgba(58,122,184,0.15);color:var(--accent)">ISL</span></div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px">
+            Same GPU hardware at every node — roles are software-defined.
+            Topology optimizes data flow between specialized roles for resilience and speed.
+        </div>
+        <div class="svg-diagram"><svg viewBox="0 0 540 320" xmlns="http://www.w3.org/2000/svg">
+            <rect x="0" y="0" width="540" height="320" fill="#080a0f"/>
+            <text x="270" y="16" text-anchor="middle" fill="#556" font-size="8" font-style="italic">Disaggregated inference data flow — same HW, different SW roles</text>
+
+            <!-- ROUTING node (center top) -->
+            <rect x="210" y="28" width="120" height="36" rx="6" fill="#1a1410" stroke="#ffcc00" stroke-width="1.5"/>
+            <text x="270" y="46" text-anchor="middle" fill="#ffcc00" font-size="9" font-weight="700">ROUTING</text>
+            <text x="270" y="58" text-anchor="middle" fill="#887700" font-size="7">primary hex-cell</text>
+
+            <!-- PREFILL node (left) -->
+            <rect x="30" y="110" width="120" height="36" rx="6" fill="#0e1828" stroke="#3377ff" stroke-width="1.5"/>
+            <text x="90" y="128" text-anchor="middle" fill="#3377ff" font-size="9" font-weight="700">PREFILL</text>
+            <text x="90" y="140" text-anchor="middle" fill="#334488" font-size="7">compute-bound</text>
+
+            <!-- DECODE node (right) -->
+            <rect x="390" y="110" width="120" height="36" rx="6" fill="#1a0e0e" stroke="#ff4030" stroke-width="1.5"/>
+            <text x="450" y="128" text-anchor="middle" fill="#ff4030" font-size="9" font-weight="700">DECODE</text>
+            <text x="450" y="140" text-anchor="middle" fill="#883322" font-size="7">memory-BW-bound</text>
+
+            <!-- CONTEXT node (center bottom) -->
+            <rect x="210" y="200" width="120" height="36" rx="6" fill="#0e1a10" stroke="#33ee55" stroke-width="1.5"/>
+            <text x="270" y="218" text-anchor="middle" fill="#33ee55" font-size="9" font-weight="700">CONTEXT</text>
+            <text x="270" y="230" text-anchor="middle" fill="#228833" font-size="7">KV-cache store</text>
+
+            <!-- Flow arrows with labels -->
+            <defs>
+                <marker id="flow_ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#e8a838"/></marker>
+                <marker id="flow_blue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#5cb8e6"/></marker>
+                <marker id="flow_green" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#33ee55"/></marker>
+                <marker id="flow_red" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#ff6644"/></marker>
+            </defs>
+
+            <!-- 1. User request → ROUTING -->
+            <line x1="270" y1="4" x2="270" y2="28" stroke="#e8a838" stroke-width="2" marker-end="url(#flow_ah)"/>
+            <text x="290" y="20" fill="#aa8800" font-size="7">user request</text>
+
+            <!-- 2. ROUTING → PREFILL (dispatch) -->
+            <line x1="210" y1="55" x2="150" y2="110" stroke="#5cb8e6" stroke-width="1.5" marker-end="url(#flow_blue)"/>
+            <text x="155" y="80" fill="#5cb8e6" font-size="7">dispatch prompt</text>
+
+            <!-- 3. PREFILL → DECODE (KV cache migration) -->
+            <line x1="150" y1="140" x2="390" y2="128" stroke="#ff6644" stroke-width="2" marker-end="url(#flow_red)"/>
+            <text x="250" y="122" fill="#ff6644" font-size="7" text-anchor="middle">KV cache (${(0.5*cfg.seqLen/1000).toFixed(1)} GB)</text>
+            <text x="250" y="133" fill="#884422" font-size="6" text-anchor="middle">${(0.5*cfg.seqLen/1000*8/(cfg.islRateGbps)*1000).toFixed(0)} ms @ ${cfg.islRateGbps} Gbps ISL</text>
+
+            <!-- 4. DECODE → CONTEXT (cache offload for long contexts) -->
+            <line x1="430" y1="146" x2="330" y2="200" stroke="#33ee55" stroke-width="1.5" marker-end="url(#flow_green)"/>
+            <text x="400" y="180" fill="#33ee55" font-size="7">cache offload</text>
+
+            <!-- 5. CONTEXT → DECODE (cache fetch on continuation) -->
+            <line x1="270" y1="236" x2="410" y2="146" stroke="#33ee55" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#flow_green)"/>
+            <text x="360" y="200" fill="#228833" font-size="6">cache fetch</text>
+
+            <!-- 6. DECODE → ROUTING (stream tokens back) -->
+            <line x1="440" y1="110" x2="330" y2="60" stroke="#e8a838" stroke-width="1.5" marker-end="url(#flow_ah)"/>
+            <text x="400" y="80" fill="#aa8800" font-size="7">stream tokens</text>
+
+            <!-- 7. ROUTING → user (response) -->
+            <text x="350" y="42" fill="#887700" font-size="6">→ user</text>
+
+            <!-- Resilience note -->
+            <rect x="20" y="260" width="500" height="50" fill="#0a0c12" stroke="#333" stroke-width="0.5" rx="4"/>
+            <text x="270" y="276" text-anchor="middle" fill="#aab" font-size="8" font-weight="600">Resilience: any node can assume any role via software reconfiguration</text>
+            <text x="270" y="292" text-anchor="middle" fill="#667" font-size="7">Node failure → remaining nodes redistribute roles → cluster degrades gracefully</text>
+            <text x="270" y="304" text-anchor="middle" fill="#667" font-size="7">Same GPU HW everywhere = one SKU manufacturing, hot-swappable hex-cells</text>
+        </svg></div>
+
+        <div class="section-header">Traffic Matrix <span class="chip chip-blue">Gbps per flow</span></div>
+        <div class="calc-block"><span class="comment">// Inter-node ISL traffic breakdown per inference request</span>
+
+Route          Flow              Size        Time
+─────────────────────────────────────────────────────
+ROUTE → PRE    Prompt tokens     ~${(cfg.seqLen * 2 / 1e6).toFixed(1)} MB     &lt;1 ms
+PRE → DEC      KV cache          ${(0.5*cfg.seqLen/1000).toFixed(1)} GB      ${(0.5*cfg.seqLen/1000*8/(cfg.islRateGbps)*1000).toFixed(0)} ms
+DEC → CTX      Cache offload     ${(0.5*cfg.seqLen/1000).toFixed(1)} GB      ${(0.5*cfg.seqLen/1000*8/(cfg.islRateGbps)*1000).toFixed(0)} ms
+CTX → DEC      Cache fetch       ~${(0.1*cfg.seqLen/1000).toFixed(2)} GB     ${(0.1*cfg.seqLen/1000*8/(cfg.islRateGbps)*1000).toFixed(0)} ms
+DEC → ROUTE    Token stream      ~${(500 * 4 / 1e6).toFixed(3)} MB   continuous
+
+<span class="comment">// Bottleneck: KV cache migration (PRE → DEC)</span>
+<span class="comment">// At ${cfg.islRateGbps} Gbps ISL, this sets minimum TTFT overhead</span>
+<span class="comment">// Mitigation: speculative prefetch, pipelined KV transfer</span></div>
+    </div>
     ` : ''}
 
     <div class="card">
