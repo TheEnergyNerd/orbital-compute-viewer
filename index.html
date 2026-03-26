@@ -332,6 +332,7 @@ const CONFIGS = {
         // Economics (2026 spreadsheet) — satLife 5yr per spreadsheet
         year: 2026, satLife: 5, waccOrbital: 0.15,
         launchCostPerKg: 1500, dryMassKg: 760,
+        // GPU unit cost: $45,000/GPU from spreadsheet
         // LCOC re-derived: totalGpuHours = 16 GPUs × 5yr × 8760hr × 0.85 util
         // totalProgramCost kept from spreadsheet
         totalProgramCost: 12225487,
@@ -386,10 +387,9 @@ const CONFIGS = {
     DP1B: {
         name: "DP1B AI Sat Mini", shortName: "DP1B",
         busPwr: 100, computeKw: 92, thermalKw: 100,
-        // Radiator sized from thermal model:
-        //   qNet ≈ 1500 W/m² (bifacial, 370K, carbon black, 18% derating)
-        //   reqRadM2 = 100kW / 1500 = 67 m² → 75 m² for 1.12× margin
-        solarM2: 360, radM2: 75, radTempK: 370,
+        // Radiator from spreadsheet: 70kW at 320K radiator temp, ~320 W/m²
+        //   reqRadM2 = 219 m² (more conservative than 370K assumption)
+        solarM2: 360, radM2: 219, radTempK: 320,
         earthVF: 0.24, sidedness: 1.80,
         gpuPowerW: 1400, gpuCount: 48, gpuType: "NVIDIA B300 (rad-screened)",
         gpuGFLOPS_W: 5000, gpuMemGB: 192, gpuMemType: "HBM3E",
@@ -409,7 +409,7 @@ const CONFIGS = {
         year: 2027, satLife: 5, waccOrbital: 0.15,
         launchCostPerKg: 800, dryMassKg: 1650, launchVehicle: "Starship",
         totalProgramCost: 15200000,
-        massSolar: 360, massRadiator: 220, massCompute: 120, massStructure: 600,
+        massSolar: 360, massRadiator: 1892, massCompute: 120, massStructure: 600,
         // Networking
         islCount: 4, islRateGbps: 100, islWavelength: "1550 nm", islModulation: "DP-QPSK",
         islApertureCm: 8, islPointingUrad: 1.5, islFEC: "LDPC 5/6",
@@ -424,7 +424,7 @@ const CONFIGS = {
     DP2: {
         name: "DP2 Space-1 Vera Rubin", shortName: "DP2",
         busPwr: 140, computeKw: 128.8, thermalKw: 140,
-        solarM2: 723, radM2: 102, radTempK: 370,
+        solarM2: 723, radM2: 187, radTempK: 370,
         earthVF: 0.24, sidedness: 1.80,
         gpuPowerW: 1800, gpuCount: 64, gpuType: "NVIDIA Vera Rubin Space",
         gpuGFLOPS_W: 2800, gpuMemGB: 192, gpuMemType: "HBM3E",
@@ -437,11 +437,11 @@ const CONFIGS = {
         orbit: "Dawn-dusk SSO, 625 km", altitude: 625,
         isPhotonic: false, isDP3: false, spineLen: 0,
         solarCell: "Monocrystalline silicon (c-Si)", solarCellEff: 0.216, solarCellGen: "Silicon",
-        // Economics (2028 spreadsheet) — satLife 5yr
+        // Economics (2028 spreadsheet) — satLife 5yr, GPU cost $75k from spreadsheet
         year: 2028, satLife: 5, waccOrbital: 0.15,
         launchCostPerKg: 600, launchVehicle: "Starship", dryMassKg: 3229,
         totalProgramCost: 23301847,
-        massSolar: 723, massRadiator: 612, massCompute: 200, massStructure: 1057,
+        massSolar: 723, massRadiator: 1523, massCompute: 200, massStructure: 1057,
         islCount: 4, islRateGbps: 100, islWavelength: "1550 nm", islModulation: "DP-16QAM",
         islApertureCm: 8, islPointingUrad: 1.5, islFEC: "LDPC 3/4",
         groundLinkGbps: 10, groundStations: 3, groundModulation: "64-QAM OFDM",
@@ -486,7 +486,7 @@ const CONFIGS = {
         busPwr: 1092, computeKw: 1014, thermalKw: 1092,
         // Power split: 1092 × 0.92 (8% housekeeping) ≈ 1005 kW available + margin → 1014 kW compute
         // Solar sized for 10% reserve: 1092 / (1361 * 0.234 * 0.90) * 1.10 = 4188 m²
-        solarM2: 4188, radM2: 832, radTempK: 370,
+        solarM2: 4188, radM2: 1333, radTempK: 370,
         earthVF: 0.22, sidedness: 1.72,
         gpuPowerW: 250, gpuCount: 3481, gpuType: "Tesla D3 Photonic (4K cryo)",
         gpuGFLOPS_W: 15000, gpuMemGB: 64, gpuMemType: "Cryo-SRAM",
@@ -504,7 +504,7 @@ const CONFIGS = {
         year: 2030, satLife: 5, waccOrbital: 0.15,
         launchCostPerKg: 403, launchVehicle: "Starship", dryMassKg: 22523,
         totalProgramCost: 129633302,
-        massSolar: 4188, massRadiator: 4992, massCompute: 1660, massCryo: 1200, massStructure: 7486,
+        massSolar: 4188, massRadiator: 10773, massCompute: 1660, massCryo: 1200, massStructure: 7486,
         islCount: 6, islRateGbps: 400, islWavelength: "1550 nm", islModulation: "DP-64QAM",
         islApertureCm: 12, islPointingUrad: 0.5, islFEC: "Polar 7/8",
         groundLinkGbps: 40, groundStations: 5, groundModulation: "256-QAM OFDM",
@@ -518,7 +518,7 @@ const CONFIGS = {
         name: "DP3B D3 Electrical", shortName: "DP3B",
         busPwr: 1092, computeKw: 1014, thermalKw: 1092,
         // Same 8% housekeeping as DP3, same bus power (1092 × 0.92 ≈ 1005 → 1014 kW)
-        solarM2: 4188, radM2: 832, radTempK: 370,
+        solarM2: 4188, radM2: 1333, radTempK: 370,
         earthVF: 0.22, sidedness: 1.72,
         gpuPowerW: 250, gpuCount: 3481, gpuType: "Tesla D3 (rad-hard)",
         gpuGFLOPS_W: 4200, gpuMemGB: 256, gpuMemType: "HBM4",
@@ -535,7 +535,7 @@ const CONFIGS = {
         year: 2030, satLife: 5, waccOrbital: 0.15,
         launchCostPerKg: 403, launchVehicle: "Starship", dryMassKg: 24345,
         totalProgramCost: 145800000,
-        massSolar: 4188, massRadiator: 4992, massCompute: 4060, massStructure: 7486,
+        massSolar: 4188, massRadiator: 10773, massCompute: 4060, massStructure: 7486,
         islCount: 8, islRateGbps: 200, islWavelength: "1550 nm", islModulation: "DP-64QAM",
         islApertureCm: 15, islPointingUrad: 0.8, islFEC: "Polar 7/8",
         groundLinkGbps: 80, groundStations: 8, groundModulation: "256-QAM OFDM",
@@ -2387,7 +2387,7 @@ function renderCluster(cfg, m) {
     const honeycombKgM2 = 3.5;  // old: Al honeycomb + ammonia heat pipes
     const solidPlateKgM2 = cfg.isDP3 ? 12 : 10;  // Al 6061-T6 solid plate, 3-5mm + carbon black coating
     const radMassDelta = (solidPlateKgM2 - honeycombKgM2) * hexRadM2;
-    const solidPlateCostM2 = 160;  // $/m² for Al 6061-T6 + carbon black coating (cheaper than AZ-93)
+    const solidPlateCostM2 = cfg.isDP3 ? 650 : cfg.year <= 2027 ? 1200 : 950;  // $/m² from spreadsheet learning curve
     const honeycombCostM2 = 950;   // $/m² for honeycomb + heat pipes
     const radCostDelta = (solidPlateCostM2 - honeycombCostM2) * hexRadM2;
     const launchCostPenalty = radMassDelta * (cfg.launchCostPerKg || 500);
@@ -2746,7 +2746,8 @@ ${mod.name} (${mod.quant}): ${gpusNeeded} GPU/copy × ${copies} copies
     //
     // We price at the COMPUTE LAYER — what a cloud provider charges for raw GPU-hours.
     // The $/MTok is derived from throughput at market GPU-hr rates.
-    const targetGpuHrRate = cfg.year <= 2027 ? 3.0 : cfg.year <= 2029 ? 4.0 : 3.5;  // $/GPU-hr
+    // From SemiAnalysis TCO sheet: GB300 NVL72 ground = $2.90/GPU-hr all-in
+    const targetGpuHrRate = 2.90;  // $/GPU-hr from TCO spreadsheet (capital $2.28 + hosting $0.62)
     const effectiveTokPerGpuHr = (blendedTokS * utilization * radPenalty) / gpuCount * 3600;
     const impliedPricePerMTok = targetGpuHrRate / (effectiveTokPerGpuHr / 1e6);
 
@@ -2825,8 +2826,8 @@ ${mod.name} (${mod.quant}): ${gpusNeeded} GPU/copy × ${copies} copies
     // Ground version: higher clock, no radiation penalty, but needs cooling + power
     const groundGpuSpecs = {
         // GPU type → { name, cost, tdpW, memGB, memBwTBs, tflops_fp8 }
-        'NVIDIA B300':       { name: 'B300 (ground)',      cost: 35000, tdpW: 1000, memGB: 192, memBwTBs: 8.0,  tflops: 9000 },
-        'NVIDIA Vera Rubin': { name: 'Vera Rubin (ground)', cost: 50000, tdpW: 1200, memGB: 288, memBwTBs: 12.0, tflops: 15000 },
+        'NVIDIA B300':       { name: 'B300 (ground)',      cost: 45000, tdpW: 1200, memGB: 192, memBwTBs: 8.0,  tflops: 9000 },  // NVL72 power per GPU incl networking
+        'NVIDIA Vera Rubin': { name: 'Vera Rubin (ground)', cost: 75000, tdpW: 1800, memGB: 288, memBwTBs: 12.0, tflops: 15000 },
         'Tesla D3 Photonic': { name: 'D3 Photonic (ground)', cost: 40000, tdpW: 300,  memGB: 64,  memBwTBs: 12.0, tflops: 18000 },
         'Tesla D3':          { name: 'D3 Electrical (ground)', cost: 30000, tdpW: 350, memGB: 256, memBwTBs: 8.0,  tflops: 6000 },
     };
