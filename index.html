@@ -2957,228 +2957,197 @@ Net delta/cluster:   <span class="${(radCostDelta + launchCostPenalty) < 0 ? 'hi
 // =====================================================================
 // TOKENOMICS MODEL — SemiAnalysis-style for orbital compute
 // Hardware → Tokens → Revenue → ROIC
+//
+// Structure:
+//   1. computeTokenomics(cfg, m) — pure math, returns all intermediate values
+//   2. renderTokenomics(cfg, m) — HTML rendering of the tokenomics cards
+//
+// The computation is separated from rendering so the debug page
+// and future exports can reuse the same math.
 // =====================================================================
-function renderTokenomics(cfg, m) {
+
+// ── MODEL MIX (shared between orbital and ground) ──
+const INFERENCE_MODELS = [
+    { name: '8B', params: 8e9, weight: 0.25, quant: 'INT8', bytesPerParam: 1 },
+    { name: '70B', params: 70e9, weight: 0.45, quant: 'FP8', bytesPerParam: 1 },
+    { name: '405B', params: 405e9, weight: 0.20, quant: 'FP8', bytesPerParam: 1 },
+    { name: '1T', params: 1e12, weight: 0.10, quant: 'FP4', bytesPerParam: 0.5 },
+];
+
+// ── GROUND GPU SPECS (for comparison) ──
+const GROUND_GPU_SPECS = {
+    'NVIDIA B300':       { name: 'B300 NVL72 (ground)', cost: 45000, tdpW: 1200, memGB: 192, memBwTBs: 8.0, tflops: 9000 },
+    'NVIDIA Vera Rubin': { name: 'Vera Rubin NVL72 (ground)', cost: 75000, tdpW: 1800, memGB: 288, memBwTBs: 12.0, tflops: 15000 },
+    'Tesla D3 Photonic': { name: 'D3 Photonic (ground)', cost: 40000, tdpW: 300, memGB: 64, memBwTBs: 12.0, tflops: 18000 },
+    'Tesla D3':          { name: 'D3 Electrical (ground)', cost: 30000, tdpW: 350, memGB: 256, memBwTBs: 8.0, tflops: 6000 },
+};
+
+// ── PRICING CONSTANTS ──
+const TARGET_GPU_HR_RATE = 2.90;  // $/GPU-hr from SemiAnalysis TCO (capital $2.28 + hosting $0.62)
+const GROUND_POWER_COST_KWH = 0.08;
+const GROUND_PUE = 1.35;
+const GROUND_MFU = 0.40;
+
+// ── PURE COMPUTATION: all tokenomics math ──
+function computeTokenomics(cfg, m) {
     const cs = cfg.clusterSize || 1;
+    const t = {};  // tokenomics result object
 
-    // ── HARDWARE INPUTS ──
-    const gpuCount = m.oruCount * cs;
-    const satLife = cfg.satLife || 5;
-    const utilization = 0.85;  // 85% average utilization
-    const radPenalty = cfg.radHardening || 0.60;  // radiation performance retention
-    const totalGpuHours = gpuCount * satLife * 8760 * utilization;
+    // 1. Hardware inputs
+    t.gpuCount = m.oruCount * cs;
+    t.satLife = cfg.satLife || 5;
+    t.utilization = 0.85;
+    t.radPenalty = cfg.radHardening || 0.60;
+    t.totalGpuHours = t.gpuCount * t.satLife * 8760 * t.utilization;
+    t.memBwPerGpu = cfg.gpuMemBwTBs * 1e12;
+    t.tflopsPerGpu = (m.effectiveTFLOPS / m.oruCount) * 1e12;
 
-    // ── TOKEN THROUGHPUT MODEL ──
-    // Real-world inference deployment with continuous batching.
-    //
-    // Decode: memory-BW bound → tok/s/GPU = memBW / (params × bytesPerParam)
-    //   This is the SINGLE-STREAM decode rate. With batching, you can serve
-    //   multiple streams but each stream still sees this rate.
-    //   Total system throughput = decode_rate × batch_size × copies
-    //
-    // Prefill: compute bound → tokens/s = TFLOPS / (2 × params)
-    //   Prefill is batch-friendly and parallelizable.
-    //
-    // Key: throughput ≠ single-user speed. System throughput = concurrent users × per-user rate.
-    // Realistic batch sizes: 8-64 concurrent requests per GPU copy.
-    //
-    // Model mix: weighted by typical API traffic
-    const models = [
-        { name: '8B', params: 8e9, weight: 0.25, quant: 'INT8', bytesPerParam: 1 },
-        { name: '70B', params: 70e9, weight: 0.45, quant: 'FP8', bytesPerParam: 1 },
-        { name: '405B', params: 405e9, weight: 0.20, quant: 'FP8', bytesPerParam: 1 },
-        { name: '1T', params: 1e12, weight: 0.10, quant: 'FP4', bytesPerParam: 0.5 },
-    ];
+    // 2. Token throughput per model
+    t.modelResults = [];
+    t.weightedDecodeTokS = 0;
+    t.weightedPrefillTokS = 0;
 
-    const memBwPerGpu = cfg.gpuMemBwTBs * 1e12;  // bytes/s per GPU
-    const tflopsPerGpu = (m.effectiveTFLOPS / m.oruCount) * 1e12;  // FLOPS per GPU (node-level ÷ GPUs per node)
-    const batchSize = cfg.batchSize || 32;  // concurrent requests per copy
-
-    let weightedDecodeTokS = 0;
-    let weightedPrefillTokS = 0;
-    let modelBreakdown = '';
-
-    for (const mod of models) {
-        // How many GPUs needed to hold model weights in memory?
+    for (const mod of INFERENCE_MODELS) {
         const modelMemGB = mod.params * mod.bytesPerParam / 1e9;
         const gpusNeeded = Math.max(1, Math.ceil(modelMemGB / cfg.gpuMemGB));
-        // How many independent model copies can we run?
-        const copies = Math.max(1, Math.floor(gpuCount / gpusNeeded));
+        const copies = Math.max(1, Math.floor(t.gpuCount / gpusNeeded));
+        const decodeTokSPerCopy = (t.memBwPerGpu * gpusNeeded) / (mod.params * mod.bytesPerParam);
+        const prefillTokSPerCopy = (t.tflopsPerGpu * gpusNeeded) / (2 * mod.params);
+        const totalDecode = decodeTokSPerCopy * copies;
+        const totalPrefill = prefillTokSPerCopy * copies;
 
-        // Decode: memory-BW bound per stream
-        // Single-stream: memBW / (params × bytes) tok/s
-        // With TP across gpusNeeded GPUs: gpusNeeded × memBW / (params × bytes)
-        // With batching: batch_size concurrent streams, but memBW is shared
-        // Net throughput per copy = gpusNeeded × memBW / (params × bytes)
-        // (batching doesn't increase aggregate decode throughput — it's BW-limited)
-        const decodeTokSPerCopy = (memBwPerGpu * gpusNeeded) / (mod.params * mod.bytesPerParam);
+        t.modelResults.push({ ...mod, modelMemGB, gpusNeeded, copies, decodeTokSPerCopy, totalDecode, totalPrefill });
+        t.weightedDecodeTokS += totalDecode * mod.weight;
+        t.weightedPrefillTokS += totalPrefill * mod.weight;
+    }
 
-        // Prefill: compute-bound, benefits from batching
-        // tok/s per copy = TFLOPS × gpusNeeded / (2 × params)
-        const prefillTokSPerCopy = (tflopsPerGpu * gpusNeeded) / (2 * mod.params);
+    t.blendedTokS = t.weightedDecodeTokS;  // decode-limited system
+    t.tokPerDay = t.blendedTokS * 86400 * t.utilization * t.radPenalty;
+    t.tokPerYear = t.tokPerDay * 365;
+    t.tokLifetime = t.tokPerYear * t.satLife;
 
-        // Total system throughput = per-copy rate × number of copies
-        const totalDecodeTokS = decodeTokSPerCopy * copies;
-        const totalPrefillTokS = prefillTokSPerCopy * copies;
+    // 3. Pricing (derived from GPU-hr rate)
+    t.targetGpuHrRate = TARGET_GPU_HR_RATE;
+    t.effTokPerGpuHr = (t.blendedTokS * t.utilization * t.radPenalty) / t.gpuCount * 3600;
+    t.impliedPricePerMTok = t.targetGpuHrRate / (t.effTokPerGpuHr / 1e6);
+    t.priceTiers = [
+        { name: 'Premium (real-time, SLA)', mult: 2.0, frac: 0.10 },
+        { name: 'Standard (API, batch)', mult: 1.0, frac: 0.45 },
+        { name: 'Economy (async, off-peak)', mult: 0.5, frac: 0.35 },
+        { name: 'Training compute (FLOPS)', mult: 0.3, frac: 0.10 },
+    ];
+    t.blendedPrice = 0;
+    for (const tier of t.priceTiers) t.blendedPrice += t.impliedPricePerMTok * tier.mult * tier.frac;
 
-        weightedDecodeTokS += totalDecodeTokS * mod.weight;
-        weightedPrefillTokS += totalPrefillTokS * mod.weight;
+    // 4. Revenue
+    t.revenuePerYear = (t.tokPerYear / 1e6) * t.blendedPrice;
+    t.revenueLifetime = t.revenuePerYear * t.satLife;
 
+    // 5. Cost structure
+    t.launchCost = (cfg.dryMassKg || 1000) * (cfg.launchCostPerKg || 500) * cs;
+    t.satBuildCost = (cfg.totalProgramCost || 10e6) * cs;
+    t.totalCapex = t.launchCost + t.satBuildCost;
+    t.groundStationOpex = 2e6 * cs;
+    t.missionControlOpex = 1.5e6;
+    t.insuranceOpex = t.totalCapex * 0.03;
+    t.annualOpex = t.groundStationOpex + t.missionControlOpex + t.insuranceOpex;
+    t.lifetimeOpex = t.annualOpex * t.satLife;
+    t.totalCost = t.totalCapex + t.lifetimeOpex;
+
+    // 6. Unit economics
+    t.costPerMTok = t.totalCost / (t.tokLifetime / 1e6);
+    t.grossMargin = (t.blendedPrice - t.costPerMTok) / t.blendedPrice;
+    t.costPerGpuHour = t.totalCost / t.totalGpuHours;
+    t.netIncome = t.revenueLifetime - t.totalCost;
+    t.roic = t.netIncome / t.totalCapex;
+    t.annualNetCashFlow = t.revenuePerYear - t.annualOpex;
+    t.paybackYears = t.annualNetCashFlow > 0 ? t.totalCapex / t.annualNetCashFlow : Infinity;
+
+    // 7. IRR (Newton's method)
+    t.irr = 0;
+    if (t.annualNetCashFlow > 0 && t.totalCapex > 0) {
+        let g = 0.15;
+        for (let i = 0; i < 100; i++) {
+            let npv = -t.totalCapex, dnpv = 0;
+            for (let y = 1; y <= t.satLife; y++) {
+                const d = Math.pow(1 + g, -y);
+                npv += t.annualNetCashFlow * d;
+                dnpv += -y * t.annualNetCashFlow * d / (1 + g);
+            }
+            if (Math.abs(npv) < 100 || Math.abs(dnpv) < 1e-10) break;
+            g -= npv / dnpv;
+            g = Math.max(-0.95, Math.min(5, g));
+        }
+        t.irr = g;
+    } else {
+        t.irr = -1;
+    }
+
+    // 8. Ground comparison
+    const gpuTypeKey = Object.keys(GROUND_GPU_SPECS).find(k => cfg.gpuType.includes(k)) || 'NVIDIA B300';
+    t.gSpec = GROUND_GPU_SPECS[gpuTypeKey];
+    t.groundTotalCapex = t.gpuCount * t.gSpec.cost;
+    t.groundAnnualPower = t.gpuCount * (t.gSpec.tdpW / 1000) * GROUND_PUE * 8760 * GROUND_POWER_COST_KWH;
+    t.groundFacilityCost = t.gpuCount * 2000;
+    t.groundAnnualOpex = t.groundAnnualPower + (t.groundTotalCapex + t.groundFacilityCost) * 0.08;
+    t.groundLifetimeCost = t.groundTotalCapex + t.groundFacilityCost + t.groundAnnualOpex * t.satLife;
+
+    let gTokS = 0;
+    for (const mod of INFERENCE_MODELS) {
+        const gMem = mod.params * mod.bytesPerParam / 1e9;
+        const gGpu = Math.max(1, Math.ceil(gMem / t.gSpec.memGB));
+        const gCop = Math.max(1, Math.floor(t.gpuCount / gGpu));
+        gTokS += ((t.gSpec.memBwTBs * 1e12) * gGpu / (mod.params * mod.bytesPerParam) * gCop) * mod.weight;
+    }
+    t.groundTokPerDay = gTokS * 86400 * 0.90;
+    t.groundTokLifetime = t.groundTokPerDay * 365 * t.satLife;
+    t.groundCostPerMTok = t.groundLifetimeCost / (t.groundTokLifetime / 1e6);
+    t.orbitalAdvantage = t.groundCostPerMTok / t.costPerMTok;
+
+    return t;
+}
+
+// ── RENDERING: HTML output for the Tokenomics tab ──
+function renderTokenomics(cfg, m) {
+    const cs = cfg.clusterSize || 1;
+    const t = computeTokenomics(cfg, m);
+
+    // All values precomputed in computeTokenomics(cfg, m)
+    const { gpuCount, satLife, utilization, radPenalty, totalGpuHours,
+            blendedTokS, tokPerDay, tokPerYear, tokLifetime,
+            blendedPrice, impliedPricePerMTok, effTokPerGpuHr, priceTiers,
+            revenuePerYear, revenueLifetime,
+            launchCost, satBuildCost, totalCapex,
+            groundStationOpex, missionControlOpex, insuranceOpex,
+            annualOpex, lifetimeOpex, totalCost,
+            costPerMTok, grossMargin, costPerGpuHour,
+            netIncome, roic, annualNetCashFlow, paybackYears, irr,
+            targetGpuHrRate, gSpec, modelResults,
+            groundTotalCapex, groundLifetimeCost, groundCostPerMTok, orbitalAdvantage,
+            groundTokPerDay, groundTokLifetime } = t;
+
+    // Build model breakdown string from precomputed results
+    let modelBreakdown = '';
+    for (const mr of modelResults) {
+        const decodeTokSPerCopy = mr.decodeTokSPerCopy;
+        const prefillTokSPerCopy = (t.tflopsPerGpu * mr.gpusNeeded) / (2 * mr.params);
         modelBreakdown += `
-${mod.name} (${mod.quant}): ${gpusNeeded} GPU/copy × ${copies} copies
-  Decode: <span class="highlight">${totalDecodeTokS.toFixed(0)} tok/s</span>  Prefill: <span class="highlight">${(totalPrefillTokS/1000).toFixed(1)}k tok/s</span>
+${mr.name} (${mr.quant}): ${mr.gpusNeeded} GPU/copy × ${mr.copies} copies
+  Decode: <span class="highlight">${mr.totalDecode.toFixed(0)} tok/s</span>  Prefill: <span class="highlight">${(mr.totalPrefill/1000).toFixed(1)}k tok/s</span>
 `;
     }
 
-    // Blended output: real inference is ~80% decode time, 20% prefill time
-    // But by TOKEN VOLUME prefill generates many tokens quickly (one prompt → many tokens)
-    // A typical request: 500 tok prefill + 500 tok decode
-    // Prefill time: 500 / prefill_rate, Decode time: 500 / decode_rate
-    // Since decode_rate << prefill_rate, decode dominates wall time
-    // System throughput ≈ decode throughput (decode is the bottleneck)
-    const blendedTokS = weightedDecodeTokS;  // decode-limited system
-
-    // Daily / Monthly / Annual token output
-    const tokPerDay = blendedTokS * 86400 * utilization * radPenalty;
     const tokPerMonth = tokPerDay * 30;
-    const tokPerYear = tokPerDay * 365;
-    const tokLifetime = tokPerYear * satLife;
-
-    // ── PRICING MODEL ──
-    // Two approaches to price orbital compute:
-    //
-    // 1. GPU-hour pricing (wholesale): sell raw compute time
-    //    Reference rates (2025-2030):
-    //      H100: $2.00-3.50/GPU-hr
-    //      B300: $3.00-5.00/GPU-hr
-    //      Next-gen: $4.00-8.00/GPU-hr
-    //
-    // 2. $/MTok pricing (retail API): sell inference results
-    //    Reference (2025): Claude Sonnet = $3/$15 in/out MTok, GPT-4o = $2.50/$10
-    //    These include model development costs, not just compute.
-    //    Pure compute cost is ~$0.50-2.00/MTok for 70B models.
-    //
-    // We price at the COMPUTE LAYER — what a cloud provider charges for raw GPU-hours.
-    // The $/MTok is derived from throughput at market GPU-hr rates.
-    // From SemiAnalysis TCO sheet: GB300 NVL72 ground = $2.90/GPU-hr all-in
-    const targetGpuHrRate = 2.90;  // $/GPU-hr from TCO spreadsheet (capital $2.28 + hosting $0.62)
-    const effectiveTokPerGpuHr = (blendedTokS * utilization * radPenalty) / gpuCount * 3600;
-    const impliedPricePerMTok = targetGpuHrRate / (effectiveTokPerGpuHr / 1e6);
-
-    const priceTiers = [
-        { name: 'Premium (real-time, SLA)', pricePerMTok: impliedPricePerMTok * 2.0, fraction: 0.10 },
-        { name: 'Standard (API, batch)', pricePerMTok: impliedPricePerMTok * 1.0, fraction: 0.45 },
-        { name: 'Economy (async, off-peak)', pricePerMTok: impliedPricePerMTok * 0.5, fraction: 0.35 },
-        { name: 'Training compute (FLOPS)', pricePerMTok: impliedPricePerMTok * 0.3, fraction: 0.10 },
-    ];
-
-    let blendedPrice = 0;
-    for (const tier of priceTiers) blendedPrice += tier.pricePerMTok * tier.fraction;
-
-    // Revenue calculations
     const revenuePerDay = (tokPerDay / 1e6) * blendedPrice;
     const revenuePerMonth = revenuePerDay * 30;
-    const revenuePerYear = revenuePerDay * 365;
-    const revenueLifetime = revenuePerYear * satLife;
+    const models = INFERENCE_MODELS;  // alias for template strings
 
-    // ── COST STRUCTURE ──
-    const launchCost = (cfg.dryMassKg || 1000) * (cfg.launchCostPerKg || 500) * cs;
-    const satBuildCost = (cfg.totalProgramCost || 10e6) * cs;
-    const totalCapex = launchCost + satBuildCost;
-
-    // Operating costs
-    const groundStationOpex = 2e6 * cs;  // $/year for ground segment
-    const missionControlOpex = 1.5e6;     // $/year shared
-    const insuranceOpex = totalCapex * 0.03;  // 3% of capex per year
-    const annualOpex = groundStationOpex + missionControlOpex + insuranceOpex;
-    const lifetimeOpex = annualOpex * satLife;
-
-    const totalCost = totalCapex + lifetimeOpex;
-
-    // ── UNIT ECONOMICS ──
-    const costPerMTok = totalCost / (tokLifetime / 1e6);
-    const grossMargin = (blendedPrice - costPerMTok) / blendedPrice;
-    const costPerGpuHour = totalCost / totalGpuHours;
-
-    // ── ROIC ──
-    const netIncome = revenueLifetime - totalCost;
-    const roic = netIncome / totalCapex;
-    const annualNetCashFlow = revenuePerYear - annualOpex;
-    const paybackYears = annualNetCashFlow > 0 ? totalCapex / annualNetCashFlow : Infinity;
-
-    // Sanity check: GPU-hour revenue vs. market rate
-    // Ground H100 rents for ~$2-3/GPU-hr. Our implied rate:
-    const impliedGpuHrRate = revenuePerYear / (gpuCount * 8760 * utilization);
-
-    // IRR calculation using Newton's method
-    // CF = -totalCapex at t=0, then annualNetCashFlow each year for satLife
-    let irr = 0;
-    if (annualNetCashFlow > 0 && totalCapex > 0) {
-        let irrGuess = 0.15;
-        for (let iter = 0; iter < 100; iter++) {
-            let npv = -totalCapex;
-            let dnpv = 0;
-            for (let t = 1; t <= satLife; t++) {
-                const disc = Math.pow(1 + irrGuess, -t);
-                npv += annualNetCashFlow * disc;
-                dnpv += -t * annualNetCashFlow * disc / (1 + irrGuess);
-            }
-            if (Math.abs(npv) < 100) break;  // converged within $100
-            if (Math.abs(dnpv) < 1e-10) break;  // flat — can't converge
-            irrGuess -= npv / dnpv;
-            if (irrGuess < -0.95) { irrGuess = -0.95; break; }
-            if (irrGuess > 5) { irrGuess = 5; break; }
-        }
-        irr = irrGuess;
-    } else {
-        irr = annualNetCashFlow <= 0 ? -1 : 0;  // negative cash flow → IRR undefined
-    }
-
-    // ── GROUND COMPARISON ──
-    // Use the GROUND equivalent of whatever GPU the orbital config uses
-    // Each orbital GPU has a ground counterpart with same arch but no rad-hardening
-    // Ground version: higher clock, no radiation penalty, but needs cooling + power
-    const groundGpuSpecs = {
-        // GPU type → { name, cost, tdpW, memGB, memBwTBs, tflops_fp8 }
-        'NVIDIA B300':       { name: 'B300 (ground)',      cost: 45000, tdpW: 1200, memGB: 192, memBwTBs: 8.0,  tflops: 9000 },  // NVL72 power per GPU incl networking
-        'NVIDIA Vera Rubin': { name: 'Vera Rubin (ground)', cost: 75000, tdpW: 1800, memGB: 288, memBwTBs: 12.0, tflops: 15000 },
-        'Tesla D3 Photonic': { name: 'D3 Photonic (ground)', cost: 40000, tdpW: 300,  memGB: 64,  memBwTBs: 12.0, tflops: 18000 },
-        'Tesla D3':          { name: 'D3 Electrical (ground)', cost: 30000, tdpW: 350, memGB: 256, memBwTBs: 8.0,  tflops: 6000 },
-    };
-    // Match ground GPU to orbital GPU type
-    const gpuTypeKey = Object.keys(groundGpuSpecs).find(k => cfg.gpuType.includes(k)) || 'NVIDIA B300';
-    const gSpec = groundGpuSpecs[gpuTypeKey];
-
-    const groundGpuCost = gSpec.cost;
-    const groundPowerCostKwh = 0.08;
-    const groundPUE = 1.35;
-    const groundGpuTDP = gSpec.tdpW;
-    const groundMemBwTBs = gSpec.memBwTBs;
-    const groundGpuMemGB = gSpec.memGB;
-    const groundPeakTFLOPS = gSpec.tflops;
-    const groundMFU = 0.40;  // ground achieves ~40% MFU (better cooling, no radiation)
-    const groundEffTFLOPS = groundPeakTFLOPS * groundMFU;
-
-    const groundTotalCapex = gpuCount * groundGpuCost;
-    const groundAnnualPower = gpuCount * (groundGpuTDP / 1000) * groundPUE * 8760 * groundPowerCostKwh;
-    const groundFacilityCost = gpuCount * 2000;  // $2k/GPU for facility build
-    const groundAnnualOpex2 = groundAnnualPower + (groundTotalCapex + groundFacilityCost) * 0.08;  // 8% maintenance
-    const groundLifetimeCost = groundTotalCapex + groundFacilityCost + groundAnnualOpex2 * satLife;
-
-    // Ground token throughput (same model mix, decode-limited, ground GPU specs)
-    let groundTokS = 0;
-    for (const mod of models) {
-        const gMemNeeded = mod.params * mod.bytesPerParam / 1e9;
-        const gGpusNeeded = Math.max(1, Math.ceil(gMemNeeded / groundGpuMemGB));
-        const gCopies = Math.max(1, Math.floor(gpuCount / gGpusNeeded));
-        // Ground decode: same formula, no radiation penalty, better utilization
-        const gDecodeTokS = (groundMemBwTBs * 1e12) * gGpusNeeded / (mod.params * mod.bytesPerParam) * gCopies;
-        groundTokS += gDecodeTokS * mod.weight;  // decode-limited
-    }
-    const groundTokPerDay = groundTokS * 86400 * 0.90;  // 90% util (no radiation penalty)
-    const groundTokLifetime = groundTokPerDay * 365 * satLife;
-    const groundCostPerMTok = groundLifetimeCost / (groundTokLifetime / 1e6);
-    const orbitalAdvantage = groundCostPerMTok / costPerMTok;
+    // Map price tiers to include computed pricePerMTok and fraction for template compatibility
+    const priceTiersDisplay = t.priceTiers.map(tier => ({
+        name: tier.name,
+        pricePerMTok: impliedPricePerMTok * tier.mult,
+        fraction: tier.frac,
+    }));
 
     return `
     <div class="card">
@@ -3206,8 +3175,8 @@ Lifetime: <span class="highlight">${(tokLifetime/1e12).toFixed(2)} T tokens</spa
             <span class="card-badge" style="background:rgba(26,138,106,0.15);color:var(--orbital)">$/MTok</span>
         </div>
         <div class="metric-row"><span class="metric-label">Blended price</span><span class="metric-value accent">$${blendedPrice.toFixed(2)}/MTok</span></div>
-        ${priceTiers.map(t => `
-        <div class="metric-row"><span class="metric-label">${t.name}</span><span class="metric-value">$${t.pricePerMTok.toFixed(2)}/MTok (${(t.fraction*100).toFixed(0)}%)</span></div>
+        ${priceTiersDisplay.map(pt => `
+        <div class="metric-row"><span class="metric-label">${pt.name}</span><span class="metric-value">$${pt.pricePerMTok.toFixed(2)}/MTok (${(pt.fraction*100).toFixed(0)}%)</span></div>
         `).join('')}
         <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
         <div class="metric-row"><span class="metric-label">Daily revenue</span><span class="metric-value orbital">$${(revenuePerDay/1000).toFixed(1)}k</span></div>
@@ -3249,7 +3218,7 @@ Lifetime: <span class="highlight">${(tokLifetime/1e12).toFixed(2)} T tokens</spa
         <div class="metric-row"><span class="metric-label">Gross margin</span><span class="metric-value ${grossMargin > 0 ? 'orbital' : 'ground'}">${(grossMargin*100).toFixed(1)}%</span></div>
         <div class="metric-row"><span class="metric-label">Cost per GPU-hour</span><span class="metric-value">$${costPerGpuHour.toFixed(2)}</span></div>
         <div class="metric-row"><span class="metric-label">Target GPU-hr rate</span><span class="metric-value orbital">$${targetGpuHrRate.toFixed(2)}/GPU-hr</span></div>
-        <div class="metric-row"><span class="metric-label">Tok/GPU-hr</span><span class="metric-value">${(effectiveTokPerGpuHr/1e6).toFixed(1)}M tok</span></div>
+        <div class="metric-row"><span class="metric-label">Tok/GPU-hr</span><span class="metric-value">${(effTokPerGpuHr/1e6).toFixed(1)}M tok</span></div>
         <div class="metric-row"><span class="metric-label">Ground GPU-hr rate</span><span class="metric-value">~$2.50-6.00/GPU-hr (market)</span></div>
         <div class="metric-row"><span class="metric-label">LCOC (gross)</span><span class="metric-value">${m.lcocGross ? '$'+m.lcocGross.toFixed(2)+'/GPU-hr' : 'N/A'}</span></div>
 
@@ -3267,15 +3236,15 @@ Lifetime: <span class="highlight">${(tokLifetime/1e12).toFixed(2)} T tokens</spa
             <span class="card-badge" style="background:rgba(26,138,106,0.15);color:var(--orbital)">COMPARISON</span>
         </div>
         <div class="calc-block"><span class="comment">// Ground baseline: ${gpuCount} × ${gSpec.name}</span>
-<span class="comment">// $${(groundGpuCost/1000).toFixed(0)}k/GPU, ${groundGpuTDP}W TDP, $${groundPowerCostKwh}/kWh, PUE ${groundPUE}</span>
+<span class="comment">// $${(gSpec.cost/1000).toFixed(0)}k/GPU, ${gSpec.tdpW}W TDP, $0.08/kWh, PUE 1.35</span>
 
                     Ground         Orbital
 GPUs:           ${gpuCount.toLocaleString().padStart(8)}       ${gpuCount.toLocaleString().padStart(8)}
 GPU type:       ${gSpec.name.substring(0,16).padEnd(16)}${cfg.gpuType.substring(0,18)}
 CAPEX:          $${(groundTotalCapex/1e6).toFixed(1).padStart(6)}M      $${(totalCapex/1e6).toFixed(1).padStart(6)}M
-OPEX/yr:        $${(groundAnnualOpex2/1e6).toFixed(1).padStart(6)}M      $${(annualOpex/1e6).toFixed(1).padStart(6)}M
+OPEX/yr:        $${(t.groundAnnualOpex/1e6).toFixed(1).padStart(6)}M      $${(annualOpex/1e6).toFixed(1).padStart(6)}M
 TCO (${satLife}yr):     $${(groundLifetimeCost/1e6).toFixed(1).padStart(6)}M      $${(totalCost/1e6).toFixed(1).padStart(6)}M
-Throughput:     ${(groundTokS/1000).toFixed(0).padStart(6)}k t/s    ${(blendedTokS*utilization*radPenalty/1000).toFixed(0).padStart(6)}k t/s
+Throughput:     ${(groundTokPerDay/86400/1000).toFixed(0).padStart(6)}k t/s    ${(blendedTokS*utilization*radPenalty/1000).toFixed(0).padStart(6)}k t/s
 $/MTok:         $${groundCostPerMTok.toFixed(2).padStart(6)}       $${costPerMTok.toFixed(2).padStart(6)}
 ───────────────────────────────────────
 <span class="${orbitalAdvantage > 1 ? 'highlight' : 'error'}">Orbital is ${orbitalAdvantage > 1 ? (orbitalAdvantage).toFixed(1)+'× cheaper' : (1/orbitalAdvantage).toFixed(1)+'× more expensive'} per token</span>

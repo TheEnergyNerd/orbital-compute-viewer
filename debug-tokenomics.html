@@ -32,10 +32,38 @@ td.formula { color: #888; font-style: italic; font-size: 11px; }
 #output { max-width: 1200px; margin: 0 auto; }
 .comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 768px) { .comparison { grid-template-columns: 1fr; } }
+.download-bar { position: sticky; top: 0; z-index: 100; background: #1a1a18; border-bottom: 1px solid #333; padding: 8px 0; margin-bottom: 10px; display: flex; gap: 8px; align-items: center; }
+.download-bar button { padding: 6px 14px; background: #1a8a6a; color: #fff; border: 1px solid #1a8a6a; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 600; }
+.download-bar button:hover { background: #22aa88; }
+.download-bar .label { color: #667; font-size: 11px; }
+@media print {
+    body { background: #fff; color: #000; font-size: 11px; padding: 10px; }
+    .download-bar, .config-select { display: none; }
+    h1 { color: #1a8a6a; font-size: 16px; }
+    h2 { color: #333; font-size: 13px; border-color: #ccc; }
+    h3 { color: #336699; font-size: 11px; }
+    .section { background: #f8f8f8; border-color: #ddd; page-break-inside: avoid; }
+    table { font-size: 10px; }
+    th { background: #e8e8e8; color: #333; }
+    td { background: #fff; border-color: #ddd; }
+    td.input { background: #e8f0ff; color: #336699; }
+    td.good { color: #228833; }
+    td.bad { color: #cc2222; }
+    td.warn { color: #aa7700; }
+    td.formula { color: #888; }
+    .sanity.ok { background: #e8ffe8; border-color: #33aa33; color: #228833; }
+    .sanity.fail { background: #ffe8e8; border-color: #cc3333; color: #cc2222; }
+    .note { color: #888; }
+}
 </style>
 </head>
 <body>
 <div id="output">
+<div class="download-bar">
+    <button onclick="window.print()">📄 Print / Save as PDF</button>
+    <button onclick="downloadAllConfigs()">📊 Download All Configs (PDF)</button>
+    <span class="label">Use browser's "Save as PDF" in print dialog</span>
+</div>
 <h1>🔧 Tokenomics Debug — Every Intermediate Value</h1>
 <p class="note">This page computes all tokenomics values step-by-step with full formula traceability. Edit CONFIGS in viewer.html and reload to see changes.</p>
 
@@ -389,6 +417,22 @@ for (const key of Object.keys(CONFIGS)) {
 }
 
 render('DP2');
+
+// Download all configs as a single printable page
+function downloadAllConfigs() {
+    const allHtml = Object.keys(CONFIGS).map(k => computeDebug(k)).join('<hr style="border:1px solid #555;margin:30px 0">');
+    const printWin = window.open('', '_blank');
+    printWin.document.write(`<!DOCTYPE html><html><head>
+    <title>Tokenomics Debug — All Configs</title>
+    <style>${document.querySelector('style').textContent}</style>
+    </head><body style="padding:20px">
+    <h1>Orbital Compute — Tokenomics Debug (All Configs)</h1>
+    <p class="note">Generated ${new Date().toISOString().split('T')[0]}</p>
+    ${allHtml}
+    </body></html>`);
+    printWin.document.close();
+    setTimeout(() => printWin.print(), 500);
+}
 </script>
 </body>
 </html>
