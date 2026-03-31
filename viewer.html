@@ -887,7 +887,7 @@ function fmt(n, d=1) { return n >= 1e6 ? (n/1e6).toFixed(d)+'M' : n >= 1e3 ? (n/
 
 function renderThermalPathSVG(cfg, tJunction, tCase, tRad, heatFlux) {
     if (cfg.centralized) {
-        return '<div class="svg-diagram"><svg viewBox="0 0 500 400" xmlns="http://www.w3.org/2000/svg">' +
+        return '<div class="svg-diagram"><svg viewBox="0 0 520 410" xmlns="http://www.w3.org/2000/svg">' +
             '<defs>' +
             '<linearGradient id="thHot" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e05555" stop-opacity="0.3"/><stop offset="1" stop-color="#e05555" stop-opacity="0.05"/></linearGradient>' +
             '<linearGradient id="thWarm" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e8a838" stop-opacity="0.2"/><stop offset="1" stop-color="#e8a838" stop-opacity="0.05"/></linearGradient>' +
@@ -895,7 +895,7 @@ function renderThermalPathSVG(cfg, tJunction, tCase, tRad, heatFlux) {
             '<linearGradient id="thCold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4ecdc4" stop-opacity="0.2"/><stop offset="1" stop-color="#4ecdc4" stop-opacity="0.05"/></linearGradient>' +
             '<marker id="flow_ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#e8a838"/></marker>' +
             '</defs>' +
-            '<rect x="0" y="0" width="500" height="400" fill="#080a0f"/>' +
+            '<rect x="0" y="0" width="520" height="410" fill="#080a0f"/>' +
             '<text x="250" y="18" text-anchor="middle" fill="#556" font-size="9" font-style="italic">Centralized compute bay — pumped fluid loop to remote radiator</text>' +
             '<rect x="30" y="28" width="200" height="160" rx="6" fill="#0a0e14" stroke="#556" stroke-width="1" stroke-dasharray="4,2"/>' +
             '<text x="130" y="44" text-anchor="middle" fill="#667" font-size="8">PRESSURE VESSEL</text>' +
@@ -927,14 +927,14 @@ function renderThermalPathSVG(cfg, tJunction, tCase, tRad, heatFlux) {
             '<text x="250" y="272" fill="#4ecdc4" font-size="9" font-weight="600">T_rad = ' + tRad + '°C</text>' +
             '<text x="250" y="286" fill="#556" font-size="8">' + cfg.radTempK + 'K</text>' +
             [80,110,140,170,200].map(x => '<line x1="'+x+'" y1="298" x2="'+x+'" y2="325" stroke="#4ecdc4" stroke-width="1.5" stroke-dasharray="3,3"/>').join('') +
-            '<rect x="260" y="148" width="220" height="85" rx="4" fill="#0a0e14" stroke="#334" stroke-width="0.5"/>' +
-            '<text x="270" y="165" fill="#b080e0" font-size="8" font-weight="600">PUMPED LOOP TRADEOFFS</text>' +
-            '<text x="270" y="180" fill="#778" font-size="7">✓ Compute bay thermally isolated</text>' +
-            '<text x="270" y="193" fill="#778" font-size="7">✓ Serviceable (swap GPUs w/o radiator)</text>' +
-            '<text x="270" y="206" fill="#778" font-size="7">✓ Uniform cooling across rack</text>' +
-            '<text x="270" y="219" fill="#778" font-size="7">✗ +5°C ΔT penalty, pump power, complexity</text>' +
-            '<text x="130" y="345" text-anchor="middle" fill="#4ecdc4" font-size="10" font-weight="600">IR emission → deep space (3K)</text>' +
-            '<text x="130" y="360" text-anchor="middle" fill="#556" font-size="8">Stefan-Boltzmann: q = εσT⁴ · ' + cfg.radM2 + 'm² @ ' + cfg.radTempK + 'K</text>' +
+            '<rect x="270" y="40" width="230" height="100" rx="4" fill="#0a0e14" stroke="#334" stroke-width="0.5"/>' +
+            '<text x="280" y="57" fill="#b080e0" font-size="8" font-weight="600">PUMPED LOOP TRADEOFFS</text>' +
+            '<text x="280" y="73" fill="#778" font-size="7">✓ Compute bay thermally isolated</text>' +
+            '<text x="280" y="87" fill="#778" font-size="7">✓ Serviceable (swap GPUs w/o radiator)</text>' +
+            '<text x="280" y="101" fill="#778" font-size="7">✓ Uniform cooling across rack</text>' +
+            '<text x="280" y="115" fill="#778" font-size="7">✗ +5°C ΔT penalty, pump power, complexity</text>' +
+            '<text x="130" y="350" text-anchor="middle" fill="#4ecdc4" font-size="10" font-weight="600">IR emission → deep space (3K)</text>' +
+            '<text x="130" y="368" text-anchor="middle" fill="#556" font-size="8">Stefan-Boltzmann: q = εσT⁴ · ' + cfg.radM2 + 'm² @ ' + cfg.radTempK + 'K</text>' +
             '</svg></div>';
     }
     // Direct-mount (DP1, DP1B, DP2, DP3, DP3B)
@@ -2110,13 +2110,13 @@ Arithmetic intensity: 2 FLOPs/byte (low → memory bound)</div>
 
     <div class="card">
         <div class="card-header"><span class="card-title">Request Routing</span></div>
-        <div class="svg-diagram"><svg viewBox="0 0 560 300" xmlns="http://www.w3.org/2000/svg">
+        <div class="svg-diagram"><svg viewBox="0 0 600 260" xmlns="http://www.w3.org/2000/svg">
             <defs>
                 <marker id="rte_ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#e8a838"/></marker>
                 <marker id="rte_ahdn" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4ecdc4"/></marker>
             </defs>
-            <rect x="0" y="0" width="560" height="300" fill="#080a0f"/>
-            <text x="280" y="14" text-anchor="middle" fill="#556" font-size="8" font-style="italic">Ground-to-orbit request flow</text>
+            <rect x="0" y="0" width="600" height="260" fill="#080a0f"/>
+            <text x="300" y="14" text-anchor="middle" fill="#556" font-size="8" font-style="italic">Ground-to-orbit request flow</text>
             <!-- Step 1: Uplink -->
             <rect x="20" y="28" width="40" height="30" rx="6" fill="#0e1828" stroke="#5cb8e6" stroke-width="1.5"/>
             <text x="40" y="47" text-anchor="middle" fill="#5cb8e6" font-size="9" font-weight="600">User</text>
@@ -2134,26 +2134,26 @@ Arithmetic intensity: 2 FLOPs/byte (low → memory bound)</div>
             <line x1="382" y1="68" x2="60" y2="68" stroke="#778" stroke-width="1" marker-end="url(#rte_ahdn)"/>
             <text x="220" y="64" text-anchor="middle" fill="#778" font-size="7">token stream response</text>
             <!-- Step labels -->
-            <rect x="20" y="88" width="24" height="16" rx="3" fill="#1a1420" stroke="#f0c040" stroke-width="1"/>
-            <text x="32" y="100" text-anchor="middle" fill="#f0c040" font-size="8" font-weight="600">1</text>
-            <text x="52" y="100" fill="#d0d4dc" font-size="9" font-weight="600">UPLINK</text>
-            <text x="120" y="100" fill="#778" font-size="8">Contact: ${contactPct}% · ${cfg.groundStations} OGTs × ${cfg.groundLinkGbps} Gbps · Eff: ${m.effectiveGroundGbps.toFixed(1)} Gbps · ${(rttMs/2).toFixed(1)} ms</text>
+            <rect x="20" y="90" width="24" height="16" rx="3" fill="#1a1420" stroke="#f0c040" stroke-width="1"/>
+            <text x="32" y="102" text-anchor="middle" fill="#f0c040" font-size="8" font-weight="600">1</text>
+            <text x="52" y="102" fill="#d0d4dc" font-size="9" font-weight="600">UPLINK</text>
+            <text x="120" y="102" fill="#778" font-size="7">Contact: ${contactPct}% · ${cfg.groundStations} OGTs × ${cfg.groundLinkGbps} Gbps · Eff: ${m.effectiveGroundGbps.toFixed(1)} Gbps · ${(rttMs/2).toFixed(1)} ms</text>
 
-            <rect x="20" y="116" width="24" height="16" rx="3" fill="#1a1420" stroke="#f0c040" stroke-width="1"/>
-            <text x="32" y="128" text-anchor="middle" fill="#f0c040" font-size="8" font-weight="600">2</text>
-            <text x="52" y="128" fill="#d0d4dc" font-size="9" font-weight="600">ROUTING</text>
-            <text x="120" y="128" fill="#778" font-size="8">${cs > 1 ? `Router → best worker · ${avgISLHops} ISL hops × 0.3ms = ${islHopLatencyMs.toFixed(1)} ms` : `Local scheduler (single node) · No ISL routing`}</text>
-            <text x="120" y="142" fill="#556" font-size="8">${cs > 1 ? `Least-loaded ${cfg.clusterRoles && cfg.clusterRoles.includes('prefill') ? 'prefill' : 'inference'} node · ${cfg.storeAndForward ? 'Store-and-forward enabled' : 'Real-time routing only'}` : `${cfg.storeAndForward ? 'Store-and-forward: queue during gaps' : 'Requires active ground contact'}`}</text>
+            <rect x="20" y="120" width="24" height="16" rx="3" fill="#1a1420" stroke="#f0c040" stroke-width="1"/>
+            <text x="32" y="132" text-anchor="middle" fill="#f0c040" font-size="8" font-weight="600">2</text>
+            <text x="52" y="132" fill="#d0d4dc" font-size="9" font-weight="600">ROUTING</text>
+            <text x="120" y="132" fill="#778" font-size="7">${cs > 1 ? `Router → best worker · ${avgISLHops} ISL hops × 0.3ms = ${islHopLatencyMs.toFixed(1)} ms` : `Local scheduler (single node) · No ISL routing`}</text>
+            <text x="120" y="148" fill="#556" font-size="7">${cs > 1 ? `Least-loaded ${cfg.clusterRoles && cfg.clusterRoles.includes('prefill') ? 'prefill' : 'inference'} node · ${cfg.storeAndForward ? 'Store-and-forward enabled' : 'Real-time routing only'}` : `${cfg.storeAndForward ? 'Store-and-forward: queue during gaps' : 'Requires active ground contact'}`}</text>
 
-            <rect x="20" y="156" width="24" height="16" rx="3" fill="#1a1420" stroke="#f0c040" stroke-width="1"/>
-            <text x="32" y="168" text-anchor="middle" fill="#f0c040" font-size="8" font-weight="600">3</text>
-            <text x="52" y="168" fill="#d0d4dc" font-size="9" font-weight="600">INFERENCE</text>
-            <text x="120" y="168" fill="#778" font-size="8">${cs > 1 ? `Prefill → KV cache → Decode · Handoff: ${kvPerRequestGB.toFixed(1)} GB @ ${cfg.islRateGbps} Gbps = ${(kvPerRequestGB*8/cfg.islRateGbps*1000).toFixed(0)} ms` : `Local prefill → decode (no KV migration) · All on single node`}</text>
+            <rect x="20" y="164" width="24" height="16" rx="3" fill="#1a1420" stroke="#f0c040" stroke-width="1"/>
+            <text x="32" y="176" text-anchor="middle" fill="#f0c040" font-size="8" font-weight="600">3</text>
+            <text x="52" y="176" fill="#d0d4dc" font-size="9" font-weight="600">INFERENCE</text>
+            <text x="120" y="176" fill="#778" font-size="7">${cs > 1 ? `Prefill → KV cache → Decode · Handoff: ${kvPerRequestGB.toFixed(1)} GB @ ${cfg.islRateGbps} Gbps = ${(kvPerRequestGB*8/cfg.islRateGbps*1000).toFixed(0)} ms` : `Local prefill → decode (no KV migration) · All on single node`}</text>
 
-            <rect x="20" y="192" width="24" height="16" rx="3" fill="#1a1420" stroke="#f0c040" stroke-width="1"/>
-            <text x="32" y="204" text-anchor="middle" fill="#f0c040" font-size="8" font-weight="600">4</text>
-            <text x="52" y="204" fill="#d0d4dc" font-size="9" font-weight="600">DOWNLINK</text>
-            <text x="120" y="204" fill="#778" font-size="8">Token stream: ~2 B/tok × ${decodeTokPerS.toFixed(0)} tok/s = <tspan fill="#f0c040" font-weight="600">${(decodeTokPerS*2*8/1e6).toFixed(2)} Mbps</tspan> · Prop: <tspan fill="#f0c040" font-weight="600">${(rttMs/2).toFixed(1)} ms</tspan></text>
+            <rect x="20" y="200" width="24" height="16" rx="3" fill="#1a1420" stroke="#f0c040" stroke-width="1"/>
+            <text x="32" y="212" text-anchor="middle" fill="#f0c040" font-size="8" font-weight="600">4</text>
+            <text x="52" y="212" fill="#d0d4dc" font-size="9" font-weight="600">DOWNLINK</text>
+            <text x="120" y="212" fill="#778" font-size="7">Token stream: ~2 B/tok × ${decodeTokPerS.toFixed(0)} tok/s = <tspan fill="#f0c040" font-weight="600">${(decodeTokPerS*2*8/1e6).toFixed(2)} Mbps</tspan> · Prop: <tspan fill="#f0c040" font-weight="600">${(rttMs/2).toFixed(1)} ms</tspan></text>
         </svg></div>
     </div>
 
@@ -2282,117 +2282,117 @@ Margin: <span class="${m.thermalMargin > 1.2 ? 'highlight' : 'error'}">${m.therm
         </div>
 
         ${cfg.centralized ? `
-        <div class="svg-diagram"><svg viewBox="0 0 540 400" xmlns="http://www.w3.org/2000/svg">
-            <rect x="0" y="0" width="540" height="400" fill="#080a0f"/>
+        <div class="svg-diagram"><svg viewBox="0 0 580 430" xmlns="http://www.w3.org/2000/svg">
+            <rect x="0" y="0" width="580" height="430" fill="#080a0f"/>
             <text x="270" y="16" text-anchor="middle" fill="#556" font-size="8" font-style="italic">DP2B Hub — pumped fluid loop thermal architecture</text>
 
             <!-- GPU Die -->
             <rect x="180" y="30" width="180" height="24" rx="3" fill="#cc3322" stroke="#ff4422" stroke-width="1.5"/>
             <text x="270" y="46" text-anchor="middle" fill="#fff" font-size="10" font-weight="700">GPU DIE</text>
-            <text x="440" y="42" fill="#cc6644" font-size="8">T_j = 85°C</text>
-            <text x="440" y="54" fill="#888" font-size="7">${cfg.gpuPowerW}W × 0.4 W/cm²</text>
+            <text x="400" y="42" fill="#cc6644" font-size="8">T_j = 85°C</text>
+            <text x="400" y="56" fill="#888" font-size="7">${cfg.gpuPowerW}W × 0.4 W/cm²</text>
 
             <!-- TIM-1 -->
-            <rect x="195" y="60" width="150" height="16" rx="2" fill="#884433" stroke="#aa6644" stroke-width="1"/>
-            <text x="270" y="72" text-anchor="middle" fill="#dda" font-size="8" font-weight="600">TIM-1</text>
-            <text x="370" y="72" fill="#888" font-size="7">Indium foil 25μm</text>
-            <text x="440" y="72" fill="#888" font-size="7">0.5°C/W</text>
+            <rect x="195" y="64" width="150" height="16" rx="2" fill="#884433" stroke="#aa6644" stroke-width="1"/>
+            <text x="270" y="76" text-anchor="middle" fill="#dda" font-size="8" font-weight="600">TIM-1</text>
+            <text x="370" y="76" fill="#888" font-size="7">Indium foil 25μm</text>
+            <text x="470" y="76" fill="#888" font-size="7">0.5°C/W</text>
 
             <!-- Cold plate -->
-            <rect x="170" y="82" width="200" height="24" rx="3" fill="#b87333" stroke="#cc8844" stroke-width="1.5"/>
-            <text x="270" y="98" text-anchor="middle" fill="#fff" font-size="9" font-weight="600">COLD PLATE</text>
-            <text x="440" y="92" fill="#b87333" font-size="8">Cu micro-channel</text>
-            <text x="440" y="104" fill="#888" font-size="7">T_case = 70°C</text>
+            <rect x="170" y="90" width="200" height="24" rx="3" fill="#b87333" stroke="#cc8844" stroke-width="1.5"/>
+            <text x="270" y="106" text-anchor="middle" fill="#fff" font-size="9" font-weight="600">COLD PLATE</text>
+            <text x="400" y="100" fill="#b87333" font-size="8">Cu micro-channel</text>
+            <text x="400" y="114" fill="#888" font-size="7">T_case = 70°C</text>
 
             <!-- Pumped fluid interface -->
-            <rect x="190" y="112" width="160" height="18" rx="2" fill="#2255aa" stroke="#3377cc" stroke-width="1"/>
-            <text x="270" y="124" text-anchor="middle" fill="#88bbff" font-size="8">FLUID COUPLING</text>
-            <text x="440" y="124" fill="#888" font-size="7">QD (quick-disconnect)</text>
+            <rect x="190" y="124" width="160" height="18" rx="2" fill="#2255aa" stroke="#3377cc" stroke-width="1"/>
+            <text x="270" y="136" text-anchor="middle" fill="#88bbff" font-size="8">FLUID COUPLING</text>
+            <text x="400" y="136" fill="#888" font-size="7">QD (quick-disconnect)</text>
 
             <!-- Down arrow (pumped loop) -->
-            <line x1="270" y1="130" x2="270" y2="180" stroke="#3377cc" stroke-width="3"/>
-            <polygon points="260,178 270,195 280,178" fill="#3377cc"/>
-            <text x="290" y="160" fill="#3377cc" font-size="8" font-weight="600">HOT SUPPLY</text>
-            <text x="290" y="172" fill="#556" font-size="7">PAO-2 fluid, 60°C</text>
+            <line x1="270" y1="142" x2="270" y2="198" stroke="#3377cc" stroke-width="3"/>
+            <polygon points="260,196 270,213 280,196" fill="#3377cc"/>
+            <text x="290" y="172" fill="#3377cc" font-size="8" font-weight="600">HOT SUPPLY</text>
+            <text x="290" y="186" fill="#556" font-size="7">PAO-2 fluid, 60°C</text>
 
             <!-- Pump -->
-            <circle cx="270" cy="210" r="16" fill="#1a2a4a" stroke="#3377cc" stroke-width="1.5"/>
-            <text x="270" y="214" text-anchor="middle" fill="#88bbff" font-size="8" font-weight="600">P</text>
-            <text x="300" y="210" fill="#888" font-size="7">Circ. pump</text>
-            <text x="300" y="222" fill="#888" font-size="7">10 W input</text>
+            <circle cx="270" cy="230" r="16" fill="#1a2a4a" stroke="#3377cc" stroke-width="1.5"/>
+            <text x="270" y="234" text-anchor="middle" fill="#88bbff" font-size="8" font-weight="600">P</text>
+            <text x="300" y="228" fill="#888" font-size="7">Circ. pump</text>
+            <text x="300" y="242" fill="#888" font-size="7">10 W input</text>
 
             <!-- Down arrow (to radiator) -->
-            <line x1="270" y1="226" x2="270" y2="260" stroke="#cc4422" stroke-width="3"/>
-            <polygon points="260,258 270,275 280,258" fill="#cc4422"/>
-            <text x="290" y="250" fill="#cc4422" font-size="7">Hot fluid → radiator</text>
+            <line x1="270" y1="246" x2="270" y2="280" stroke="#cc4422" stroke-width="3"/>
+            <polygon points="260,278 270,295 280,278" fill="#cc4422"/>
+            <text x="290" y="270" fill="#cc4422" font-size="7">Hot fluid → radiator</text>
 
             <!-- Header manifold -->
-            <rect x="140" y="278" width="260" height="14" rx="2" fill="#556677" stroke="#778899" stroke-width="1"/>
-            <text x="270" y="289" text-anchor="middle" fill="#ccd" font-size="7">HEADER MANIFOLD</text>
+            <rect x="140" y="298" width="260" height="14" rx="2" fill="#556677" stroke="#778899" stroke-width="1"/>
+            <text x="270" y="309" text-anchor="middle" fill="#ccd" font-size="7">HEADER MANIFOLD</text>
 
             <!-- Radiator panel -->
-            <rect x="60" y="298" width="420" height="20" rx="3" fill="#1a1a1a" stroke="#444" stroke-width="1.5"/>
-            <text x="270" y="312" text-anchor="middle" fill="#aab" font-size="9" font-weight="600">RADIATOR PANEL (${cfg.radM2} m²)</text>
-            <text x="440" y="302" fill="#888" font-size="7">Al 6061-T6</text>
-            <text x="440" y="314" fill="#888" font-size="7">T_rad = ${cfg.radTempK - 273}°C</text>
+            <rect x="60" y="320" width="380" height="20" rx="3" fill="#1a1a1a" stroke="#444" stroke-width="1.5"/>
+            <text x="250" y="334" text-anchor="middle" fill="#aab" font-size="9" font-weight="600">RADIATOR PANEL (${cfg.radM2} m²)</text>
+            <text x="460" y="326" fill="#888" font-size="7">Al 6061-T6</text>
+            <text x="460" y="340" fill="#888" font-size="7">T_rad = ${cfg.radTempK - 273}°C</text>
 
             <!-- Return path (cold) -->
-            <line x1="150" y1="298" x2="150" y2="130" stroke="#2255aa" stroke-width="2" stroke-dasharray="6 3"/>
-            <text x="90" y="220" fill="#2255aa" font-size="7" transform="rotate(-90, 90, 220)">COLD RETURN (35°C)</text>
+            <line x1="120" y1="320" x2="120" y2="142" stroke="#2255aa" stroke-width="2" stroke-dasharray="6 3"/>
+            <text x="55" y="240" fill="#2255aa" font-size="7" transform="rotate(-90, 55, 240)">COLD RETURN (35°C)</text>
 
             <!-- Emission arrows -->
-            <line x1="160" y1="318" x2="160" y2="350" stroke="#44aaaa" stroke-width="1.5"/>
-            <line x1="230" y1="318" x2="230" y2="350" stroke="#44aaaa" stroke-width="1.5"/>
-            <line x1="300" y1="318" x2="300" y2="350" stroke="#44aaaa" stroke-width="1.5"/>
-            <line x1="370" y1="318" x2="370" y2="350" stroke="#44aaaa" stroke-width="1.5"/>
-            <text x="270" y="365" text-anchor="middle" fill="#44aaaa" font-size="9" font-weight="600">IR emission → deep space (3K)</text>
-            <text x="270" y="380" text-anchor="middle" fill="#556" font-size="7">Stefan-Boltzmann: q = εσT⁴ · ${cfg.radM2}m² @ ${cfg.radTempK}K</text>
-            <text x="270" y="393" text-anchor="middle" fill="#556" font-size="7">Carbon black: ε = 0.95</text>
+            <line x1="160" y1="340" x2="160" y2="372" stroke="#44aaaa" stroke-width="1.5"/>
+            <line x1="230" y1="340" x2="230" y2="372" stroke="#44aaaa" stroke-width="1.5"/>
+            <line x1="300" y1="340" x2="300" y2="372" stroke="#44aaaa" stroke-width="1.5"/>
+            <line x1="370" y1="340" x2="370" y2="372" stroke="#44aaaa" stroke-width="1.5"/>
+            <text x="270" y="390" text-anchor="middle" fill="#44aaaa" font-size="9" font-weight="600">IR emission → deep space (3K)</text>
+            <text x="270" y="407" text-anchor="middle" fill="#556" font-size="7">Stefan-Boltzmann: q = εσT⁴ · ${cfg.radM2}m² @ ${cfg.radTempK}K</text>
+            <text x="270" y="422" text-anchor="middle" fill="#556" font-size="7">Carbon black: ε = 0.95</text>
         </svg></div>
         ` : `
-        <div class="svg-diagram"><svg viewBox="0 0 540 340" xmlns="http://www.w3.org/2000/svg">
-            <rect x="0" y="0" width="540" height="340" fill="#080a0f"/>
+        <div class="svg-diagram"><svg viewBox="0 0 600 360" xmlns="http://www.w3.org/2000/svg">
+            <rect x="0" y="0" width="600" height="360" fill="#080a0f"/>
             <text x="270" y="16" text-anchor="middle" fill="#556" font-size="8" font-style="italic">Direct-mount thermal — GPU bolted to radiator, zero-length path</text>
 
             <!-- GPU Die -->
             <rect x="180" y="30" width="180" height="24" rx="3" fill="#cc3322" stroke="#ff4422" stroke-width="1.5"/>
             <text x="270" y="46" text-anchor="middle" fill="#fff" font-size="10" font-weight="700">GPU DIE</text>
-            <text x="440" y="42" fill="#cc6644" font-size="8">T_j = 85°C</text>
-            <text x="440" y="54" fill="#888" font-size="7">${cfg.gpuPowerW}W × 0.4 W/cm²</text>
+            <text x="400" y="42" fill="#cc6644" font-size="8">T_j = 85°C</text>
+            <text x="400" y="54" fill="#888" font-size="7">${cfg.gpuPowerW}W × 0.4 W/cm²</text>
 
             <!-- TIM-1 -->
-            <rect x="195" y="60" width="150" height="16" rx="2" fill="#884433" stroke="#aa6644" stroke-width="1"/>
-            <text x="270" y="72" text-anchor="middle" fill="#dda" font-size="8" font-weight="600">TIM-1</text>
-            <text x="370" y="72" fill="#888" font-size="7">Indium foil 25μm</text>
-            <text x="440" y="72" fill="#888" font-size="7">0.5°C/W</text>
+            <rect x="195" y="66" width="150" height="16" rx="2" fill="#884433" stroke="#aa6644" stroke-width="1"/>
+            <text x="270" y="78" text-anchor="middle" fill="#dda" font-size="8" font-weight="600">TIM-1</text>
+            <text x="370" y="78" fill="#888" font-size="7">Indium foil 25μm</text>
+            <text x="470" y="78" fill="#888" font-size="7">0.5°C/W</text>
 
             <!-- IHS / Spreader -->
-            <rect x="170" y="82" width="200" height="24" rx="3" fill="#b87333" stroke="#cc8844" stroke-width="1.5"/>
-            <text x="270" y="95" text-anchor="middle" fill="#fff" font-size="8" font-weight="600">IHS / SPREADER</text>
-            <text x="440" y="92" fill="#b87333" font-size="8">Cu vapor chamber</text>
-            <text x="440" y="104" fill="#888" font-size="7">ΔT &lt; 5°C</text>
+            <rect x="170" y="90" width="200" height="24" rx="3" fill="#b87333" stroke="#cc8844" stroke-width="1.5"/>
+            <text x="270" y="103" text-anchor="middle" fill="#fff" font-size="8" font-weight="600">IHS / SPREADER</text>
+            <text x="400" y="100" fill="#b87333" font-size="8">Cu vapor chamber</text>
+            <text x="400" y="114" fill="#888" font-size="7">ΔT &lt; 5°C</text>
 
             <!-- TIM-2 -->
-            <rect x="195" y="112" width="150" height="14" rx="2" fill="#665544" stroke="#887766" stroke-width="1"/>
-            <text x="270" y="122" text-anchor="middle" fill="#dda" font-size="7" font-weight="600">TIM-2</text>
-            <text x="370" y="122" fill="#888" font-size="7">Thermal pad 100μm</text>
-            <text x="440" y="122" fill="#888" font-size="7">1.2°C/W</text>
+            <rect x="195" y="122" width="150" height="14" rx="2" fill="#665544" stroke="#887766" stroke-width="1"/>
+            <text x="270" y="132" text-anchor="middle" fill="#dda" font-size="7" font-weight="600">TIM-2</text>
+            <text x="370" y="132" fill="#888" font-size="7">Thermal pad 100μm</text>
+            <text x="470" y="132" fill="#888" font-size="7">1.2°C/W</text>
 
             <!-- Cold plate / Manifold -->
-            <rect x="160" y="132" width="220" height="24" rx="3" fill="#556677" stroke="#778899" stroke-width="1.5"/>
-            <text x="270" y="145" text-anchor="middle" fill="#ccd" font-size="8" font-weight="600">COLD PLATE / MANIFOLD</text>
-            <text x="440" y="142" fill="#888" font-size="8">Heat pipe or LHP</text>
-            <text x="440" y="154" fill="#888" font-size="7">T_case = 70°C</text>
+            <rect x="160" y="144" width="220" height="24" rx="3" fill="#556677" stroke="#778899" stroke-width="1.5"/>
+            <text x="270" y="157" text-anchor="middle" fill="#ccd" font-size="8" font-weight="600">COLD PLATE / MANIFOLD</text>
+            <text x="400" y="154" fill="#888" font-size="8">Heat pipe or LHP</text>
+            <text x="400" y="168" fill="#888" font-size="7">T_case = 70°C</text>
 
             <!-- DIRECT BOND (the key differentiator) -->
-            <rect x="100" y="164" width="340" height="20" rx="2" fill="#1a3a1a" stroke="#33aa33" stroke-width="2"/>
-            <text x="270" y="178" text-anchor="middle" fill="#33ee55" font-size="9" font-weight="700">ZERO-LENGTH BOND — ORU BOLTED TO RADIATOR</text>
+            <rect x="100" y="178" width="340" height="20" rx="2" fill="#1a3a1a" stroke="#33aa33" stroke-width="2"/>
+            <text x="270" y="192" text-anchor="middle" fill="#33ee55" font-size="9" font-weight="700">ZERO-LENGTH BOND — ORU BOLTED TO RADIATOR</text>
 
             <!-- Radiator panel (wide) -->
-            <rect x="40" y="190" width="460" height="28" rx="3" fill="#1a1a1a" stroke="#444" stroke-width="1.5"/>
-            <text x="270" y="208" text-anchor="middle" fill="#aab" font-size="10" font-weight="600">RADIATOR PANEL (${cfg.radM2} m²)</text>
-            <text x="440" y="196" fill="#888" font-size="7">Al 6061-T6 solid plate</text>
-            <text x="440" y="208" fill="#888" font-size="7">3mm + carbon black</text>
+            <rect x="40" y="206" width="420" height="28" rx="3" fill="#1a1a1a" stroke="#444" stroke-width="1.5"/>
+            <text x="250" y="224" text-anchor="middle" fill="#aab" font-size="10" font-weight="600">RADIATOR PANEL (${cfg.radM2} m²)</text>
+            <text x="400" y="212" fill="#888" font-size="7">Al 6061-T6 solid plate</text>
+            <text x="400" y="224" fill="#888" font-size="7">3mm + carbon black</text>
 
             <!-- Temperature gradient bar -->
             <defs><linearGradient id="tgrad" x1="0" y1="0" x2="0" y2="1">
@@ -2401,23 +2401,23 @@ Margin: <span class="${m.thermalMargin > 1.2 ? 'highlight' : 'error'}">${m.therm
                 <stop offset="70%" stop-color="#4488aa"/>
                 <stop offset="100%" stop-color="#224466"/>
             </linearGradient></defs>
-            <rect x="500" y="30" width="12" height="190" fill="url(#tgrad)" rx="2"/>
-            <text x="518" y="40" fill="#ff4422" font-size="7">85°C</text>
-            <text x="518" y="108" fill="#cc8844" font-size="7">70°C</text>
-            <text x="518" y="180" fill="#4488aa" font-size="7">${cfg.radTempK - 273}°C</text>
+            <rect x="540" y="30" width="12" height="200" fill="url(#tgrad)" rx="2"/>
+            <text x="558" y="40" fill="#ff4422" font-size="7">85°C</text>
+            <text x="558" y="118" fill="#cc8844" font-size="7">70°C</text>
+            <text x="558" y="194" fill="#4488aa" font-size="7">${cfg.radTempK - 273}°C</text>
 
             <!-- Emission arrows -->
-            <line x1="120" y1="218" x2="120" y2="260" stroke="#44aaaa" stroke-width="1.5"/>
-            <line x1="200" y1="218" x2="200" y2="260" stroke="#44aaaa" stroke-width="1.5"/>
-            <line x1="280" y1="218" x2="280" y2="260" stroke="#44aaaa" stroke-width="1.5"/>
-            <line x1="360" y1="218" x2="360" y2="260" stroke="#44aaaa" stroke-width="1.5"/>
-            <text x="270" y="278" text-anchor="middle" fill="#44aaaa" font-size="9" font-weight="600">IR emission → deep space (3K)</text>
-            <text x="270" y="295" text-anchor="middle" fill="#556" font-size="7">Stefan-Boltzmann: q = εσT⁴ · ${cfg.radM2}m² @ ${cfg.radTempK}K</text>
-            <text x="270" y="308" text-anchor="middle" fill="#556" font-size="7">Carbon black: ε = 0.95</text>
+            <line x1="120" y1="234" x2="120" y2="272" stroke="#44aaaa" stroke-width="1.5"/>
+            <line x1="200" y1="234" x2="200" y2="272" stroke="#44aaaa" stroke-width="1.5"/>
+            <line x1="280" y1="234" x2="280" y2="272" stroke="#44aaaa" stroke-width="1.5"/>
+            <line x1="360" y1="234" x2="360" y2="272" stroke="#44aaaa" stroke-width="1.5"/>
+            <text x="250" y="290" text-anchor="middle" fill="#44aaaa" font-size="9" font-weight="600">IR emission → deep space (3K)</text>
+            <text x="250" y="307" text-anchor="middle" fill="#556" font-size="7">Stefan-Boltzmann: q = εσT⁴ · ${cfg.radM2}m² @ ${cfg.radTempK}K</text>
+            <text x="250" y="322" text-anchor="middle" fill="#556" font-size="7">Carbon black: ε = 0.95</text>
 
             <!-- Advantage callout -->
-            <rect x="80" y="318" width="380" height="16" rx="3" fill="#0a1a0a" stroke="#33aa33" stroke-width="0.5"/>
-            <text x="270" y="330" text-anchor="middle" fill="#33ee55" font-size="8">No pump · No plumbing · No fluid · No single-point failure</text>
+            <rect x="60" y="336" width="380" height="18" rx="3" fill="#0a1a0a" stroke="#33aa33" stroke-width="0.5"/>
+            <text x="250" y="349" text-anchor="middle" fill="#33ee55" font-size="8">No pump · No plumbing · No fluid · No single-point failure</text>
         </svg></div>
         `}
     </div>
@@ -2643,57 +2643,57 @@ function renderCluster(cfg, m) {
             Two redundant primary cores provide N+1 fault tolerance for the control plane.
         </div>
 
-        <div class="svg-diagram"><svg viewBox="0 0 540 280" xmlns="http://www.w3.org/2000/svg">
-            <rect x="0" y="0" width="540" height="280" fill="#080a0f"/>
-            <text x="270" y="16" text-anchor="middle" fill="#556" font-size="8" font-style="italic">Hex-cell branching topology — self-similar building blocks</text>
+        <div class="svg-diagram"><svg viewBox="0 0 560 300" xmlns="http://www.w3.org/2000/svg">
+            <rect x="0" y="0" width="560" height="300" fill="#080a0f"/>
+            <text x="280" y="16" text-anchor="middle" fill="#556" font-size="8" font-style="italic">Hex-cell branching topology — self-similar building blocks</text>
 
             <!-- Primary 1 (left) -->
-            <polygon points="200,110 220,98 240,110 240,130 220,142 200,130" fill="#1a1410" stroke="#ffcc00" stroke-width="2"/>
-            <text x="220" y="122" text-anchor="middle" fill="#ffcc00" font-size="8" font-weight="700">P1</text>
-            <text x="220" y="132" text-anchor="middle" fill="#887700" font-size="6">ROUTE</text>
+            <polygon points="200,120 220,108 240,120 240,140 220,152 200,140" fill="#1a1410" stroke="#ffcc00" stroke-width="2"/>
+            <text x="220" y="132" text-anchor="middle" fill="#ffcc00" font-size="8" font-weight="700">P1</text>
+            <text x="220" y="143" text-anchor="middle" fill="#887700" font-size="6">ROUTE</text>
 
             <!-- Primary 2 (right) -->
-            <polygon points="290,110 310,98 330,110 330,130 310,142 290,130" fill="#1a1410" stroke="#ffcc00" stroke-width="2"/>
-            <text x="310" y="122" text-anchor="middle" fill="#ffcc00" font-size="8" font-weight="700">P2</text>
-            <text x="310" y="132" text-anchor="middle" fill="#887700" font-size="6">ROUTE</text>
+            <polygon points="300,120 320,108 340,120 340,140 320,152 300,140" fill="#1a1410" stroke="#ffcc00" stroke-width="2"/>
+            <text x="320" y="132" text-anchor="middle" fill="#ffcc00" font-size="8" font-weight="700">P2</text>
+            <text x="320" y="143" text-anchor="middle" fill="#887700" font-size="6">ROUTE</text>
 
             <!-- Spine link between primaries -->
-            <line x1="240" y1="120" x2="290" y2="120" stroke="#ffdd00" stroke-width="3" opacity="0.7"/>
-            <text x="265" y="115" text-anchor="middle" fill="#aa8800" font-size="6">SPINE</text>
+            <line x1="240" y1="130" x2="300" y2="130" stroke="#ffdd00" stroke-width="3" opacity="0.7"/>
+            <text x="270" y="125" text-anchor="middle" fill="#aa8800" font-size="6">SPINE</text>
 
             <!-- Edge cells branching off P1 -->
             <polygon points="110,60 130,48 150,60 150,80 130,92 110,80" fill="#0e1828" stroke="#3377ff" stroke-width="1.5"/>
             <text x="130" y="73" text-anchor="middle" fill="#3377ff" font-size="7" font-weight="600">PRE</text>
-            <line x1="150" y1="70" x2="200" y2="115" stroke="#00ffcc" stroke-width="1.5" opacity="0.5"/>
+            <line x1="150" y1="75" x2="200" y2="125" stroke="#00ffcc" stroke-width="1.5" opacity="0.5"/>
 
-            <polygon points="95,150 115,138 135,150 135,170 115,182 95,170" fill="#0e1828" stroke="#ff4030" stroke-width="1.5"/>
-            <text x="115" y="163" text-anchor="middle" fill="#ff4030" font-size="7" font-weight="600">DEC</text>
-            <line x1="135" y1="155" x2="200" y2="125" stroke="#00ffcc" stroke-width="1.5" opacity="0.5"/>
+            <polygon points="95,160 115,148 135,160 135,180 115,192 95,180" fill="#0e1828" stroke="#ff4030" stroke-width="1.5"/>
+            <text x="115" y="173" text-anchor="middle" fill="#ff4030" font-size="7" font-weight="600">DEC</text>
+            <line x1="135" y1="165" x2="200" y2="135" stroke="#00ffcc" stroke-width="1.5" opacity="0.5"/>
 
             <!-- Deeper branch off P1 -->
             <polygon points="40,30 60,18 80,30 80,50 60,62 40,50" fill="#0e1828" stroke="#33ee55" stroke-width="1.5"/>
             <text x="60" y="43" text-anchor="middle" fill="#33ee55" font-size="7" font-weight="600">CTX</text>
-            <line x1="80" y1="40" x2="110" y2="65" stroke="#00ffcc" stroke-width="1" opacity="0.4"/>
+            <line x1="80" y1="45" x2="110" y2="65" stroke="#00ffcc" stroke-width="1" opacity="0.4"/>
 
             <!-- Edge cells branching off P2 -->
-            <polygon points="380,55 400,43 420,55 420,75 400,87 380,75" fill="#0e1828" stroke="#3377ff" stroke-width="1.5"/>
-            <text x="400" y="68" text-anchor="middle" fill="#3377ff" font-size="7" font-weight="600">PRE</text>
-            <line x1="380" y1="65" x2="330" y2="115" stroke="#00ffcc" stroke-width="1.5" opacity="0.5"/>
+            <polygon points="400,55 420,43 440,55 440,75 420,87 400,75" fill="#0e1828" stroke="#3377ff" stroke-width="1.5"/>
+            <text x="420" y="68" text-anchor="middle" fill="#3377ff" font-size="7" font-weight="600">PRE</text>
+            <line x1="400" y1="70" x2="340" y2="125" stroke="#00ffcc" stroke-width="1.5" opacity="0.5"/>
 
-            <polygon points="390,145 410,133 430,145 430,165 410,177 390,165" fill="#0e1828" stroke="#ff4030" stroke-width="1.5"/>
-            <text x="410" y="158" text-anchor="middle" fill="#ff4030" font-size="7" font-weight="600">DEC</text>
-            <line x1="390" y1="155" x2="330" y2="125" stroke="#00ffcc" stroke-width="1.5" opacity="0.5"/>
+            <polygon points="410,155 430,143 450,155 450,175 430,187 410,175" fill="#0e1828" stroke="#ff4030" stroke-width="1.5"/>
+            <text x="430" y="168" text-anchor="middle" fill="#ff4030" font-size="7" font-weight="600">DEC</text>
+            <line x1="410" y1="165" x2="340" y2="135" stroke="#00ffcc" stroke-width="1.5" opacity="0.5"/>
 
             <!-- Cross-branch link -->
-            <line x1="150" y1="70" x2="380" y2="65" stroke="#ff8800" stroke-width="1" opacity="0.4" stroke-dasharray="4 3"/>
-            <text x="265" y="60" text-anchor="middle" fill="#ff8800" font-size="6" opacity="0.7">cross-branch</text>
+            <line x1="150" y1="70" x2="400" y2="65" stroke="#ff8800" stroke-width="1" opacity="0.4" stroke-dasharray="4 3"/>
+            <text x="275" y="56" text-anchor="middle" fill="#ff8800" font-size="6" opacity="0.7">cross-branch</text>
 
             <!-- Legend -->
-            <rect x="20" y="210" width="500" height="60" fill="#0a0c12" stroke="#333" stroke-width="0.5" rx="4"/>
-            <circle cx="45" cy="228" r="5" fill="#ffcc00"/><text x="60" y="232" fill="#aab" font-size="8">Primary (redundant routing cores)</text>
-            <circle cx="45" cy="248" r="5" fill="#00ffcc"/><text x="60" y="252" fill="#aab" font-size="8">Branch ISL (parent→child)</text>
-            <circle cx="280" cy="228" r="5" fill="#ff8800"/><text x="295" y="232" fill="#aab" font-size="8">Cross-branch ISL (global link)</text>
-            <text x="280" y="252" fill="#667" font-size="8">Each hex = own solar + compute + radiator</text>
+            <rect x="20" y="220" width="520" height="70" fill="#0a0c12" stroke="#333" stroke-width="0.5" rx="4"/>
+            <circle cx="45" cy="242" r="5" fill="#ffcc00"/><text x="60" y="246" fill="#aab" font-size="8">Primary (redundant routing cores)</text>
+            <circle cx="45" cy="264" r="5" fill="#00ffcc"/><text x="60" y="268" fill="#aab" font-size="8">Branch ISL (parent→child)</text>
+            <circle cx="300" cy="242" r="5" fill="#ff8800"/><text x="315" y="246" fill="#aab" font-size="8">Cross-branch ISL (global link)</text>
+            <text x="300" y="268" fill="#667" font-size="8">Each hex = own solar + compute + radiator</text>
         </svg></div>
     </div>
 
@@ -2736,29 +2736,29 @@ function renderCluster(cfg, m) {
             Same GPU hardware at every node — roles are software-defined.
             Topology optimizes data flow between specialized roles for resilience and speed.
         </div>
-        <div class="svg-diagram"><svg viewBox="0 0 540 320" xmlns="http://www.w3.org/2000/svg">
-            <rect x="0" y="0" width="540" height="320" fill="#080a0f"/>
-            <text x="270" y="16" text-anchor="middle" fill="#556" font-size="8" font-style="italic">Disaggregated inference data flow — same HW, different SW roles</text>
+        <div class="svg-diagram"><svg viewBox="0 0 560 370" xmlns="http://www.w3.org/2000/svg">
+            <rect x="0" y="0" width="560" height="370" fill="#080a0f"/>
+            <text x="280" y="16" text-anchor="middle" fill="#556" font-size="8" font-style="italic">Disaggregated inference data flow — same HW, different SW roles</text>
 
             <!-- ROUTING node (center top) -->
-            <rect x="210" y="28" width="120" height="36" rx="6" fill="#1a1410" stroke="#ffcc00" stroke-width="1.5"/>
-            <text x="270" y="46" text-anchor="middle" fill="#ffcc00" font-size="9" font-weight="700">ROUTING</text>
-            <text x="270" y="58" text-anchor="middle" fill="#887700" font-size="7">primary hex-cell</text>
+            <rect x="220" y="30" width="120" height="36" rx="6" fill="#1a1410" stroke="#ffcc00" stroke-width="1.5"/>
+            <text x="280" y="48" text-anchor="middle" fill="#ffcc00" font-size="9" font-weight="700">ROUTING</text>
+            <text x="280" y="60" text-anchor="middle" fill="#887700" font-size="7">primary hex-cell</text>
 
             <!-- PREFILL node (left) -->
-            <rect x="30" y="110" width="120" height="36" rx="6" fill="#0e1828" stroke="#3377ff" stroke-width="1.5"/>
-            <text x="90" y="128" text-anchor="middle" fill="#3377ff" font-size="9" font-weight="700">PREFILL</text>
-            <text x="90" y="140" text-anchor="middle" fill="#334488" font-size="7">compute-bound</text>
+            <rect x="30" y="120" width="120" height="36" rx="6" fill="#0e1828" stroke="#3377ff" stroke-width="1.5"/>
+            <text x="90" y="138" text-anchor="middle" fill="#3377ff" font-size="9" font-weight="700">PREFILL</text>
+            <text x="90" y="150" text-anchor="middle" fill="#334488" font-size="7">compute-bound</text>
 
             <!-- DECODE node (right) -->
-            <rect x="390" y="110" width="120" height="36" rx="6" fill="#1a0e0e" stroke="#ff4030" stroke-width="1.5"/>
-            <text x="450" y="128" text-anchor="middle" fill="#ff4030" font-size="9" font-weight="700">DECODE</text>
-            <text x="450" y="140" text-anchor="middle" fill="#883322" font-size="7">memory-BW-bound</text>
+            <rect x="410" y="120" width="120" height="36" rx="6" fill="#1a0e0e" stroke="#ff4030" stroke-width="1.5"/>
+            <text x="470" y="138" text-anchor="middle" fill="#ff4030" font-size="9" font-weight="700">DECODE</text>
+            <text x="470" y="150" text-anchor="middle" fill="#883322" font-size="7">memory-BW-bound</text>
 
             <!-- CONTEXT node (center bottom) -->
-            <rect x="210" y="200" width="120" height="36" rx="6" fill="#0e1a10" stroke="#33ee55" stroke-width="1.5"/>
-            <text x="270" y="218" text-anchor="middle" fill="#33ee55" font-size="9" font-weight="700">CONTEXT</text>
-            <text x="270" y="230" text-anchor="middle" fill="#228833" font-size="7">KV-cache store</text>
+            <rect x="220" y="230" width="120" height="36" rx="6" fill="#0e1a10" stroke="#33ee55" stroke-width="1.5"/>
+            <text x="280" y="248" text-anchor="middle" fill="#33ee55" font-size="9" font-weight="700">CONTEXT</text>
+            <text x="280" y="260" text-anchor="middle" fill="#228833" font-size="7">KV-cache store</text>
 
             <!-- Flow arrows with labels -->
             <defs>
@@ -2769,38 +2769,38 @@ function renderCluster(cfg, m) {
             </defs>
 
             <!-- 1. User request → ROUTING -->
-            <line x1="270" y1="4" x2="270" y2="28" stroke="#e8a838" stroke-width="2" marker-end="url(#flow_ah)"/>
-            <text x="290" y="20" fill="#aa8800" font-size="7">user request</text>
+            <line x1="280" y1="4" x2="280" y2="30" stroke="#e8a838" stroke-width="2" marker-end="url(#flow_ah)"/>
+            <text x="300" y="20" fill="#aa8800" font-size="7">user request</text>
 
             <!-- 2. ROUTING → PREFILL (dispatch) -->
-            <line x1="210" y1="55" x2="150" y2="110" stroke="#5cb8e6" stroke-width="1.5" marker-end="url(#flow_blue)"/>
-            <text x="155" y="80" fill="#5cb8e6" font-size="7">dispatch prompt</text>
+            <line x1="220" y1="58" x2="150" y2="120" stroke="#5cb8e6" stroke-width="1.5" marker-end="url(#flow_blue)"/>
+            <text x="160" y="86" fill="#5cb8e6" font-size="7">dispatch prompt</text>
 
             <!-- 3. PREFILL → DECODE (KV cache migration) -->
-            <line x1="150" y1="140" x2="390" y2="128" stroke="#ff6644" stroke-width="2" marker-end="url(#flow_red)"/>
-            <text x="250" y="122" fill="#ff6644" font-size="7" text-anchor="middle">KV cache (${(0.5*cfg.seqLen/1000).toFixed(1)} GB)</text>
-            <text x="250" y="133" fill="#884422" font-size="6" text-anchor="middle">${(0.5*cfg.seqLen/1000*8/(cfg.islRateGbps)*1000).toFixed(0)} ms @ ${cfg.islRateGbps} Gbps ISL</text>
+            <line x1="150" y1="150" x2="410" y2="138" stroke="#ff6644" stroke-width="2" marker-end="url(#flow_red)"/>
+            <text x="260" y="164" fill="#ff6644" font-size="7" text-anchor="middle">KV cache (${(0.5*cfg.seqLen/1000).toFixed(1)} GB)</text>
+            <text x="260" y="178" fill="#884422" font-size="6" text-anchor="middle">${(0.5*cfg.seqLen/1000*8/(cfg.islRateGbps)*1000).toFixed(0)} ms @ ${cfg.islRateGbps} Gbps ISL</text>
 
             <!-- 4. DECODE → CONTEXT (cache offload for long contexts) -->
-            <line x1="430" y1="146" x2="330" y2="200" stroke="#33ee55" stroke-width="1.5" marker-end="url(#flow_green)"/>
-            <text x="400" y="180" fill="#33ee55" font-size="7">cache offload</text>
+            <line x1="450" y1="156" x2="340" y2="230" stroke="#33ee55" stroke-width="1.5" marker-end="url(#flow_green)"/>
+            <text x="420" y="198" fill="#33ee55" font-size="7">cache offload</text>
 
             <!-- 5. CONTEXT → DECODE (cache fetch on continuation) -->
-            <line x1="270" y1="236" x2="410" y2="146" stroke="#33ee55" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#flow_green)"/>
-            <text x="360" y="200" fill="#228833" font-size="6">cache fetch</text>
+            <line x1="290" y1="266" x2="430" y2="156" stroke="#33ee55" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#flow_green)"/>
+            <text x="380" y="224" fill="#228833" font-size="6">cache fetch</text>
 
             <!-- 6. DECODE → ROUTING (stream tokens back) -->
-            <line x1="440" y1="110" x2="330" y2="60" stroke="#e8a838" stroke-width="1.5" marker-end="url(#flow_ah)"/>
-            <text x="400" y="80" fill="#aa8800" font-size="7">stream tokens</text>
+            <line x1="460" y1="120" x2="340" y2="62" stroke="#e8a838" stroke-width="1.5" marker-end="url(#flow_ah)"/>
+            <text x="420" y="86" fill="#aa8800" font-size="7">stream tokens</text>
 
             <!-- 7. ROUTING → user (response) -->
-            <text x="350" y="42" fill="#887700" font-size="6">→ user</text>
+            <text x="360" y="44" fill="#887700" font-size="6">→ user</text>
 
             <!-- Resilience note -->
-            <rect x="20" y="260" width="500" height="50" fill="#0a0c12" stroke="#333" stroke-width="0.5" rx="4"/>
-            <text x="270" y="276" text-anchor="middle" fill="#aab" font-size="8" font-weight="600">Resilience: any node can assume any role via software reconfiguration</text>
-            <text x="270" y="292" text-anchor="middle" fill="#667" font-size="7">Node failure → remaining nodes redistribute roles → cluster degrades gracefully</text>
-            <text x="270" y="304" text-anchor="middle" fill="#667" font-size="7">Same GPU HW everywhere = one SKU manufacturing, hot-swappable hex-cells</text>
+            <rect x="20" y="290" width="520" height="68" fill="#0a0c12" stroke="#333" stroke-width="0.5" rx="4"/>
+            <text x="280" y="310" text-anchor="middle" fill="#aab" font-size="8" font-weight="600">Resilience: any node can assume any role via software reconfiguration</text>
+            <text x="280" y="328" text-anchor="middle" fill="#667" font-size="7">Node failure → remaining nodes redistribute roles → cluster degrades gracefully</text>
+            <text x="280" y="346" text-anchor="middle" fill="#667" font-size="7">Same GPU HW everywhere = one SKU manufacturing, hot-swappable hex-cells</text>
         </svg></div>
 
         <div class="section-header">Traffic Matrix <span class="chip chip-blue">Gbps per flow</span></div>
