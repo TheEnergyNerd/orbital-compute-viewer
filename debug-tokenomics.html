@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tokenomics Debug — Orbital Compute</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: 'IBM Plex Mono', monospace; font-size: 13px; background: #1a1a18; color: #d0d4dc; padding: 20px; }
+h1 { color: #1a8a6a; margin-bottom: 10px; font-size: 18px; }
+h2 { color: #e8a838; margin: 20px 0 8px; font-size: 14px; border-bottom: 1px solid #333; padding-bottom: 4px; }
+h3 { color: #5cb8e6; margin: 12px 0 6px; font-size: 12px; }
+.config-select { margin: 10px 0; }
+.config-select button { padding: 6px 14px; margin: 2px; background: #2a2a28; color: #aab; border: 1px solid #444; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 12px; }
+.config-select button.active { background: #1a8a6a; color: #fff; border-color: #1a8a6a; }
+table { border-collapse: collapse; margin: 8px 0; width: 100%; }
+th, td { padding: 4px 10px; text-align: left; border: 1px solid #333; font-size: 12px; }
+th { background: #222; color: #5cb8e6; font-weight: 600; }
+td { background: #1e1e1c; }
+td.num { text-align: right; font-family: 'IBM Plex Mono', monospace; }
+td.good { color: #33ee55; }
+td.bad { color: #ff4030; }
+td.warn { color: #e8a838; }
+td.input { color: #5cb8e6; background: #1a2228; }
+td.calc { color: #d0d4dc; }
+td.formula { color: #888; font-style: italic; font-size: 11px; }
+.note { color: #667; font-size: 11px; margin: 4px 0; }
+.sanity { padding: 8px; margin: 8px 0; border-radius: 4px; }
+.sanity.ok { background: #0a2a0a; border: 1px solid #33ee55; color: #33ee55; }
+.sanity.fail { background: #2a0a0a; border: 1px solid #ff4030; color: #ff4030; }
+.section { margin: 16px 0; padding: 12px; background: #222220; border: 1px solid #333; border-radius: 6px; }
+#output { max-width: 1200px; margin: 0 auto; }
+.comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 768px) { .comparison { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div id="output">
+<h1>🔧 Tokenomics Debug — Every Intermediate Value</h1>
+<p class="note">This page computes all tokenomics values step-by-step with full formula traceability. Edit CONFIGS in viewer.html and reload to see changes.</p>
+
+<div class="config-select" id="config-btns"></div>
+<div id="debug-content"></div>
+</div>
+
+<script>
+// ── Pull CONFIGS from viewer.html (copy the object) ──
+const CONFIGS = {
+    DP1: {
+        name: "DP1 GB300 Mini", shortName: "DP1",
+        busPwr: 30, computeKw: 27.6, thermalKw: 30,
+        solarM2: 174, radM2: 40, radTempK: 370,
+        earthVF: 0.24, sidedness: 1.80,
+        gpuPowerW: 1400, gpuCount: 16, gpuType: "NVIDIA B300 (rad-screened)",
+        gpuGFLOPS_W: 5000, gpuMemGB: 192, gpuMemType: "HBM3E",
+        gpuMemBwTBs: 8.0,
+        orbit: "Dawn-dusk SSO, 625 km", altitude: 625,
+        year: 2026, satLife: 5, waccOrbital: 0.15,
+        launchCostPerKg: 1500, dryMassKg: 760, launchVehicle: "Falcon 9",
+        totalProgramCost: 12225487,
+        massSolar: 174, massRadiator: 320, massCompute: 40, massStructure: 245,
+        islCount: 4, islRateGbps: 100,
+        groundLinkGbps: 10, groundStations: 2,
+        contactFraction: 0.30, storeAndForward: true,
+        clusterSize: 1, clusterTopology: "standalone",
+        tensorParallel: 1, pipelineParallel: 1,
+        batchSize: 8, seqLen: 2048, radHardening: 0.55,
+    },
+    DP1B: {
+        name: "DP1B AI Sat Mini", shortName: "DP1B",
+        busPwr: 100, computeKw: 92, thermalKw: 100,
+        solarM2: 360, radM2: 219, radTempK: 320,
+        earthVF: 0.24, sidedness: 1.80,
+        gpuPowerW: 1400, gpuCount: 48, gpuType: "NVIDIA B300 (rad-screened)",
+        gpuGFLOPS_W: 5000, gpuMemGB: 192, gpuMemType: "HBM3E",
+        gpuMemBwTBs: 8.0,
+        year: 2027, satLife: 5, waccOrbital: 0.15,
+        launchCostPerKg: 800, dryMassKg: 2400, launchVehicle: "Starship",
+        totalProgramCost: 18500000,
+        massSolar: 360, massRadiator: 1892, massCompute: 120, massStructure: 900,
+        islCount: 4, islRateGbps: 100,
+        clusterSize: 1, clusterTopology: "standalone",
+        tensorParallel: 2, pipelineParallel: 1,
+        batchSize: 16, seqLen: 4096, radHardening: 0.60,
+    },
+    DP2: {
+        name: "DP2 Space-1 Vera Rubin", shortName: "DP2",
+        busPwr: 140, computeKw: 128.8, thermalKw: 140,
+        solarM2: 723, radM2: 187, radTempK: 370,
+        earthVF: 0.24, sidedness: 1.80,
+        gpuPowerW: 1800, gpuCount: 64, gpuType: "NVIDIA Vera Rubin Space",
+        gpuGFLOPS_W: 2800, gpuMemGB: 192, gpuMemType: "HBM3E",
+        gpuMemBwTBs: 4.8,
+        year: 2028, satLife: 5, waccOrbital: 0.15,
+        launchCostPerKg: 600, dryMassKg: 3229, launchVehicle: "Starship",
+        totalProgramCost: 23301847,
+        massSolar: 723, massRadiator: 1523, massCompute: 200, massStructure: 1057,
+        islCount: 4, islRateGbps: 100,
+        clusterSize: 5, clusterTopology: "hex-cell dragonfly",
+        tensorParallel: 4, pipelineParallel: 2,
+        batchSize: 32, seqLen: 4096, radHardening: 0.65,
+    },
+    DP3: {
+        name: "DP3 Tesla D3 Photonic", shortName: "DP3",
+        busPwr: 1092, computeKw: 1014, thermalKw: 1092,
+        solarM2: 4188, radM2: 1333, radTempK: 370,
+        earthVF: 0.22, sidedness: 1.72,
+        gpuPowerW: 250, gpuCount: 3481, gpuType: "Tesla D3 Photonic (4K cryo)",
+        gpuGFLOPS_W: 15000, gpuMemGB: 64, gpuMemType: "Cryo-SRAM",
+        gpuMemBwTBs: 12.0,
+        year: 2030, satLife: 5, waccOrbital: 0.15,
+        launchCostPerKg: 403, dryMassKg: 22523, launchVehicle: "Starship",
+        totalProgramCost: 129633302,
+        massSolar: 4188, massRadiator: 10773, massCompute: 1660, massStructure: 7486,
+        islCount: 6, islRateGbps: 400,
+        clusterSize: 10, clusterTopology: "hex-cell dragonfly+",
+        tensorParallel: 8, pipelineParallel: 4,
+        batchSize: 64, seqLen: 8192, radHardening: 0.80,
+    },
+    DP3B: {
+        name: "DP3B D3 Electrical", shortName: "DP3B",
+        busPwr: 1092, computeKw: 1014, thermalKw: 1092,
+        solarM2: 4188, radM2: 1333, radTempK: 370,
+        earthVF: 0.22, sidedness: 1.72,
+        gpuPowerW: 250, gpuCount: 3481, gpuType: "Tesla D3 (rad-hard)",
+        gpuGFLOPS_W: 4200, gpuMemGB: 256, gpuMemType: "HBM4",
+        gpuMemBwTBs: 8.0,
+        year: 2030, satLife: 5, waccOrbital: 0.15,
+        launchCostPerKg: 403, dryMassKg: 24345, launchVehicle: "Starship",
+        totalProgramCost: 145800000,
+        massSolar: 4188, massRadiator: 10773, massCompute: 4060, massStructure: 7486,
+        islCount: 8, islRateGbps: 200,
+        clusterSize: 10, clusterTopology: "hex-cell fat-tree",
+        tensorParallel: 8, pipelineParallel: 4,
+        batchSize: 128, seqLen: 8192, radHardening: 0.70,
+    },
+};
+
+// Ground GPU specs (same as in viewer.html)
+const GROUND_GPUS = {
+    'NVIDIA B300':       { name: 'B300 NVL72 (ground)', cost: 45000, tdpW: 1200, memGB: 192, memBwTBs: 8.0, tflops: 9000 },
+    'NVIDIA Vera Rubin': { name: 'Vera Rubin NVL72 (ground)', cost: 75000, tdpW: 1800, memGB: 288, memBwTBs: 12.0, tflops: 15000 },
+    'Tesla D3 Photonic': { name: 'D3 Photonic (ground)', cost: 40000, tdpW: 300, memGB: 64, memBwTBs: 12.0, tflops: 18000 },
+    'Tesla D3':          { name: 'D3 Electrical (ground)', cost: 30000, tdpW: 350, memGB: 256, memBwTBs: 8.0, tflops: 6000 },
+};
+
+const MODELS = [
+    { name: '8B', params: 8e9, weight: 0.25, quant: 'INT8', bytesPerParam: 1 },
+    { name: '70B', params: 70e9, weight: 0.45, quant: 'FP8', bytesPerParam: 1 },
+    { name: '405B', params: 405e9, weight: 0.20, quant: 'FP8', bytesPerParam: 1 },
+    { name: '1T', params: 1e12, weight: 0.10, quant: 'FP4', bytesPerParam: 0.5 },
+];
+
+function fmt(n, dec=2) { return typeof n === 'number' ? n.toLocaleString(undefined, {minimumFractionDigits: dec, maximumFractionDigits: dec}) : n; }
+function fmtD(n) { return '$' + fmt(n, 0); }
+function fmtM(n) { return '$' + fmt(n/1e6, 2) + 'M'; }
+
+function row(label, value, formula, cls='') {
+    return `<tr><td>${label}</td><td class="num ${cls}">${value}</td><td class="formula">${formula || ''}</td></tr>`;
+}
+
+function computeDebug(cfgKey) {
+    const cfg = CONFIGS[cfgKey];
+    const cs = cfg.clusterSize || 1;
+
+    // ── STEP 1: Hardware basics ──
+    const gpuCount = cfg.gpuCount * cs;
+    const satLife = cfg.satLife || 5;
+    const util = 0.85;
+    const radPenalty = cfg.radHardening || 0.60;
+    const totalGpuHours = gpuCount * satLife * 8760 * util;
+
+    // Compute effective TFLOPS (simplified — matches viewer.html computeMetrics)
+    const computeWatts = cfg.computeKw * 1000;
+    const gflops = computeWatts * cfg.gpuGFLOPS_W;
+    const tflops = gflops / 1000;
+    const effectiveTFLOPS = tflops * radPenalty;
+    const tflopsPerGpu = (effectiveTFLOPS / cfg.gpuCount) * 1e12; // FLOPS per GPU
+
+    const memBwPerGpu = cfg.gpuMemBwTBs * 1e12;
+
+    let html = `<h2>Config: ${cfg.name} (${cfgKey})</h2>`;
+
+    // ── Section 1: Hardware Inputs ──
+    html += `<div class="section"><h3>1. Hardware Inputs</h3>
+    <table>
+    <tr><th>Variable</th><th>Value</th><th>Source / Formula</th></tr>
+    ${row('GPUs per satellite', cfg.gpuCount, 'cfg.gpuCount', 'input')}
+    ${row('Cluster size', cs, 'cfg.clusterSize', 'input')}
+    ${row('Total GPUs', gpuCount, `${cfg.gpuCount} × ${cs}`)}
+    ${row('GPU type', cfg.gpuType, '', 'input')}
+    ${row('GPU TDP', cfg.gpuPowerW + ' W', 'cfg.gpuPowerW', 'input')}
+    ${row('GPU GFLOPS/W', cfg.gpuGFLOPS_W.toLocaleString(), 'cfg.gpuGFLOPS_W', 'input')}
+    ${row('GPU memory', cfg.gpuMemGB + ' GB', 'cfg.gpuMemGB', 'input')}
+    ${row('GPU mem BW', cfg.gpuMemBwTBs + ' TB/s', 'cfg.gpuMemBwTBs', 'input')}
+    ${row('Compute power', cfg.computeKw + ' kW', 'cfg.computeKw', 'input')}
+    ${row('Rad hardening', (radPenalty * 100).toFixed(0) + '%', 'cfg.radHardening', 'input')}
+    ${row('Utilization', (util * 100).toFixed(0) + '%', 'hardcoded 0.85')}
+    ${row('Satellite life', satLife + ' years', 'cfg.satLife', 'input')}
+    ${row('Total TFLOPS (raw)', fmt(tflops, 0), `computeKw×1000 × GFLOPS_W / 1000 = ${cfg.computeKw*1000} × ${cfg.gpuGFLOPS_W} / 1000`)}
+    ${row('Total TFLOPS (eff)', fmt(effectiveTFLOPS, 0), `${fmt(tflops,0)} × ${radPenalty}`)}
+    ${row('TFLOPS per GPU (eff)', fmt(effectiveTFLOPS / cfg.gpuCount, 1), `${fmt(effectiveTFLOPS,0)} / ${cfg.gpuCount}`)}
+    ${row('Total GPU-hours', fmt(totalGpuHours, 0), `${gpuCount} × ${satLife} × 8760 × ${util}`)}
+    </table></div>`;
+
+    // ── Section 2: Token Throughput ──
+    html += `<div class="section"><h3>2. Token Throughput (per model)</h3>
+    <table>
+    <tr><th>Model</th><th>Params</th><th>Quant</th><th>Weight</th><th>Mem (GB)</th><th>GPUs/copy</th><th>Copies</th><th>Decode/copy (tok/s)</th><th>Decode total</th><th>Weighted</th></tr>`;
+
+    let totalWeightedDecode = 0;
+    let totalWeightedPrefill = 0;
+    for (const mod of MODELS) {
+        const modelMemGB = mod.params * mod.bytesPerParam / 1e9;
+        const gpusNeeded = Math.max(1, Math.ceil(modelMemGB / cfg.gpuMemGB));
+        const copies = Math.max(1, Math.floor(gpuCount / gpusNeeded));
+        const decodePerCopy = (memBwPerGpu * gpusNeeded) / (mod.params * mod.bytesPerParam);
+        const prefillPerCopy = (tflopsPerGpu * gpusNeeded) / (2 * mod.params);
+        const totalDecode = decodePerCopy * copies;
+        const totalPrefill = prefillPerCopy * copies;
+        const weightedDecode = totalDecode * mod.weight;
+        const weightedPrefill = totalPrefill * mod.weight;
+        totalWeightedDecode += weightedDecode;
+        totalWeightedPrefill += weightedPrefill;
+
+        html += `<tr>
+        <td>${mod.name}</td><td class="num">${(mod.params/1e9).toFixed(0)}B</td>
+        <td>${mod.quant}</td><td class="num">${(mod.weight*100).toFixed(0)}%</td>
+        <td class="num">${fmt(modelMemGB, 1)}</td><td class="num">${gpusNeeded}</td>
+        <td class="num">${copies}</td>
+        <td class="num">${fmt(decodePerCopy, 1)}</td>
+        <td class="num">${fmt(totalDecode, 0)}</td>
+        <td class="num">${fmt(weightedDecode, 0)}</td></tr>`;
+    }
+
+    const blendedTokS = totalWeightedDecode;
+    const tokPerDay = blendedTokS * 86400 * util * radPenalty;
+    const tokPerYear = tokPerDay * 365;
+    const tokLifetime = tokPerYear * satLife;
+
+    html += `</table>
+    <table>
+    <tr><th>Aggregate</th><th>Value</th><th>Formula</th></tr>
+    ${row('Total weighted decode', fmt(totalWeightedDecode, 0) + ' tok/s', 'Σ(model_decode × weight)')}
+    ${row('Total weighted prefill', fmt(totalWeightedPrefill, 0) + ' tok/s', 'Σ(model_prefill × weight)')}
+    ${row('Blended (decode-limited)', fmt(blendedTokS, 0) + ' tok/s', 'using decode only (bottleneck)')}
+    ${row('After util + rad', fmt(blendedTokS * util * radPenalty, 0) + ' tok/s', `${fmt(blendedTokS,0)} × ${util} × ${radPenalty}`)}
+    ${row('Tokens/day', fmt(tokPerDay, 0), `${fmt(blendedTokS*util*radPenalty,0)} × 86400`)}
+    ${row('Tokens/year', fmt(tokPerYear, 0), '')}
+    ${row('Tokens/lifetime', fmt(tokLifetime, 0), `${fmt(tokPerYear,0)} × ${satLife}`)}
+    ${row('Effective tok/GPU-hr', fmt((blendedTokS * util * radPenalty) / gpuCount * 3600, 0), `(blended × util × rad) / gpuCount × 3600`)}
+    </table></div>`;
+
+    // ── Section 3: Pricing ──
+    const targetGpuHrRate = 2.90;
+    const effTokPerGpuHr = (blendedTokS * util * radPenalty) / gpuCount * 3600;
+    const impliedPricePerMTok = targetGpuHrRate / (effTokPerGpuHr / 1e6);
+
+    const tiers = [
+        { name: 'Premium', mult: 2.0, frac: 0.10 },
+        { name: 'Standard', mult: 1.0, frac: 0.45 },
+        { name: 'Economy', mult: 0.5, frac: 0.35 },
+        { name: 'Training', mult: 0.3, frac: 0.10 },
+    ];
+    let blendedPrice = 0;
+    for (const t of tiers) blendedPrice += impliedPricePerMTok * t.mult * t.frac;
+
+    const revenuePerYear = (tokPerYear / 1e6) * blendedPrice;
+    const revenueLifetime = revenuePerYear * satLife;
+
+    html += `<div class="section"><h3>3. Pricing Model</h3>
+    <table>
+    <tr><th>Variable</th><th>Value</th><th>Formula</th></tr>
+    ${row('Target GPU-hr rate', '$' + targetGpuHrRate.toFixed(2), 'From SemiAnalysis TCO: $2.28 capital + $0.62 hosting', 'input')}
+    ${row('Eff tok/GPU-hr', fmt(effTokPerGpuHr, 0), '')}
+    ${row('Implied $/MTok', '$' + fmt(impliedPricePerMTok, 4), `$${targetGpuHrRate} / (${fmt(effTokPerGpuHr,0)} / 1e6)`)}
+    </table>
+    <table>
+    <tr><th>Tier</th><th>Multiplier</th><th>$/MTok</th><th>Traffic %</th><th>Contribution</th></tr>
+    ${tiers.map(t => `<tr><td>${t.name}</td><td class="num">${t.mult}×</td><td class="num">$${fmt(impliedPricePerMTok * t.mult, 4)}</td><td class="num">${(t.frac*100).toFixed(0)}%</td><td class="num">$${fmt(impliedPricePerMTok * t.mult * t.frac, 4)}</td></tr>`).join('')}
+    </table>
+    <table>
+    ${row('Blended price', '$' + fmt(blendedPrice, 4) + '/MTok', 'Σ(tier_price × tier_fraction)')}
+    ${row('Revenue/year', fmtM(revenuePerYear), `(tokPerYear / 1e6) × blendedPrice`)}
+    ${row('Revenue/lifetime', fmtM(revenueLifetime), `revenuePerYear × ${satLife}`)}
+    </table></div>`;
+
+    // ── Section 4: Cost Structure ──
+    const launchCost = (cfg.dryMassKg || 1000) * (cfg.launchCostPerKg || 500) * cs;
+    const satBuildCost = (cfg.totalProgramCost || 10e6) * cs;
+    const totalCapex = launchCost + satBuildCost;
+
+    const groundStationOpex = 2e6 * cs;
+    const missionControlOpex = 1.5e6;
+    const insuranceOpex = totalCapex * 0.03;
+    const annualOpex = groundStationOpex + missionControlOpex + insuranceOpex;
+    const lifetimeOpex = annualOpex * satLife;
+    const totalCost = totalCapex + lifetimeOpex;
+
+    html += `<div class="section"><h3>4. Cost Structure</h3>
+    <table>
+    <tr><th>Item</th><th>Value</th><th>Formula</th></tr>
+    ${row('Satellite build cost (per sat)', fmtD(cfg.totalProgramCost), 'cfg.totalProgramCost', 'input')}
+    ${row('Satellite build × ' + cs, fmtM(satBuildCost), `${fmtD(cfg.totalProgramCost)} × ${cs}`)}
+    ${row('Dry mass (per sat)', (cfg.dryMassKg||1000).toLocaleString() + ' kg', 'cfg.dryMassKg', 'input')}
+    ${row('Launch $/kg', '$' + (cfg.launchCostPerKg||500), 'cfg.launchCostPerKg', 'input')}
+    ${row('Launch cost', fmtM(launchCost), `${(cfg.dryMassKg||1000)} × ${(cfg.launchCostPerKg||500)} × ${cs}`)}
+    ${row('Total CAPEX', fmtM(totalCapex), 'satBuild + launch', 'warn')}
+    ${row('Ground segment/yr', fmtM(groundStationOpex), `$2M × ${cs}`)}
+    ${row('Mission control/yr', fmtM(missionControlOpex), '$1.5M shared')}
+    ${row('Insurance/yr (3%)', fmtM(insuranceOpex), `${fmtM(totalCapex)} × 3%`)}
+    ${row('Annual OPEX', fmtM(annualOpex), 'ground + mission + insurance')}
+    ${row('Lifetime OPEX', fmtM(lifetimeOpex), `${fmtM(annualOpex)} × ${satLife}`)}
+    ${row('Total Cost (TCO)', fmtM(totalCost), 'CAPEX + lifetime OPEX', 'warn')}
+    </table></div>`;
+
+    // ── Section 5: Unit Economics ──
+    const costPerMTok = totalCost / (tokLifetime / 1e6);
+    const grossMargin = (blendedPrice - costPerMTok) / blendedPrice;
+    const costPerGpuHour = totalCost / totalGpuHours;
+    const netIncome = revenueLifetime - totalCost;
+    const roic = netIncome / totalCapex;
+    const annualNetCF = revenuePerYear - annualOpex;
+    const payback = annualNetCF > 0 ? totalCapex / annualNetCF : Infinity;
+
+    html += `<div class="section"><h3>5. Unit Economics</h3>
+    <table>
+    <tr><th>Metric</th><th>Value</th><th>Formula</th></tr>
+    ${row('Cost per MTok', '$' + fmt(costPerMTok, 4), `TCO / (tokLifetime / 1e6) = ${fmtM(totalCost)} / ${fmt(tokLifetime/1e6, 0)} MTok`)}
+    ${row('Revenue per MTok', '$' + fmt(blendedPrice, 4), 'blended tier pricing')}
+    ${row('Gross margin', (grossMargin*100).toFixed(1) + '%', `(price - cost) / price`, grossMargin > 0 ? 'good' : 'bad')}
+    ${row('Cost per GPU-hour', '$' + fmt(costPerGpuHour, 2), `TCO / totalGpuHours = ${fmtM(totalCost)} / ${fmt(totalGpuHours,0)}`)}
+    ${row('Target GPU-hr rate', '$' + targetGpuHrRate.toFixed(2), 'from SemiAnalysis TCO', 'input')}
+    ${row('Cost vs revenue (GPU-hr)', '$' + fmt(costPerGpuHour, 2) + ' vs $' + targetGpuHrRate.toFixed(2), '', costPerGpuHour > targetGpuHrRate ? 'bad' : 'good')}
+    ${row('Net income (lifetime)', fmtM(netIncome), 'revenue - TCO', netIncome > 0 ? 'good' : 'bad')}
+    ${row('ROIC', (roic*100).toFixed(1) + '%', 'netIncome / CAPEX', roic > 0 ? 'good' : 'bad')}
+    ${row('Annual net cash flow', fmtM(annualNetCF), 'revenue/yr - OPEX/yr', annualNetCF > 0 ? 'good' : 'bad')}
+    ${row('Payback period', payback === Infinity ? 'N/A (negative CF)' : fmt(payback, 1) + ' years', 'CAPEX / annualNetCF')}
+    </table>
+
+    <div class="sanity ${costPerGpuHour > targetGpuHrRate * 3 ? 'fail' : costPerGpuHour > targetGpuHrRate ? 'fail' : 'ok'}">
+    <b>Sanity check:</b> Orbital GPU-hr costs $${fmt(costPerGpuHour,2)}, ground GPU-hr is $${targetGpuHrRate.toFixed(2)}.
+    Orbital is ${fmt(costPerGpuHour / targetGpuHrRate, 1)}× ground.
+    ${costPerGpuHour > targetGpuHrRate ? '❌ Orbital is MORE expensive than ground.' : '✅ Orbital is cheaper than ground!'}
+    </div>
+    </div>`;
+
+    // ── Section 6: What-if sensitivity ──
+    html += `<div class="section"><h3>6. Sensitivity — What Makes It Work?</h3>
+    <table>
+    <tr><th>Scenario</th><th>$/GPU-hr orbital</th><th>vs ground ($2.90)</th><th>Viable?</th></tr>`;
+
+    const scenarios = [
+        { name: 'Current', capex: totalCapex, opex: lifetimeOpex, gpuHrs: totalGpuHours },
+        { name: 'Launch cost halved', capex: launchCost/2 + satBuildCost, opex: lifetimeOpex * 0.95, gpuHrs: totalGpuHours },
+        { name: 'Sat build cost halved', capex: launchCost + satBuildCost/2, opex: lifetimeOpex * 0.95, gpuHrs: totalGpuHours },
+        { name: '2× more GPUs per sat', capex: totalCapex * 1.3, opex: lifetimeOpex * 1.2, gpuHrs: totalGpuHours * 2 },
+        { name: '10yr design life', capex: totalCapex, opex: annualOpex * 10, gpuHrs: gpuCount * 10 * 8760 * util },
+        { name: 'Launch $50/kg + 2× GPUs', capex: cfg.dryMassKg * 50 * cs + satBuildCost, opex: lifetimeOpex * 0.9, gpuHrs: totalGpuHours * 2 },
+    ];
+
+    for (const sc of scenarios) {
+        const scCost = (sc.capex + sc.opex) / sc.gpuHrs;
+        const viable = scCost <= 2.90;
+        html += `<tr><td>${sc.name}</td><td class="num">$${fmt(scCost, 2)}</td><td class="num">${fmt(scCost / 2.90, 1)}×</td><td class="${viable ? 'good' : 'bad'}">${viable ? '✅ YES' : '❌ No'}</td></tr>`;
+    }
+    html += `</table></div>`;
+
+    return html;
+}
+
+// ── Build config buttons ──
+const btns = document.getElementById('config-btns');
+const content = document.getElementById('debug-content');
+let currentCfg = 'DP2';
+
+function render(key) {
+    currentCfg = key;
+    document.querySelectorAll('.config-select button').forEach(b => b.classList.toggle('active', b.dataset.cfg === key));
+    content.innerHTML = computeDebug(key);
+}
+
+for (const key of Object.keys(CONFIGS)) {
+    const btn = document.createElement('button');
+    btn.textContent = key;
+    btn.dataset.cfg = key;
+    btn.onclick = () => render(key);
+    btns.appendChild(btn);
+}
+
+render('DP2');
+</script>
+</body>
+</html>

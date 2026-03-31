@@ -5356,6 +5356,14 @@ debugBtn.style.cssText = 'position:fixed;bottom:10px;right:10px;z-index:9999;pad
 debugBtn.addEventListener('click', exportDebugReference);
 document.body.appendChild(debugBtn);
 
+// Tokenomics debug link
+const tokDebugBtn = document.createElement('a');
+tokDebugBtn.textContent = 'Tokenomics Debug';
+tokDebugBtn.href = 'debug-tokenomics.html';
+tokDebugBtn.target = '_blank';
+tokDebugBtn.style.cssText = 'position:fixed;bottom:10px;right:140px;z-index:9999;padding:6px 12px;background:#2a1a1a;color:#e8a838;border:1px solid #e8a838;border-radius:4px;font-size:11px;cursor:pointer;font-family:inherit;text-decoration:none';
+document.body.appendChild(tokDebugBtn);
+
 </script>
 </body>
 </html>
