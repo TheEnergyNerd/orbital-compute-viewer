@@ -621,6 +621,30 @@ const CONFIGS = {
 };
 
 // =====================================================================
+// $/MTok HELPER — single source of truth for token pricing
+// =====================================================================
+// costPerGpuHr: $/GPU-hr (e.g. m.lcocNet)
+// clusterTokPerSec: total cluster throughput in tok/s
+// gpuCount: number of GPUs in the cluster
+//
+// Returns: $/MTok (cost per million tokens)
+//
+// Formula: (costPerGpuHr × gpuCount) / (clusterTokPerSec × 3600 / 1e6)
+//        = total cluster $/hr / MTok per hr
+function dollarsPerMTokFromCluster(costPerGpuHr, clusterTokPerSec, gpuCount) {
+    if (!isFinite(clusterTokPerSec) || clusterTokPerSec <= 0 ||
+        !isFinite(costPerGpuHr) || costPerGpuHr <= 0 || !gpuCount) return Infinity;
+    const clusterCostPerHr = costPerGpuHr * gpuCount;
+    const mtokPerHr = clusterTokPerSec * 3600 / 1e6;
+    const result = clusterCostPerHr / mtokPerHr;
+    // Sanity check: if GPU-hr rate is >$5 but $/MTok is <$1, something is wrong
+    if (result < 1 && costPerGpuHr > 5) {
+        console.warn(`Implausibly low $/MTok (${result.toFixed(4)}) — check units. costPerGpuHr=${costPerGpuHr}, clusterTok/s=${clusterTokPerSec}, gpuCount=${gpuCount}`);
+    }
+    return result;
+}
+
+// =====================================================================
 // COMPUTE DERIVED METRICS
 // =====================================================================
 function computeMetrics(cfg) {
@@ -1739,9 +1763,10 @@ function analyzeCustomModel(cfg, m) {
     const trainTokPerS = (clusterTFLOPS * trainMFU * 1e12) / (6 * activeParams);
     const finetuneHours = 1e9 / trainTokPerS / 3600;
 
-    // $/M tokens: costPerHr / (tok/s × 3600 s/hr / 1e6 tok/MTok)
-    const costPerHr = m.lcocNet || cfg.lcocNet || (cfg.busPwr * 1500 / 3600);
-    const costPerMTok = effTPS > 0 ? costPerHr / (effTPS * 3600 / 1e6) : Infinity;
+    // $/M tokens — uses cluster-level cost and cluster-level throughput
+    const costPerGpuHr = m.lcocNet || cfg.lcocNet || (cfg.busPwr * 1500 / 3600);
+    const clusterGpuCount = m.oruCount * cs;
+    const costPerMTok = dollarsPerMTokFromCluster(costPerGpuHr, effTPS, clusterGpuCount);
 
     // Nodes needed if doesn't fit
     const nodesNeeded = Math.ceil(weightMemGB / (m.totalMemTB * 1024));
@@ -2164,8 +2189,9 @@ Arithmetic intensity: 2 FLOPs/byte (low → memory bound)</div>
             const modDecodeTps = totalMemBwBytesPerS / (activeP * bytesPerParam);
             const modBatchTps = modDecodeTps * Math.min(cfg.batchSize, 32);
             const modEffTps = Math.min(modBatchTps, bwLimitTokSec);
-            const costPerHr = m.lcocNet || cfg.lcocNet || (cfg.busPwr * 1500 / 3600);
-            const costPerMTok = costPerHr / (modEffTps * 3600 / 1e6);
+            const costPerGpuHr2 = m.lcocNet || cfg.lcocNet || (cfg.busPwr * 1500 / 3600);
+            const servingGpuCount = m.oruCount * (cfg.clusterSize || 1);
+            const costPerMTok = dollarsPerMTokFromCluster(costPerGpuHr2, modEffTps, servingGpuCount);
             return `
             <div class="section-header">${mod.name}</div>
             <div class="metric-row"><span class="metric-label">Decode TPS (1 stream)</span><span class="metric-value">${modDecodeTps.toFixed(0)} tok/s</span></div>
