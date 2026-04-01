@@ -361,6 +361,7 @@ body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', 
             <button class="sidebar-tab" data-tab="models">Tokenomics</button>
             <button class="sidebar-tab" data-tab="physics">Physics</button>
             <button class="sidebar-tab" data-tab="cluster">Cluster</button>
+            <button class="sidebar-tab" data-tab="aisat">AI Sat</button>
         </div>
         <div class="tab-content active" id="tab-overview"></div>
         <div class="tab-content" id="tab-compute"></div>
@@ -368,6 +369,7 @@ body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', 
         <div class="tab-content" id="tab-models"></div>
         <div class="tab-content" id="tab-physics"></div>
         <div class="tab-content" id="tab-cluster"></div>
+        <div class="tab-content" id="tab-aisat"></div>
     </div>
 </div>
 
@@ -2583,6 +2585,158 @@ ${(() => {
         <div class="metric-row"><span class="metric-label">Maneuver capability</span><span class="metric-value">${cfg.isDP3 ? 'Hall EP (Busek BHT-600)' : 'Cold-gas Kr'}</span></div>
         <div class="metric-row"><span class="metric-label">Debris avoidance/yr</span><span class="metric-value">~3 maneuvers (CAM threshold <1e-4)</span></div>
         <div class="metric-row"><span class="metric-label">Graceful degradation</span><span class="metric-value">${cfg.isDP3 ? 'Segmented + PGS: lose area, not function' : 'Segmented LHP: isolate damaged loop'}</span></div>
+    </div>
+    `;
+}
+
+// =====================================================================
+// AI SAT MINI — Dedicated tab for the SpaceX-style 100kW compute sat
+// =====================================================================
+function renderAISat() {
+    const cfg = CONFIGS.DP1B;
+    const m = computeMetrics(cfg);
+    const t = computeTokenomics(cfg, m);
+
+    return `
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">AI Sat Mini</span>
+            <span class="card-badge" style="background:rgba(26,138,106,0.2);color:var(--orbital)">100 kW</span>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
+            SpaceX-style orbital compute satellite. Scaled-up Starlink V3 form factor
+            with deployable radiator fins. GPU-on-radiator direct-mount thermal architecture.
+        </div>
+
+        <div class="svg-diagram"><svg viewBox="0 0 580 280" xmlns="http://www.w3.org/2000/svg">
+            <rect x="0" y="0" width="580" height="280" fill="#080a0f"/>
+            <text x="290" y="16" text-anchor="middle" fill="#556" font-size="8" font-style="italic">AI Sat Mini — exploded view with dimensions</text>
+
+            <!-- Bus body (center) -->
+            <rect x="255" y="30" width="70" height="120" rx="4" fill="#2a2a30" stroke="#556" stroke-width="1.5"/>
+            <text x="290" y="75" text-anchor="middle" fill="#aab" font-size="8" font-weight="600">BUS</text>
+            <text x="290" y="88" text-anchor="middle" fill="#667" font-size="7">${cfg.busPwr} kW</text>
+            <text x="290" y="100" text-anchor="middle" fill="#667" font-size="7">${cfg.gpuCount} GPUs</text>
+
+            <!-- Dimensions for bus -->
+            <text x="290" y="162" text-anchor="middle" fill="#888" font-size="7">2.5m × 1.0m × 0.3m</text>
+
+            <!-- Solar wing left -->
+            <rect x="20" y="50" width="225" height="10" rx="2" fill="#0c1858" stroke="#1a2868" stroke-width="1"/>
+            <text x="132" y="45" text-anchor="middle" fill="#3377ff" font-size="7">Solar Panel (${(cfg.solarM2/2).toFixed(0)} m²)</text>
+            <!-- dimension line -->
+            <line x1="20" y1="68" x2="245" y2="68" stroke="#555" stroke-width="0.5"/>
+            <text x="132" y="78" text-anchor="middle" fill="#888" font-size="6">${cfg.pvWingSpan || 60}m span × 3m chord</text>
+
+            <!-- Solar wing right -->
+            <rect x="335" y="50" width="225" height="10" rx="2" fill="#0c1858" stroke="#1a2868" stroke-width="1"/>
+            <text x="447" y="45" text-anchor="middle" fill="#3377ff" font-size="7">Solar Panel (${(cfg.solarM2/2).toFixed(0)} m²)</text>
+
+            <!-- Radiator fin left -->
+            <rect x="180" y="160" width="60" height="70" rx="3" fill="#1a1a1a" stroke="#444" stroke-width="1.5"/>
+            <text x="210" y="195" text-anchor="middle" fill="#aab" font-size="7">RAD</text>
+            <text x="210" y="207" text-anchor="middle" fill="#667" font-size="6">${(cfg.radM2/4).toFixed(0)} m²</text>
+
+            <!-- Radiator fin right -->
+            <rect x="340" y="160" width="60" height="70" rx="3" fill="#1a1a1a" stroke="#444" stroke-width="1.5"/>
+            <text x="370" y="195" text-anchor="middle" fill="#aab" font-size="7">RAD</text>
+            <text x="370" y="207" text-anchor="middle" fill="#667" font-size="6">${(cfg.radM2/4).toFixed(0)} m²</text>
+
+            <!-- ORU grid on radiator (colored dots) -->
+            ${[0,1].map(side => {
+                const bx = side === 0 ? 185 : 345;
+                let dots = '';
+                for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) {
+                    const colors = ['#ff4030','#ff4030','#3377ff','#ff4030','#3377ff','#33ee55','#ff4030','#ff4030','#3377ff','#ff4030','#3377ff','#33ee55'];
+                    dots += `<rect x="${bx + c*16 + 4}" y="${168 + r*14}" width="10" height="8" rx="1" fill="${colors[(r*3+c)%12]}" opacity="0.8"/>`;
+                }
+                return dots;
+            }).join('')}
+
+            <!-- ISL terminals -->
+            <circle cx="260" cy="35" r="4" fill="#e8e8f0" stroke="#aab" stroke-width="0.5"/>
+            <text x="248" y="28" fill="#888" font-size="6">ISL</text>
+            <circle cx="320" cy="35" r="4" fill="#e8e8f0" stroke="#aab" stroke-width="0.5"/>
+
+            <!-- Antenna -->
+            <ellipse cx="290" cy="28" rx="8" ry="3" fill="#e8e8f0" stroke="#aab" stroke-width="0.5"/>
+            <text x="290" y="22" text-anchor="middle" fill="#888" font-size="6">Ka-band</text>
+
+            <!-- Legend -->
+            <rect x="20" y="240" width="540" height="32" fill="#0a0c12" stroke="#333" stroke-width="0.5" rx="4"/>
+            <rect x="35" y="250" width="8" height="8" rx="1" fill="#0c1858"/><text x="48" y="258" fill="#aab" font-size="7">Solar (${cfg.solarM2} m²)</text>
+            <rect x="135" y="250" width="8" height="8" rx="1" fill="#1a1a1a"/><text x="148" y="258" fill="#aab" font-size="7">Radiator (${cfg.radM2} m²)</text>
+            <rect x="255" y="250" width="8" height="8" rx="1" fill="#ff4030"/><text x="268" y="258" fill="#aab" font-size="7">Decode ORU</text>
+            <rect x="345" y="250" width="8" height="8" rx="1" fill="#3377ff"/><text x="358" y="258" fill="#aab" font-size="7">Prefill ORU</text>
+            <rect x="435" y="250" width="8" height="8" rx="1" fill="#33ee55"/><text x="448" y="258" fill="#aab" font-size="7">Context ORU</text>
+        </svg></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">Key Specs</span></div>
+        <div class="metric-row"><span class="metric-label">Platform</span><span class="metric-value">${cfg.name}</span></div>
+        <div class="metric-row"><span class="metric-label">Bus power</span><span class="metric-value accent">${cfg.busPwr} kW</span></div>
+        <div class="metric-row"><span class="metric-label">Compute</span><span class="metric-value">${cfg.computeKw} kW (${(cfg.computeKw/cfg.busPwr*100).toFixed(0)}% of bus)</span></div>
+        <div class="metric-row"><span class="metric-label">GPUs</span><span class="metric-value orbital">${cfg.gpuCount} × ${cfg.gpuType}</span></div>
+        <div class="metric-row"><span class="metric-label">Memory</span><span class="metric-value purple">${m.totalMemTB.toFixed(1)} TB ${cfg.gpuMemType}</span></div>
+        <div class="metric-row"><span class="metric-label">TFLOPS (eff)</span><span class="metric-value accent">${m.effectiveTFLOPS.toLocaleString()}</span></div>
+        <div class="metric-row"><span class="metric-label">Solar</span><span class="metric-value">${cfg.solarM2} m² (${cfg.solarCell})</span></div>
+        <div class="metric-row"><span class="metric-label">Radiator</span><span class="metric-value">${cfg.radM2} m² (Al 6061-T6, carbon black)</span></div>
+        <div class="metric-row"><span class="metric-label">Thermal margin</span><span class="metric-value ${m.thermalMargin > 1.1 ? 'orbital' : 'warning'}">${m.thermalMargin.toFixed(2)}×</span></div>
+        <div class="metric-row"><span class="metric-label">Dry mass</span><span class="metric-value">${cfg.dryMassKg.toLocaleString()} kg</span></div>
+        <div class="metric-row"><span class="metric-label">Launch</span><span class="metric-value">${cfg.launchVehicle} @ $${cfg.launchCostPerKg}/kg</span></div>
+        <div class="metric-row"><span class="metric-label">Design life</span><span class="metric-value">${cfg.satLife} years</span></div>
+        <div class="metric-row"><span class="metric-label">Orbit</span><span class="metric-value">${cfg.orbit}</span></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">Design Heritage</span></div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.6">
+            <b>Starlink V3 form factor</b> — flat rectangular bus with roll-out solar wings.
+            Body acts as structural backbone. Deployable radiator fins fold out from bus edges.<br><br>
+            <b>Pantograph deployment</b> — solar panels deploy via pantograph scissor mechanism,
+            same as Starlink V3 D2C phased array structure. Largest pantograph deployment for any application.<br><br>
+            <b>GPU-on-radiator</b> — ORUs bolted directly to Al 6061-T6 radiator panels.
+            Zero-length thermal path. No pumped fluid loop. No single-point pump failure.<br><br>
+            <b>Gravity gradient stabilized</b> — radiator fins oriented along local vertical
+            for passive attitude stabilization, minimizing reaction wheel duty cycle.
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">Cost Summary</span></div>
+        <div class="metric-row"><span class="metric-label">Satellite build</span><span class="metric-value">$${(cfg.totalProgramCost/1e6).toFixed(1)}M</span></div>
+        <div class="metric-row"><span class="metric-label">Launch cost</span><span class="metric-value">$${(cfg.dryMassKg * cfg.launchCostPerKg / 1e6).toFixed(1)}M</span></div>
+        <div class="metric-row"><span class="metric-label">Total CAPEX</span><span class="metric-value warning">$${((cfg.totalProgramCost + cfg.dryMassKg * cfg.launchCostPerKg)/1e6).toFixed(1)}M</span></div>
+        <div class="metric-row"><span class="metric-label">Cost per GPU</span><span class="metric-value">$${((cfg.totalProgramCost + cfg.dryMassKg * cfg.launchCostPerKg) / cfg.gpuCount / 1000).toFixed(0)}k</span></div>
+        <div class="metric-row"><span class="metric-label">Cost per GPU-hour</span><span class="metric-value ${t.costPerGpuHour > 5 ? 'ground' : 'orbital'}">$${t.costPerGpuHour.toFixed(2)}</span></div>
+        <div class="metric-row"><span class="metric-label">Ground baseline</span><span class="metric-value">$${t.targetGpuHrRate.toFixed(2)}/GPU-hr</span></div>
+        <div class="metric-row"><span class="metric-label">Orbital vs ground</span><span class="metric-value ${t.costPerGpuHour <= t.targetGpuHrRate ? 'orbital' : 'ground'}">${(t.costPerGpuHour / t.targetGpuHrRate).toFixed(1)}× ${t.costPerGpuHour <= t.targetGpuHrRate ? 'cheaper' : 'more expensive'}</span></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">Comparison to Ground</span></div>
+        <div class="calc-block"><span class="comment">// AI Sat Mini vs ground ${t.gSpec.name}</span>
+<span class="comment">// What makes orbital competitive?</span>
+
+Space advantages:
+  ✓ Zero cooling cost (radiate to 3K background)
+  ✓ Free 24/7 solar (${cfg.solarM2} m² × ${(cfg.solarCellEff*100).toFixed(0)}% = ${(cfg.solarM2 * 1361 * cfg.solarCellEff / 1000).toFixed(0)} kW)
+  ✓ No land, permitting, water, grid connection
+  ✓ No PUE overhead (ground: 1.35×)
+  ✓ Sovereign compute (no jurisdiction issues)
+
+Space disadvantages:
+  ✗ Launch cost: $${(cfg.dryMassKg * cfg.launchCostPerKg / 1e6).toFixed(1)}M
+  ✗ Radiation: ${(cfg.radHardening*100).toFixed(0)}% performance retained
+  ✗ Bandwidth: ${cfg.islRateGbps * cfg.islCount} Gbps ISL
+  ✗ ${cfg.satLife}yr design life (ground: 6+ years)
+  ✗ No physical servicing
+
+<span class="comment">// Break-even launch cost:</span>
+At current sat build ($${(cfg.totalProgramCost/1e6).toFixed(1)}M), orbital breaks even
+with ground at <span class="highlight">$${((t.targetGpuHrRate * t.totalGpuHours - cfg.totalProgramCost - t.lifetimeOpex) / cfg.dryMassKg).toFixed(0)}/kg</span> launch cost.
+${((t.targetGpuHrRate * t.totalGpuHours - cfg.totalProgramCost - t.lifetimeOpex) / cfg.dryMassKg) > 0 ? 'Current: $' + cfg.launchCostPerKg + '/kg — need ' + ((cfg.launchCostPerKg / ((t.targetGpuHrRate * t.totalGpuHours - cfg.totalProgramCost - t.lifetimeOpex) / cfg.dryMassKg))).toFixed(1) + '× reduction' : 'Sat build cost alone exceeds ground TCO — need cheaper hardware'}</div>
     </div>
     `;
 }
@@ -4929,6 +5083,7 @@ function switchConfig(key) {
     document.getElementById('tab-models').innerHTML = renderModels(cfg, m) + renderTokenomics(cfg, m);
     document.getElementById('tab-physics').innerHTML = renderPhysics(cfg, m);
     document.getElementById('tab-cluster').innerHTML = renderCluster(cfg, m);
+    document.getElementById('tab-aisat').innerHTML = renderAISat();
     // Reset camera
     // Auto-frame camera to fit model bounding box
     const bbox = new THREE.Box3().setFromObject(stationGroup);
@@ -5184,6 +5339,10 @@ document.querySelectorAll('.sidebar-tab').forEach(tab => {
         document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
         document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+        // Auto-switch to DP1B when AI Sat tab is clicked
+        if (tab.dataset.tab === 'aisat' && currentConfig !== 'DP1B') {
+            switchConfig('DP1B');
+        }
     });
 });
 
