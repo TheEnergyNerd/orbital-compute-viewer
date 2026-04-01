@@ -3168,7 +3168,13 @@ function computeTokenomics(cfg, m) {
         const totalDecode = decodeTokSPerCopy * copies;
         const totalPrefill = prefillTokSPerCopy * copies;
 
-        t.modelResults.push({ ...mod, modelMemGB, gpusNeeded, copies, decodeTokSPerCopy, totalDecode, totalPrefill });
+        t.modelResults.push({
+            ...mod, modelMemGB, gpusNeeded, copies,
+            decodeTokSPerCopy, prefillTokSPerCopy,
+            totalDecode, totalPrefill,
+            weightedDecode: totalDecode * mod.weight,
+            weightedPrefill: totalPrefill * mod.weight,
+        });
         t.weightedDecodeTokS += totalDecode * mod.weight;
         t.weightedPrefillTokS += totalPrefill * mod.weight;
     }
@@ -3194,6 +3200,9 @@ function computeTokenomics(cfg, m) {
     // 4. Revenue
     t.revenuePerYear = (t.tokPerYear / 1e6) * t.blendedPrice;
     t.revenueLifetime = t.revenuePerYear * t.satLife;
+    t.tokPerMonth = t.tokPerDay * 30;
+    t.revenuePerDay = (t.tokPerDay / 1e6) * t.blendedPrice;
+    t.revenuePerMonth = t.revenuePerDay * 30;
 
     // 5. Cost structure
     t.launchCost = (cfg.dryMassKg || 1000) * (cfg.launchCostPerKg || 500) * cs;
@@ -3210,6 +3219,7 @@ function computeTokenomics(cfg, m) {
     t.costPerMTok = t.totalCost / (t.tokLifetime / 1e6);
     t.grossMargin = (t.blendedPrice - t.costPerMTok) / t.blendedPrice;
     t.costPerGpuHour = t.totalCost / t.totalGpuHours;
+    t.costVsTargetRatio = t.costPerGpuHour / t.targetGpuHrRate;
     t.netIncome = t.revenueLifetime - t.totalCost;
     t.roic = t.netIncome / t.totalCapex;
     t.annualNetCashFlow = t.revenuePerYear - t.annualOpex;
@@ -3254,7 +3264,9 @@ function computeTokenomics(cfg, m) {
     t.groundTokPerDay = gTokS * 86400 * 0.90;
     t.groundTokLifetime = t.groundTokPerDay * 365 * t.satLife;
     t.groundCostPerMTok = t.groundLifetimeCost / (t.groundTokLifetime / 1e6);
+    t.groundCostPerGpuHour = t.groundLifetimeCost / (t.gpuCount * t.satLife * 8760 * GROUND_MFU);
     t.orbitalAdvantage = t.groundCostPerMTok / t.costPerMTok;
+    t.viableVsTarget = t.costPerGpuHour <= t.targetGpuHrRate;
 
     return t;
 }
@@ -3276,23 +3288,20 @@ function renderTokenomics(cfg, m) {
             netIncome, roic, annualNetCashFlow, paybackYears, irr,
             targetGpuHrRate, gSpec, modelResults,
             groundTotalCapex, groundLifetimeCost, groundCostPerMTok, orbitalAdvantage,
-            groundTokPerDay, groundTokLifetime } = t;
+            groundTokPerDay, groundTokLifetime,
+            tokPerMonth, revenuePerDay, revenuePerMonth,
+            costVsTargetRatio, viableVsTarget } = t;
 
     // Build model breakdown string from precomputed results
     let modelBreakdown = '';
     for (const mr of modelResults) {
-        const decodeTokSPerCopy = mr.decodeTokSPerCopy;
-        const prefillTokSPerCopy = (t.tflopsPerGpu * mr.gpusNeeded) / (2 * mr.params);
         modelBreakdown += `
 ${mr.name} (${mr.quant}): ${mr.gpusNeeded} GPU/copy × ${mr.copies} copies
   Decode: <span class="highlight">${mr.totalDecode.toFixed(0)} tok/s</span>  Prefill: <span class="highlight">${(mr.totalPrefill/1000).toFixed(1)}k tok/s</span>
 `;
     }
 
-    const tokPerMonth = tokPerDay * 30;
-    const revenuePerDay = (tokPerDay / 1e6) * blendedPrice;
-    const revenuePerMonth = revenuePerDay * 30;
-    const models = INFERENCE_MODELS;  // alias for template strings
+    const models = INFERENCE_MODELS;
 
     // Map price tiers to include computed pricePerMTok and fraction for template compatibility
     const priceTiersDisplay = t.priceTiers.map(tier => ({
