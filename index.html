@@ -1739,9 +1739,9 @@ function analyzeCustomModel(cfg, m) {
     const trainTokPerS = (clusterTFLOPS * trainMFU * 1e12) / (6 * activeParams);
     const finetuneHours = 1e9 / trainTokPerS / 3600;
 
-    // $/M tokens
+    // $/M tokens: costPerHr / (tok/s × 3600 s/hr / 1e6 tok/MTok)
     const costPerHr = m.lcocNet || cfg.lcocNet || (cfg.busPwr * 1500 / 3600);
-    const costPerMTok = effTPS > 0 ? costPerHr / (effTPS * 3.6) : Infinity;
+    const costPerMTok = effTPS > 0 ? costPerHr / (effTPS * 3600 / 1e6) : Infinity;
 
     // Nodes needed if doesn't fit
     const nodesNeeded = Math.ceil(weightMemGB / (m.totalMemTB * 1024));
@@ -2165,7 +2165,7 @@ Arithmetic intensity: 2 FLOPs/byte (low → memory bound)</div>
             const modBatchTps = modDecodeTps * Math.min(cfg.batchSize, 32);
             const modEffTps = Math.min(modBatchTps, bwLimitTokSec);
             const costPerHr = m.lcocNet || cfg.lcocNet || (cfg.busPwr * 1500 / 3600);
-            const costPerMTok = costPerHr / (modEffTps * 3.6);
+            const costPerMTok = costPerHr / (modEffTps * 3600 / 1e6);
             return `
             <div class="section-header">${mod.name}</div>
             <div class="metric-row"><span class="metric-label">Decode TPS (1 stream)</span><span class="metric-value">${modDecodeTps.toFixed(0)} tok/s</span></div>
@@ -2350,74 +2350,112 @@ Margin: <span class="${m.thermalMargin > 1.2 ? 'highlight' : 'error'}">${m.therm
             <text x="270" y="422" text-anchor="middle" fill="#556" font-size="7">Carbon black: ε = 0.95</text>
         </svg></div>
         ` : `
-        <div class="svg-diagram"><svg viewBox="0 0 600 360" xmlns="http://www.w3.org/2000/svg">
-            <rect x="0" y="0" width="600" height="360" fill="#080a0f"/>
-            <text x="270" y="16" text-anchor="middle" fill="#556" font-size="8" font-style="italic">Direct-mount thermal — GPU bolted to radiator, zero-length path</text>
+        <div class="svg-diagram"><svg viewBox="0 0 620 440" xmlns="http://www.w3.org/2000/svg">
+            <rect x="0" y="0" width="620" height="440" fill="#080a0f"/>
+            <text x="280" y="16" text-anchor="middle" fill="#556" font-size="8" font-style="italic">ORU cross-section — sealed Al box, GPU bolted to radiator</text>
+
+            <!-- ═══ SEALED ORU BOX (outer enclosure) ═══ -->
+            <!-- Top radiation shield -->
+            <rect x="120" y="28" width="320" height="8" rx="2" fill="#667788" stroke="#8899aa" stroke-width="1.5"/>
+            <text x="280" y="35" text-anchor="middle" fill="#ccd" font-size="6" font-weight="600">RAD SHIELD (2-3mm Al 6061-T6)</text>
+
+            <!-- Left wall -->
+            <rect x="120" y="28" width="6" height="190" fill="#667788" stroke="#8899aa" stroke-width="0.5"/>
+            <!-- Right wall -->
+            <rect x="434" y="28" width="6" height="190" fill="#667788" stroke="#8899aa" stroke-width="0.5"/>
+
+            <!-- ORU label and dimensions -->
+            <text x="80" y="125" fill="#8899aa" font-size="8" font-weight="600" text-anchor="end">ORU</text>
+            <text x="80" y="138" fill="#667" font-size="7" text-anchor="end">60×40×6 cm</text>
+            <text x="80" y="151" fill="#667" font-size="7" text-anchor="end">~4 kg</text>
+
+            <!-- Blind-mate connectors on sides -->
+            <rect x="108" y="70" width="12" height="18" rx="2" fill="#44aa66" stroke="#55cc77" stroke-width="1"/>
+            <text x="96" y="74" fill="#55cc77" font-size="5" text-anchor="end">48V</text>
+            <text x="96" y="84" fill="#55cc77" font-size="5" text-anchor="end">PWR</text>
+            <rect x="108" y="110" width="12" height="18" rx="2" fill="#4488cc" stroke="#55aaee" stroke-width="1"/>
+            <text x="96" y="118" fill="#55aaee" font-size="5" text-anchor="end">DATA</text>
+            <text x="96" y="128" fill="#55aaee" font-size="5" text-anchor="end">NVLink</text>
+
+            <!-- Quarter-turn fasteners (corners) -->
+            <circle cx="132" cy="38" r="4" fill="none" stroke="#aab" stroke-width="1"/>
+            <line x1="130" y1="38" x2="134" y2="38" stroke="#aab" stroke-width="1"/>
+            <circle cx="428" cy="38" r="4" fill="none" stroke="#aab" stroke-width="1"/>
+            <line x1="426" y1="38" x2="430" y2="38" stroke="#aab" stroke-width="1"/>
+            <text x="448" y="42" fill="#888" font-size="6">¼-turn fastener</text>
+
+            <!-- VRM module (inside box, top) -->
+            <rect x="145" y="45" width="270" height="18" rx="2" fill="#2a3a2a" stroke="#44aa44" stroke-width="1"/>
+            <text x="280" y="57" text-anchor="middle" fill="#66cc66" font-size="7" font-weight="600">VRM (48V → 0.8V GaN, 96% eff)</text>
+            <text x="465" y="55" fill="#888" font-size="7">Input: 48V bus</text>
 
             <!-- GPU Die -->
-            <rect x="180" y="30" width="180" height="24" rx="3" fill="#cc3322" stroke="#ff4422" stroke-width="1.5"/>
-            <text x="270" y="46" text-anchor="middle" fill="#fff" font-size="10" font-weight="700">GPU DIE</text>
-            <text x="400" y="42" fill="#cc6644" font-size="8">T_j = 85°C</text>
-            <text x="400" y="54" fill="#888" font-size="7">${cfg.gpuPowerW}W × 0.4 W/cm²</text>
+            <rect x="185" y="72" width="190" height="26" rx="3" fill="#cc3322" stroke="#ff4422" stroke-width="1.5"/>
+            <text x="280" y="89" text-anchor="middle" fill="#fff" font-size="10" font-weight="700">GPU DIE + HBM3E</text>
+            <text x="465" y="82" fill="#cc6644" font-size="8">T_j = 85°C</text>
+            <text x="465" y="94" fill="#888" font-size="7">${cfg.gpuPowerW}W</text>
 
             <!-- TIM-1 -->
-            <rect x="195" y="66" width="150" height="16" rx="2" fill="#884433" stroke="#aa6644" stroke-width="1"/>
-            <text x="270" y="78" text-anchor="middle" fill="#dda" font-size="8" font-weight="600">TIM-1</text>
-            <text x="370" y="78" fill="#888" font-size="7">Indium foil 25μm</text>
-            <text x="470" y="78" fill="#888" font-size="7">0.5°C/W</text>
+            <rect x="200" y="106" width="160" height="14" rx="2" fill="#884433" stroke="#aa6644" stroke-width="1"/>
+            <text x="280" y="116" text-anchor="middle" fill="#dda" font-size="7" font-weight="600">TIM-1 (Indium 25μm)</text>
+            <text x="465" y="116" fill="#888" font-size="7">0.5°C/W</text>
 
             <!-- IHS / Spreader -->
-            <rect x="170" y="90" width="200" height="24" rx="3" fill="#b87333" stroke="#cc8844" stroke-width="1.5"/>
-            <text x="270" y="103" text-anchor="middle" fill="#fff" font-size="8" font-weight="600">IHS / SPREADER</text>
-            <text x="400" y="100" fill="#b87333" font-size="8">Cu vapor chamber</text>
-            <text x="400" y="114" fill="#888" font-size="7">ΔT &lt; 5°C</text>
+            <rect x="175" y="128" width="210" height="22" rx="3" fill="#b87333" stroke="#cc8844" stroke-width="1.5"/>
+            <text x="280" y="142" text-anchor="middle" fill="#fff" font-size="8" font-weight="600">Cu VAPOR CHAMBER</text>
+            <text x="465" y="138" fill="#b87333" font-size="7">Spreads heat</text>
+            <text x="465" y="150" fill="#888" font-size="7">ΔT &lt; 5°C</text>
 
             <!-- TIM-2 -->
-            <rect x="195" y="122" width="150" height="14" rx="2" fill="#665544" stroke="#887766" stroke-width="1"/>
-            <text x="270" y="132" text-anchor="middle" fill="#dda" font-size="7" font-weight="600">TIM-2</text>
-            <text x="370" y="132" fill="#888" font-size="7">Thermal pad 100μm</text>
-            <text x="470" y="132" fill="#888" font-size="7">1.2°C/W</text>
+            <rect x="200" y="158" width="160" height="12" rx="2" fill="#665544" stroke="#887766" stroke-width="1"/>
+            <text x="280" y="167" text-anchor="middle" fill="#dda" font-size="6" font-weight="600">TIM-2 (Thermal pad 100μm)</text>
+            <text x="465" y="167" fill="#888" font-size="7">1.2°C/W</text>
 
-            <!-- Cold plate / Manifold -->
-            <rect x="160" y="144" width="220" height="24" rx="3" fill="#556677" stroke="#778899" stroke-width="1.5"/>
-            <text x="270" y="157" text-anchor="middle" fill="#ccd" font-size="8" font-weight="600">COLD PLATE / MANIFOLD</text>
-            <text x="400" y="154" fill="#888" font-size="8">Heat pipe or LHP</text>
-            <text x="400" y="168" fill="#888" font-size="7">T_case = 70°C</text>
+            <!-- Cold plate (bottom of ORU box) -->
+            <rect x="130" y="178" width="300" height="20" rx="3" fill="#556677" stroke="#778899" stroke-width="1.5"/>
+            <text x="280" y="191" text-anchor="middle" fill="#ccd" font-size="8" font-weight="600">COLD PLATE (Al micro-channel)</text>
+            <text x="465" y="186" fill="#888" font-size="7">T_case = 70°C</text>
 
-            <!-- DIRECT BOND (the key differentiator) -->
-            <rect x="100" y="178" width="340" height="20" rx="2" fill="#1a3a1a" stroke="#33aa33" stroke-width="2"/>
-            <text x="270" y="192" text-anchor="middle" fill="#33ee55" font-size="9" font-weight="700">ZERO-LENGTH BOND — ORU BOLTED TO RADIATOR</text>
+            <!-- Bottom of ORU box / mounting interface -->
+            <rect x="120" y="204" width="320" height="6" rx="1" fill="#667788" stroke="#8899aa" stroke-width="1"/>
 
-            <!-- Radiator panel (wide) -->
-            <rect x="40" y="206" width="420" height="28" rx="3" fill="#1a1a1a" stroke="#444" stroke-width="1.5"/>
-            <text x="250" y="224" text-anchor="middle" fill="#aab" font-size="10" font-weight="600">RADIATOR PANEL (${cfg.radM2} m²)</text>
-            <text x="400" y="212" fill="#888" font-size="7">Al 6061-T6 solid plate</text>
-            <text x="400" y="224" fill="#888" font-size="7">3mm + carbon black</text>
+            <!-- ═══ ZERO-LENGTH BOND ═══ -->
+            <rect x="100" y="218" width="360" height="20" rx="2" fill="#1a3a1a" stroke="#33aa33" stroke-width="2"/>
+            <text x="280" y="232" text-anchor="middle" fill="#33ee55" font-size="9" font-weight="700">ZERO-LENGTH BOND — BOLTED TO RADIATOR</text>
+            <text x="465" y="232" fill="#33aa33" font-size="7">4× captive bolts</text>
+
+            <!-- ═══ RADIATOR PANEL ═══ -->
+            <rect x="30" y="246" width="500" height="30" rx="3" fill="#1a1a1a" stroke="#444" stroke-width="1.5"/>
+            <text x="280" y="265" text-anchor="middle" fill="#aab" font-size="10" font-weight="600">RADIATOR PANEL (${cfg.radM2} m²)</text>
+            <text x="465" y="256" fill="#888" font-size="7">Al 6061-T6, 3mm</text>
+            <text x="465" y="270" fill="#888" font-size="7">Carbon black coat</text>
 
             <!-- Temperature gradient bar -->
             <defs><linearGradient id="tgrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stop-color="#ff4422"/>
-                <stop offset="40%" stop-color="#cc8844"/>
-                <stop offset="70%" stop-color="#4488aa"/>
+                <stop offset="30%" stop-color="#cc8844"/>
+                <stop offset="60%" stop-color="#4488aa"/>
                 <stop offset="100%" stop-color="#224466"/>
             </linearGradient></defs>
-            <rect x="540" y="30" width="12" height="200" fill="url(#tgrad)" rx="2"/>
-            <text x="558" y="40" fill="#ff4422" font-size="7">85°C</text>
-            <text x="558" y="118" fill="#cc8844" font-size="7">70°C</text>
-            <text x="558" y="194" fill="#4488aa" font-size="7">${cfg.radTempK - 273}°C</text>
+            <rect x="560" y="45" width="12" height="230" fill="url(#tgrad)" rx="2"/>
+            <text x="578" y="55" fill="#ff4422" font-size="7">85°C</text>
+            <text x="578" y="145" fill="#cc8844" font-size="7">70°C</text>
+            <text x="578" y="240" fill="#4488aa" font-size="7">${cfg.radTempK - 273}°C</text>
 
             <!-- Emission arrows -->
-            <line x1="120" y1="234" x2="120" y2="272" stroke="#44aaaa" stroke-width="1.5"/>
-            <line x1="200" y1="234" x2="200" y2="272" stroke="#44aaaa" stroke-width="1.5"/>
-            <line x1="280" y1="234" x2="280" y2="272" stroke="#44aaaa" stroke-width="1.5"/>
-            <line x1="360" y1="234" x2="360" y2="272" stroke="#44aaaa" stroke-width="1.5"/>
-            <text x="250" y="290" text-anchor="middle" fill="#44aaaa" font-size="9" font-weight="600">IR emission → deep space (3K)</text>
-            <text x="250" y="307" text-anchor="middle" fill="#556" font-size="7">Stefan-Boltzmann: q = εσT⁴ · ${cfg.radM2}m² @ ${cfg.radTempK}K</text>
-            <text x="250" y="322" text-anchor="middle" fill="#556" font-size="7">Carbon black: ε = 0.95</text>
+            <line x1="120" y1="276" x2="120" y2="314" stroke="#44aaaa" stroke-width="1.5"/>
+            <line x1="210" y1="276" x2="210" y2="314" stroke="#44aaaa" stroke-width="1.5"/>
+            <line x1="300" y1="276" x2="300" y2="314" stroke="#44aaaa" stroke-width="1.5"/>
+            <line x1="390" y1="276" x2="390" y2="314" stroke="#44aaaa" stroke-width="1.5"/>
+            <text x="260" y="332" text-anchor="middle" fill="#44aaaa" font-size="9" font-weight="600">IR emission → deep space (3K)</text>
+            <text x="260" y="349" text-anchor="middle" fill="#556" font-size="7">Stefan-Boltzmann: q = εσT⁴ · ${cfg.radM2}m² @ ${cfg.radTempK}K</text>
+            <text x="260" y="364" text-anchor="middle" fill="#556" font-size="7">Carbon black: ε = 0.95</text>
 
-            <!-- Advantage callout -->
-            <rect x="60" y="336" width="380" height="18" rx="3" fill="#0a1a0a" stroke="#33aa33" stroke-width="0.5"/>
-            <text x="250" y="349" text-anchor="middle" fill="#33ee55" font-size="8">No pump · No plumbing · No fluid · No single-point failure</text>
+            <!-- ORU features callout -->
+            <rect x="40" y="380" width="520" height="50" fill="#0a0c12" stroke="#333" stroke-width="0.5" rx="4"/>
+            <text x="280" y="396" text-anchor="middle" fill="#8899aa" font-size="8" font-weight="600">Sealed ORU module — field-replaceable by robotic arm</text>
+            <text x="280" y="412" text-anchor="middle" fill="#667" font-size="7">Blind-mate connectors (48V + NVLink) · ¼-turn captive fasteners · EMI Faraday cage</text>
+            <text x="280" y="426" text-anchor="middle" fill="#33ee55" font-size="7">No pump · No plumbing · No fluid · No single-point failure</text>
         </svg></div>
         `}
     </div>
