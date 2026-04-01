@@ -1,0 +1,1469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orbital Compute Station — Interactive Viewer</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+    --bg: #f0e6d3;
+    --surface: #faf6f0;
+    --surface2: #e8dfd0;
+    --surface3: #d8cfc0;
+    --border: #c4b8a4;
+    --border-dark: #8a7a62;
+    --text: #2d2518;
+    --muted: #6b5d4a;
+    --orbital: #1a8a6a;
+    --ground: #c44a3a;
+    --accent: #3a7ab8;
+    --warning: #d49a22;
+    --purple: #7a4ba8;
+    --orange: #d4622a;
+    --pink: #b84a8a;
+    --screen-bg: #1a1a18;
+    --screen-glow: #1a8a6a;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', -apple-system, sans-serif; font-size: 13px; line-height: 1.5; height: 100vh; overflow: hidden; }
+
+.app { display: grid; grid-template-columns: 1fr 420px; grid-template-rows: auto 1fr; height: 100vh; }
+.top-bar { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.top-bar h1 { font-size: 15px; font-weight: 700; color: var(--text); white-space: nowrap; }
+.top-bar .subtitle { font-size: 11px; color: var(--muted); margin-left: -4px; }
+
+/* Config tabs */
+.config-tabs { display: flex; gap: 2px; margin-left: 16px; }
+.config-tab {
+    padding: 8px 14px; border-radius: 4px; border: 2px solid var(--border);
+    background: var(--surface2); color: var(--text); cursor: pointer; font-size: 11px;
+    font-weight: 500; font-family: inherit; transition: all 0.15s;
+    text-transform: uppercase; letter-spacing: 0.55px;
+}
+.config-tab:hover { background: var(--surface2); color: var(--text); }
+.config-tab.active { background: var(--orbital); color: #fff; border-color: var(--orbital); }
+.config-tab .sub { text-transform: none; letter-spacing: 0; }
+.config-tab .sub { font-size: 9px; display: block; opacity: 0.7; }
+
+/* Badge pills */
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+.badge.orbital { background: rgba(26,138,106,0.15); color: var(--orbital); }
+.badge.power { background: rgba(212,154,34,0.15); color: var(--warning); }
+.badge.compute { background: rgba(58,122,184,0.15); color: var(--accent); }
+
+/* 3D viewport */
+.viewport { position: relative; background: var(--screen-bg); border-right: 1px solid var(--border-dark); overflow: hidden; }
+.viewport canvas { width: 100%; height: 100%; display: block; }
+.viewport-overlay {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: linear-gradient(transparent, rgba(26,26,24,0.9));
+    padding: 12px 16px 10px;
+}
+.kpi-row { display: flex; gap: 20px; }
+.kpi { text-align: center; }
+.kpi .val { font-size: 18px; font-weight: 700; color: var(--screen-glow); font-family: 'IBM Plex Mono', monospace; }
+.kpi .unit { font-size: 9px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+.viewport-hint { position: absolute; top: 8px; right: 12px; font-size: 10px; color: #555; }
+.role-legend { position: absolute; top: 30px; right: 12px; background: rgba(10,14,20,0.85); border: 1px solid rgba(127,219,202,0.3); border-radius: 6px; padding: 6px 10px; font-size: 10px; backdrop-filter: blur(4px); }
+.legend-title { color: #7fdbca; font-weight: bold; font-size: 9px; letter-spacing: 1px; margin-bottom: 4px; text-transform: uppercase; }
+.legend-item { display: flex; align-items: center; gap: 6px; padding: 2px 0; color: #c8ccd4; }
+.legend-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+.legend-pct { color: #667; font-size: 9px; margin-left: auto; }
+
+/* Right sidebar */
+.sidebar { background: var(--surface); overflow-y: auto; display: flex; flex-direction: column; }
+
+/* Sidebar tabs */
+.sidebar-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.sidebar-tab {
+    flex: 1; padding: 8px 4px; text-align: center; font-size: 11px; font-weight: 600;
+    color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent;
+    background: none; border-top: none; border-left: none; border-right: none;
+    font-family: inherit; transition: all 0.15s;
+}
+.sidebar-tab:hover { color: var(--text); background: var(--surface2); }
+.sidebar-tab.active { color: var(--orbital); border-bottom-color: var(--orbital); }
+
+/* Tab content panels */
+.tab-content { flex: 1; overflow-y: auto; padding: 12px; }
+.tab-content:not(.active) { display: none; }
+.tab-content.active { display: block; }
+
+/* Cards */
+.card {
+    background: var(--surface); border: 2px solid var(--border); border-radius: 6px;
+    padding: 14px; margin-bottom: 10px;
+}
+.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.card-title { font-size: 12px; font-weight: 700; color: var(--text); text-transform: uppercase; letter-spacing: 0.5px; }
+.card-badge { font-size: 9px; padding: 1px 6px; border-radius: 3px; font-weight: 600; }
+
+/* Metric rows */
+.metric-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid var(--surface2); }
+.metric-row:last-child { border-bottom: none; }
+.metric-label { color: var(--muted); font-size: 12px; }
+.metric-value { font-weight: 600; font-size: 12px; font-family: 'IBM Plex Mono', monospace; }
+.metric-value.orbital { color: var(--orbital); }
+.metric-value.warning { color: var(--warning); }
+.metric-value.accent { color: var(--accent); }
+.metric-value.purple { color: var(--purple); }
+.metric-value.ground { color: var(--ground); }
+.metric-value.orange { color: var(--orange); }
+
+/* Calc blocks */
+.calc-block {
+    background: var(--screen-bg); border-radius: 6px; padding: 12px; margin: 8px 0;
+    font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; line-height: 1.7;
+    color: var(--screen-glow); border: 1px solid #333; white-space: pre-wrap; word-break: break-word;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);
+}
+.calc-block .comment { color: #556; }
+.calc-block .highlight { color: #f0c040; font-weight: 600; }
+.calc-block .error { color: #e05555; }
+.calc-block .dim { color: #445; }
+.calc-block .green { color: #4ecdc4; }
+.calc-block .cyan { color: #5cb8e6; }
+.calc-block .orange { color: #e8a838; }
+.calc-block .pink { color: #e06090; }
+.calc-block .white { color: #d0d4dc; font-weight: 600; }
+
+/* Diagram block */
+.diagram-block {
+    background: #0a0c10; border-radius: 6px; padding: 14px 12px; margin: 8px 0;
+    font-family: 'IBM Plex Mono', monospace; font-size: 10px; line-height: 1.55;
+    color: #778; border: 1px solid #222; white-space: pre; overflow-x: auto;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.4);
+}
+.diagram-block .b { color: #5cb8e6; }
+.diagram-block .g { color: #4ecdc4; }
+.diagram-block .o { color: #e8a838; }
+.diagram-block .r { color: #e05555; }
+.diagram-block .p { color: #b080e0; }
+.diagram-block .w { color: #d0d4dc; font-weight:600; }
+.diagram-block .y { color: #f0c040; font-weight:600; }
+.diagram-block .d { color: #3a3e48; }
+.diagram-block .c { color: #556; font-style: italic; }
+
+/* SVG diagram styling */
+.svg-diagram { width: 100%; margin: 8px 0; border-radius: 6px; overflow: hidden; background: #0a0c10; border: 1px solid #222; }
+.svg-diagram svg { width: 100%; display: block; }
+.svg-diagram text { font-family: 'IBM Plex Mono', 'SF Mono', monospace; }
+
+/* Component chip badges inline */
+.chip { display:inline-block; padding:1px 6px; border-radius:3px; font-size:9px; font-weight:600; margin:0 2px; vertical-align:middle; }
+.chip-blue { background:rgba(58,122,184,0.2); color:#5cb8e6; }
+.chip-green { background:rgba(78,205,196,0.15); color:#4ecdc4; }
+.chip-orange { background:rgba(232,168,56,0.15); color:#e8a838; }
+.chip-red { background:rgba(224,85,85,0.15); color:#e05555; }
+.chip-purple { background:rgba(176,128,224,0.15); color:#b080e0; }
+
+/* Progress bars */
+.progress-bar { height: 6px; background: var(--surface2); border-radius: 3px; margin: 4px 0; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+
+/* Section headers */
+.section-header { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; padding: 8px 0 4px; margin-top: 4px; }
+
+/* Info panel (3D click) */
+.info-panel {
+    position: absolute; left: 16px; top: 16px; width: 320px;
+    background: rgba(26,26,24,0.95); border: 1px solid #444; border-radius: 8px;
+    padding: 16px; display: none; z-index: 20; max-height: calc(100% - 32px); overflow-y: auto;
+    color: #ddd; backdrop-filter: blur(12px);
+}
+.info-panel h2 { font-size: 14px; color: var(--screen-glow); margin-bottom: 6px; }
+.info-panel h3 { font-size: 11px; color: #888; margin: 10px 0 4px; text-transform: uppercase; letter-spacing: 1px; }
+.info-panel .close-btn { position: absolute; top: 8px; right: 12px; cursor: pointer; color: #666; font-size: 18px; background: none; border: none; }
+.info-panel .close-btn:hover { color: #fff; }
+.info-panel .mat-name { color: #ddd; }
+.info-panel .mat-supplier { color: #6db; }
+.info-panel .mat-detail { color: #888; }
+.info-panel .metric-row { border-color: #333; }
+.info-panel .metric-label { color: #888; }
+.info-panel .metric-value { color: #ddd; }
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-dark); }
+
+/* Responsive — tablets and phones */
+@media (max-width: 768px) {
+    body { overflow: auto; height: auto; }
+    .app {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 40vh 1fr;
+        height: auto; min-height: 100vh;
+    }
+
+    /* Top bar: stack title above tabs */
+    .top-bar { flex-wrap: wrap; padding: 6px 10px; gap: 6px; }
+    .top-bar h1 { font-size: 14px; }
+    .top-bar .subtitle { font-size: 10px; }
+    .top-bar .badge { font-size: 9px; padding: 1px 6px; }
+
+    /* Config tabs: horizontal scroll */
+    .config-tabs {
+        margin-left: 0; width: 100%; order: 10;
+        overflow-x: auto; flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+    .config-tabs::-webkit-scrollbar { display: none; }
+    .config-tab { padding: 6px 10px; font-size: 10px; white-space: nowrap; flex-shrink: 0; }
+    .config-tab .sub { font-size: 8px; }
+
+    /* Viewport */
+    .viewport { height: 40vh; border-right: none; border-bottom: 1px solid var(--border-dark); }
+    .viewport-hint { font-size: 9px; }
+    .role-legend { font-size: 9px; padding: 4px 8px; }
+
+    /* KPI row: wrap */
+    .kpi-row { flex-wrap: wrap; gap: 12px; }
+    .kpi .val { font-size: 15px; }
+    .kpi .unit { font-size: 8px; }
+
+    /* Info panel (click popup) */
+    .info-panel { width: calc(100% - 24px); left: 12px; top: 12px; max-height: calc(100% - 24px); }
+
+    /* Sidebar fills remaining height, scrollable */
+    .sidebar { overflow-y: auto; max-height: none; }
+
+    /* Sidebar tabs: smaller */
+    .sidebar-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .sidebar-tab { padding: 6px 3px; font-size: 10px; }
+
+    /* Cards */
+    .card { padding: 10px; margin-bottom: 8px; }
+    .card-title { font-size: 11px; }
+
+    /* Calc blocks: allow horizontal scroll for wide monospace */
+    .calc-block { font-size: 9.5px; overflow-x: auto; white-space: pre; word-break: normal; }
+    .diagram-block { font-size: 9px; }
+
+    /* Metric rows */
+    .metric-label { font-size: 11px; }
+    .metric-value { font-size: 11px; }
+
+    /* SVG diagrams */
+    .svg-diagram svg { max-width: 100%; height: auto; }
+}
+
+/* Slightly wider tablets: two-column but narrower sidebar */
+@media (min-width: 769px) and (max-width: 1024px) {
+    .app { grid-template-columns: 1fr 340px; }
+    .config-tab { padding: 6px 10px; font-size: 10px; }
+    .config-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+    .config-tabs::-webkit-scrollbar { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+    <!-- Top navigation bar -->
+    <div class="top-bar">
+        <h1>&#x2B21; Orbital Compute</h1>
+        <span class="subtitle">Interactive Viewer</span>
+        <div class="config-tabs" id="config-tabs">
+            <button class="config-tab" data-config="DP1B">DP1B<span class="sub">AI Sat Mini</span></button>
+            <button class="config-tab active" data-config="DP2">DP2<span class="sub">Vera Rubin</span></button>
+            <button class="config-tab" data-config="DP2_CLUSTER">Cluster<span class="sub">DP2 &times;5</span></button>
+        </div>
+        <div style="flex:1"></div>
+        <span class="badge orbital">Dawn-Dusk SSO</span>
+        <span class="badge power">625 km</span>
+    </div>
+
+    <!-- 3D Viewport -->
+    <div class="viewport" id="viewport">
+        <canvas id="canvas"></canvas>
+        <div class="viewport-overlay">
+            <div class="kpi-row" id="kpi-row"></div>
+        </div>
+        <div class="viewport-hint">Orbit: drag &middot; Zoom: scroll &middot; Click: inspect</div>
+        <div class="role-legend" id="role-legend">
+            <div class="legend-title">ORU ROLES</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#e64033"></span>DECODE <span class="legend-pct">60%</span></div>
+            <div class="legend-item"><span class="legend-dot" style="background:#3373e6"></span>PREFILL <span class="legend-pct">25%</span></div>
+            <div class="legend-item"><span class="legend-dot" style="background:#33bf4d"></span>CONTEXT <span class="legend-pct">15%</span></div>
+        </div>
+        <div class="info-panel" id="info-panel">
+            <button class="close-btn" onclick="closeInfo()">&#215;</button>
+            <div id="info-content"></div>
+        </div>
+    </div>
+
+    <!-- Right sidebar with single Overview tab -->
+    <div class="sidebar">
+        <div class="sidebar-tabs" id="sidebar-tabs">
+            <button class="sidebar-tab active" data-tab="overview">Overview</button>
+        </div>
+        <div class="tab-content active" id="tab-overview"></div>
+    </div>
+</div>
+
+<!-- CTA button -->
+<a href="mailto:contact@spacedcs.com" id="cta-btn" style="position:fixed;bottom:16px;right:16px;z-index:9999;padding:12px 24px;background:#1a8a6a;color:#fff;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;font-family:inherit;box-shadow:0 4px 12px rgba(0,0,0,0.3)">Get Full Model &rarr;</a>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/" } }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// =====================================================================
+// CONFIGS — only DP1B and DP2 (DP2_CLUSTER derived from DP2)
+// =====================================================================
+const CONFIGS = {
+    DP1B: {
+        name: "DP1B AI Sat Mini", shortName: "DP1B",
+        busPwr: 100, computeKw: 92, thermalKw: 100,
+        solarM2: 360, radM2: 219, radTempK: 320,
+        earthVF: 0.24, sidedness: 1.80,
+        gpuPowerW: 1400, gpuCount: 48, gpuType: "NVIDIA B300 (rad-screened)",
+        gpuGFLOPS_W: 5000, gpuMemGB: 192, gpuMemType: "HBM3E",
+        gpuMemBwTBs: 8.0, gpuInterconnect: "NVLink 5.0 + NVSwitch",
+        gpuNvlinkBwGBs: 1800, gpuProcess: "TSMC 4NP",
+        oruSize: [0.6, 0.4, 0.06],
+        oruThermalInterface: "Direct-bond copper to bus cold plate",
+        oruVRM: "48V\u21920.8V GaN buck, 96% eff",
+        oruPackaging: "CoWoS-L, 2.5D interposer, 8-HBM3E stack",
+        orbit: "Dawn-dusk SSO, 625 km", altitude: 625,
+        isPhotonic: false, isDP3: false, isDP1: false, isDP1B: true, spineLen: 0,
+        solarCell: "Monocrystalline silicon (c-Si)", solarCellEff: 0.22, solarCellGen: "Silicon",
+        year: 2027, satLife: 5, waccOrbital: 0.15,
+        launchCostPerKg: 800, dryMassKg: 1650, launchVehicle: "Starship",
+        totalProgramCost: 15200000,
+        massSolar: 360, massRadiator: 1892, massCompute: 120, massStructure: 600,
+        islCount: 4, islRateGbps: 100, islWavelength: "1550 nm", islModulation: "DP-QPSK",
+        islApertureCm: 8, islPointingUrad: 1.5, islFEC: "LDPC 5/6",
+        groundLinkGbps: 10, groundStations: 3, groundModulation: "16-QAM OFDM",
+        contactFraction: 0.32, storeAndForward: true,
+        clusterSize: 1, clusterTopology: "standalone",
+        clusterRoles: ["inference"], maxClusterSize: 12,
+        tensorParallel: 2, pipelineParallel: 1,
+        batchSize: 16, seqLen: 4096,
+        radHardening: 0.60,
+    },
+    DP2: {
+        name: "DP2 Space-1 Vera Rubin", shortName: "DP2",
+        busPwr: 140, computeKw: 128.8, thermalKw: 140,
+        solarM2: 723, radM2: 187, radTempK: 370,
+        earthVF: 0.24, sidedness: 1.80,
+        gpuPowerW: 1800, gpuCount: 64, gpuType: "NVIDIA Vera Rubin Space",
+        gpuGFLOPS_W: 2800, gpuMemGB: 192, gpuMemType: "HBM3E",
+        gpuMemBwTBs: 4.8, gpuInterconnect: "NVLink 5.0 + NVSwitch",
+        gpuNvlinkBwGBs: 1800, gpuProcess: "TSMC 3nm",
+        oruSize: [0.8, 0.6, 0.08],
+        oruThermalInterface: "Zero-length: ORU bolted direct to radiator heat pipe",
+        oruVRM: "48V\u21920.7V multiphase GaN, 97% eff",
+        oruPackaging: "CoWoS-L, 2.5D interposer, 8-HBM3E stack",
+        orbit: "Dawn-dusk SSO, 625 km", altitude: 625,
+        isPhotonic: false, isDP3: false, spineLen: 0,
+        solarCell: "Monocrystalline silicon (c-Si)", solarCellEff: 0.216, solarCellGen: "Silicon",
+        year: 2028, satLife: 5, waccOrbital: 0.15,
+        launchCostPerKg: 600, launchVehicle: "Starship", dryMassKg: 3229,
+        totalProgramCost: 23301847,
+        massSolar: 723, massRadiator: 1523, massCompute: 200, massStructure: 1057,
+        islCount: 4, islRateGbps: 100, islWavelength: "1550 nm", islModulation: "DP-16QAM",
+        islApertureCm: 8, islPointingUrad: 1.5, islFEC: "LDPC 3/4",
+        groundLinkGbps: 10, groundStations: 3, groundModulation: "64-QAM OFDM",
+        contactFraction: 0.35, storeAndForward: false,
+        clusterSize: 5, clusterTopology: "hex-cell dragonfly",
+        clusterRoles: ["prefill","decode","context","routing"], maxClusterSize: 16,
+        tensorParallel: 4, pipelineParallel: 2,
+        batchSize: 32, seqLen: 4096, radHardening: 0.65,
+    },
+};
+
+// =====================================================================
+// COMPUTE DERIVED METRICS
+// =====================================================================
+function computeMetrics(cfg) {
+    const m = {};
+    const solarEff = cfg.solarCellEff || 0.20;
+    const solarGen = cfg.solarM2 * 1361 * solarEff;
+    m.solarGenW = solarGen;
+    m.pmadOut = solarGen * 0.90;
+    m.powerMargin = m.pmadOut / (cfg.busPwr * 1000);
+
+    const sigma = 5.67e-8;
+    const eps = 0.95;
+    const alphaIR = 0.95;
+    const alphaSolar = 0.95;
+    const qEarth = 237;
+    const qEmit = sigma * eps * Math.pow(cfg.radTempK, 4);
+    m.qEmitPerFace = qEmit;
+
+    const vfDeepSpace = 0.08;
+    const vfEarthSide = 0.35;
+
+    const qNetA = qEmit - alphaIR * qEarth * vfDeepSpace;
+
+    const T_earth = 255;
+    const qNetB_emission = eps * sigma * (Math.pow(cfg.radTempK, 4) - Math.pow(T_earth, 4) * vfEarthSide);
+    const qAlbedoIncident = 55;
+    const qSolarLeakIncident = 40;
+    const qAlbedo = alphaSolar * qAlbedoIncident;
+    const qSolarLeak = alphaSolar * qSolarLeakIncident;
+    const qNetB = qNetB_emission - qAlbedo - qSolarLeak;
+
+    const systemDerating = 0.82;
+
+    m.qNetA = qNetA;
+    m.qNetB = Math.max(0, qNetB);
+    m.qNet = (qNetA + m.qNetB) * systemDerating;
+    m.derivedSidedness = m.qNet / qEmit;
+    m.qFace = qEmit;
+    m.systemDerating = systemDerating;
+
+    m.reqRadM2 = cfg.thermalKw * 1000 / m.qNet;
+    m.thermalMargin = cfg.radM2 / m.reqRadM2;
+
+    m.oruCount = cfg.gpuCount || Math.floor(cfg.computeKw * 1000 / cfg.gpuPowerW);
+    const computeWatts = cfg.computeKw * 1000;
+    const rawGFLOPS = computeWatts * cfg.gpuGFLOPS_W;
+    m.rawTFLOPS = rawGFLOPS / 1000;
+    m.effectiveTFLOPS = m.rawTFLOPS * cfg.radHardening;
+    m.totalMemTB = (m.oruCount * cfg.gpuMemGB) / 1024;
+
+    m.islBandwidthGbps = cfg.islCount * cfg.islRateGbps;
+    m.groundBandwidthGbps = cfg.groundLinkGbps * cfg.groundStations;
+    m.effectiveGroundGbps = m.groundBandwidthGbps * cfg.contactFraction;
+
+    m.orbitalLatencyMs = (cfg.altitude * 2 * 1000) / 3e8 * 1000;
+    m.totalLatencyMs = m.orbitalLatencyMs + 5;
+
+    m.pvMassKg = cfg.massSolar || cfg.solarM2 * 1.5;
+    m.radMassKg = cfg.massRadiator || cfg.radM2 * 3.0;
+    m.computeMassKg = cfg.massCompute || m.oruCount * (cfg.gpuPowerW > 500 ? 8 : 3);
+    m.structMassKg = cfg.massStructure || ((cfg.spineLen || 2) * 3 + 50);
+    m.cryoMassKg = cfg.massCryo || 0;
+    m.totalMassKg = cfg.dryMassKg || (m.pvMassKg + m.radMassKg + m.computeMassKg + m.cryoMassKg + m.structMassKg + 200);
+    const costPerKg = cfg.launchCostPerKg || 1500;
+    m.launchCostM = m.totalMassKg * costPerKg / 1e6;
+    m.launchCostPerKg = costPerKg;
+    m.launchVehicle = cfg.launchVehicle || 'Falcon 9';
+
+    const utilization = 0.85;
+    m.totalGpuHours = m.oruCount * (cfg.satLife || 5) * 8760 * utilization;
+    m.totalProgramCost = cfg.totalProgramCost || (m.totalMassKg * costPerKg + m.oruCount * 5000);
+    m.lcocGross = m.totalProgramCost / m.totalGpuHours;
+    const servingFraction = cfg.storeAndForward ? 1.0 : (cfg.contactFraction || 0.35);
+    m.lcocNet = m.lcocGross / servingFraction;
+
+    const pvSpan = Math.sqrt(cfg.solarM2 / 2 / 1.5) * 1.5;
+    const L = pvSpan / 2;
+    m.pvHalfSpan = L;
+
+    const longeronMM = cfg.isDP3 ? 100 : (cfg.isDP1 ? 40 : 60);
+    const wallMM = cfg.isDP3 ? 5 : 3;
+    const longeronM = longeronMM / 1000;
+    const wallM = wallMM / 1000;
+    m.longeronMM = longeronMM;
+    m.longeronWallMM = wallMM;
+
+    const E_cfrp = 150e9;
+    const rho_cfrp = 1600;
+    const a = longeronM, b = longeronM - 2 * wallM;
+    const I_long = (Math.pow(a, 4) - Math.pow(b, 4)) / 12;
+    const A_long = a * a - b * b;
+    m.I_longeron = I_long;
+    m.A_longeron = A_long;
+
+    m.f1_pv = (1.875*1.875 / (2*Math.PI)) * Math.sqrt(E_cfrp * I_long / (rho_cfrp * A_long * Math.pow(L, 4)));
+    m.f1 = m.f1_pv;
+    m.f1_note = 'Cantilever beam (PV wing)';
+
+    return m;
+}
+
+// =====================================================================
+// SIDEBAR RENDERER — Overview only
+// =====================================================================
+function fmt(n, d=1) { return n >= 1e6 ? (n/1e6).toFixed(d)+'M' : n >= 1e3 ? (n/1e3).toFixed(d)+'k' : n.toFixed(d); }
+
+function renderOverview(cfg, m) {
+    return `
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">${cfg.shortName} Configuration</span>
+            <span class="card-badge" style="background:rgba(26,138,106,0.2);color:var(--orbital)">${cfg.isPhotonic ? 'PHOTONIC' : 'ELECTRICAL'}</span>
+        </div>
+        <div class="metric-row"><span class="metric-label">Platform</span><span class="metric-value">${cfg.name}</span></div>
+        <div class="metric-row"><span class="metric-label">Orbit</span><span class="metric-value">${cfg.orbit}</span></div>
+        <div class="metric-row"><span class="metric-label">Eclipse</span><span class="metric-value orbital">~0% (dawn-dusk SSO)</span></div>
+        <div class="metric-row"><span class="metric-label">Design life</span><span class="metric-value">${cfg.satLife} years</span></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">Power Budget</span></div>
+        <div class="metric-row"><span class="metric-label">Solar array</span><span class="metric-value">${cfg.solarM2.toFixed(0)} m\u00b2</span></div>
+        <div class="metric-row"><span class="metric-label">Cell technology</span><span class="metric-value" style="font-size:10px">${cfg.solarCell || 'III-V MJ'}</span></div>
+        <div class="metric-row"><span class="metric-label">Cell efficiency (AM0)</span><span class="metric-value accent">${((cfg.solarCellEff||0.20)*100).toFixed(0)}%</span></div>
+        <div class="metric-row"><span class="metric-label">Generated (BOL)</span><span class="metric-value orbital">${(m.solarGenW/1000).toFixed(1)} kW</span></div>
+        <div class="metric-row"><span class="metric-label">After PMAD (90%)</span><span class="metric-value">${(m.pmadOut/1000).toFixed(1)} kW</span></div>
+        <div class="metric-row"><span class="metric-label">Bus power</span><span class="metric-value warning">${cfg.busPwr} kW</span></div>
+        <div class="metric-row"><span class="metric-label">\u2192 Compute</span><span class="metric-value accent">${cfg.computeKw} kW</span></div>
+        <div class="metric-row"><span class="metric-label">\u2192 Housekeeping</span><span class="metric-value">${(cfg.busPwr - cfg.computeKw).toFixed(1)} kW</span></div>
+        <div class="metric-row"><span class="metric-label">Power margin</span><span class="metric-value ${m.powerMargin > 1.3 ? 'orbital' : 'ground'}">${(m.powerMargin*100).toFixed(0)}%</span></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">GPU Compute</span></div>
+        <div class="metric-row"><span class="metric-label">GPU type</span><span class="metric-value accent">${cfg.gpuType}</span></div>
+        <div class="metric-row"><span class="metric-label">GPU count</span><span class="metric-value">${m.oruCount}</span></div>
+        <div class="metric-row"><span class="metric-label">Memory per GPU</span><span class="metric-value purple">${cfg.gpuMemGB} GB ${cfg.gpuMemType}</span></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">Mass Budget</span></div>
+        <div class="metric-row"><span class="metric-label">Solar arrays</span><span class="metric-value">${m.pvMassKg.toFixed(0)} kg</span></div>
+        <div class="metric-row"><span class="metric-label">Radiators</span><span class="metric-value">${m.radMassKg.toFixed(0)} kg</span></div>
+        <div class="metric-row"><span class="metric-label">Compute (${m.oruCount} ORUs)</span><span class="metric-value">${m.computeMassKg.toFixed(0)} kg</span></div>
+        <div class="metric-row"><span class="metric-label">Structure</span><span class="metric-value">${m.structMassKg.toFixed(0)} kg</span></div>
+        <div class="metric-row"><span class="metric-label"><b>Total dry mass</b></span><span class="metric-value warning"><b>${m.totalMassKg.toFixed(0)} kg</b></span></div>
+        <div class="metric-row"><span class="metric-label">Est. launch cost</span><span class="metric-value ground">$${m.launchCostM.toFixed(1)}M</span></div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px">@ $${m.launchCostPerKg.toLocaleString()}/kg (${m.launchVehicle})</div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">Quick Reference</span></div>
+        <div class="metric-row"><span class="metric-label">Compute</span><span class="metric-value accent">${m.effectiveTFLOPS.toFixed(0)} TFLOPS (eff)</span></div>
+        <div class="metric-row"><span class="metric-label">Memory</span><span class="metric-value purple">${m.totalMemTB.toFixed(1)} TB</span></div>
+        <div class="metric-row"><span class="metric-label">ISL bandwidth</span><span class="metric-value orbital">${m.islBandwidthGbps} Gbps</span></div>
+        <div class="metric-row"><span class="metric-label">Ground bandwidth</span><span class="metric-value">${m.effectiveGroundGbps.toFixed(0)} Gbps (eff)</span></div>
+        <div class="metric-row"><span class="metric-label">RTT latency</span><span class="metric-value orange">${m.totalLatencyMs.toFixed(1)} ms</span></div>
+    </div>
+
+    <div class="card" style="border-color:var(--orbital);background:rgba(26,138,106,0.05)">
+        <div class="card-header"><span class="card-title" style="color:var(--orbital)">Full Model Includes</span></div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.8">
+            \ud83d\udd12 Tokenomics & ROIC analysis<br>
+            \ud83d\udd12 Detailed thermal physics (Stefan-Boltzmann model)<br>
+            \ud83d\udd12 Network link budget (ISL + ground backhaul)<br>
+            \ud83d\udd12 Custom model serving analyzer (8B \u2192 1T)<br>
+            \ud83d\udd12 Supply chain & materials sourcing<br>
+            \ud83d\udd12 Cluster topology & traffic flow analysis<br>
+            \ud83d\udd12 All 7 satellite configurations (DP1, T1, DP2B, DP3, DP3B)<br>
+            \ud83d\udd12 Orbital vs Ground TCO comparison<br>
+            \ud83d\udd12 Debug reference with full calculation traceability<br>
+            \ud83d\udd12 PDF export
+        </div>
+        <a href="mailto:contact@spacedcs.com" style="display:block;text-align:center;margin-top:10px;padding:8px;background:var(--orbital);color:#fff;border-radius:4px;text-decoration:none;font-size:12px;font-weight:600">Contact for Access \u2192</a>
+    </div>
+    `;
+}
+
+// =====================================================================
+// KPI BAR
+// =====================================================================
+function updateKPIs(cfg, m) {
+    const kpis = [
+        { val: cfg.busPwr, unit: 'kW bus' },
+        { val: m.effectiveTFLOPS.toFixed(0), unit: 'TFLOPS eff' },
+        { val: m.totalMemTB.toFixed(1), unit: 'TB mem' },
+        { val: m.oruCount, unit: 'ORUs' },
+        { val: m.thermalMargin.toFixed(1)+'\u00d7', unit: 'thermal' },
+        { val: m.islBandwidthGbps, unit: 'Gbps ISL' },
+        { val: m.totalLatencyMs.toFixed(0), unit: 'ms RTT' },
+    ];
+    document.getElementById('kpi-row').innerHTML = kpis.map(k =>
+        `<div class="kpi"><div class="val">${k.val}</div><div class="unit">${k.unit}</div></div>`
+    ).join('');
+}
+
+// =====================================================================
+// THREE.JS SETUP
+// =====================================================================
+const canvas = document.getElementById('canvas');
+const viewport = document.getElementById('viewport');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+
+const scene = new THREE.Scene();
+const bgCanvas = document.createElement('canvas'); bgCanvas.width = 2; bgCanvas.height = 512;
+const bgCtx = bgCanvas.getContext('2d');
+const grad = bgCtx.createLinearGradient(0, 0, 0, 512);
+grad.addColorStop(0, '#0c1020'); grad.addColorStop(0.5, '#0a0e1a'); grad.addColorStop(1, '#141828');
+bgCtx.fillStyle = grad; bgCtx.fillRect(0, 0, 2, 512);
+scene.background = new THREE.CanvasTexture(bgCanvas);
+
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 5000);
+camera.position.set(30, 20, 30);
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.enablePan = true;
+controls.panSpeed = 1.2;
+controls.screenSpacePanning = true;
+controls.minDistance = 0.5;
+controls.maxDistance = 2000;
+controls.zoomToCursor = true;
+
+// Lighting
+const sunLight = new THREE.DirectionalLight(0xfff5e0, 3.0);
+sunLight.position.set(0, 50, 0);
+scene.add(sunLight);
+const earthFill = new THREE.DirectionalLight(0x88aacc, 0.6);
+earthFill.position.set(0, -30, 10);
+scene.add(earthFill);
+const rimLight = new THREE.DirectionalLight(0xaaccff, 1.0);
+rimLight.position.set(-40, 10, -30);
+scene.add(rimLight);
+scene.add(new THREE.AmbientLight(0x404870, 0.7));
+scene.add(new THREE.HemisphereLight(0x6060b0, 0x202040, 0.5));
+
+// Sun indicator
+const sunMesh = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffee88, transparent: true, opacity: 0.9 }));
+sunMesh.position.set(0, 80, 0);
+scene.add(sunMesh);
+
+// =====================================================================
+// MATERIALS
+// =====================================================================
+const MAT = {
+    pv:      new THREE.MeshStandardMaterial({ color: 0x0c1858, metalness: 0.72, roughness: 0.12, emissive: 0x061040, emissiveIntensity: 0.5 }),
+    pvBack:  new THREE.MeshStandardMaterial({ color: 0xf5f5fa, roughness: 0.7, metalness: 0.05, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }),
+    rad:     new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.35, metalness: 0.05, emissive: 0x222228, emissiveIntensity: 0.4 }),
+    oru:     new THREE.MeshStandardMaterial({ color: 0x353840, roughness: 0.65, metalness: 0.3, emissive: 0x060808, emissiveIntensity: 0.15 }),
+    hub:     new THREE.MeshStandardMaterial({ color: 0x2a2a30, roughness: 0.5, metalness: 0.5, emissive: 0x040406, emissiveIntensity: 0.15 }),
+    truss:   new THREE.MeshStandardMaterial({ color: 0xc5c5cc, roughness: 0.4, metalness: 0.6, emissive: 0x0a0a0e, emissiveIntensity: 0.1 }),
+    gold:    new THREE.MeshStandardMaterial({ color: 0xe8b810, roughness: 0.3, metalness: 0.85, emissive: 0x2a2000, emissiveIntensity: 0.25 }),
+    cryo:    new THREE.MeshStandardMaterial({ color: 0x88bbdd, roughness: 0.25, metalness: 0.6, emissive: 0x081520, emissiveIntensity: 0.25 }),
+    mli:     new THREE.MeshStandardMaterial({ color: 0xf0c820, roughness: 0.4, metalness: 0.7, emissive: 0x1a1200, emissiveIntensity: 0.2 }),
+    pipe:    new THREE.MeshStandardMaterial({ color: 0x606870, roughness: 0.35, metalness: 0.65 }),
+    antenna: new THREE.MeshStandardMaterial({ color: 0xe8e8f0, roughness: 0.25, metalness: 0.6 }),
+    seam:    new THREE.MeshStandardMaterial({ color: 0x040430, roughness: 0.5 }),
+    decode:  new THREE.MeshStandardMaterial({ color: 0xff4030, roughness: 0.4, metalness: 0.15, emissive: 0x660c0c, emissiveIntensity: 0.6 }),
+    prefill: new THREE.MeshStandardMaterial({ color: 0x3377ff, roughness: 0.4, metalness: 0.15, emissive: 0x0c1866, emissiveIntensity: 0.6 }),
+    context: new THREE.MeshStandardMaterial({ color: 0x33ee55, roughness: 0.4, metalness: 0.15, emissive: 0x0c6620, emissiveIntensity: 0.6 }),
+    brace:   new THREE.MeshStandardMaterial({ color: 0xa0a8b0, roughness: 0.45, metalness: 0.5 }),
+    rcs:     new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.4, metalness: 0.5 }),
+    highlight: new THREE.MeshStandardMaterial({ color: 0xffff66, roughness: 0.3, emissive: 0x444400 }),
+};
+
+// =====================================================================
+// ORU ROLE SYSTEM
+// =====================================================================
+const ORU_ROLES = {
+    decode:  { mat: MAT.decode,  color: '#ff3020', label: 'DECODE',  desc: 'Token generation \u2014 autoregressive sampling, memory-BW bound. Red ORUs run the decode phase of inference.' },
+    prefill: { mat: MAT.prefill, color: '#2266ff', label: 'PREFILL', desc: 'Prompt processing \u2014 parallel KV-cache generation, compute bound. Blue ORUs handle initial prompt ingestion.' },
+    context: { mat: MAT.context, color: '#22dd44', label: 'CONTEXT', desc: 'KV-cache storage & serving \u2014 high-capacity memory nodes. Green ORUs store long-context attention state.' },
+    routing: { mat: new THREE.MeshStandardMaterial({ color: 0xffbb22, roughness: 0.35, metalness: 0.15, emissive: 0x663300, emissiveIntensity: 0.6 }),
+               color: '#ffaa00', label: 'ROUTING', desc: 'Router/scheduler \u2014 request dispatch, load balancing, ground antenna control. Orange ORUs handle network coordination.' },
+    compute: { mat: MAT.oru,     color: '#353840', label: 'COMPUTE', desc: 'General compute \u2014 flexible allocation between prefill/decode as load shifts. Gray ORUs are unbiased.' },
+};
+
+function getORURole(oruIdx, primaryRole) {
+    const roleOrder = primaryRole === 'prefill'  ? ['prefill','decode','context'] :
+                      primaryRole === 'context'  ? ['context','prefill','decode'] :
+                      primaryRole === 'routing'  ? ['routing','decode','prefill'] :
+                                                   ['decode','prefill','context'];
+    const bucket = (oruIdx * 7 + 3) % 20;
+    let roleKey;
+    if (bucket < 12)      roleKey = roleOrder[0];
+    else if (bucket < 17) roleKey = roleOrder[1];
+    else                  roleKey = roleOrder[2];
+    const role = ORU_ROLES[roleKey];
+    return { roleKey, mat: role.mat, label: role.label, desc: role.desc };
+}
+
+// =====================================================================
+// PART DATABASE
+// =====================================================================
+const PART_DB = {
+    "pv_wing": { label: "PV Array Wing", desc: null },
+    "radiator": { label: "Main Radiator (370K)", desc: "Al 6061-T6 solid flat plate, 3-5mm thick. Carbon black coating: \u03b5=0.95, \u03b1_solar=0.95. No heat pipes \u2014 ORU direct-bolted to plate, conduction path through aluminum. High emissivity across full spectrum. Trades solar absorption for manufacturing simplicity and uniform spectral performance." },
+    "oru": { label: "ORU \u2014 Compute Module", desc: "Self-contained GPU/ASIC + VRM + HBM. Zero-length thermal path to radiator." },
+    "hub": { label: "Spacecraft Bus", desc: "ADCS, PMAD, flight computer, ground link antenna." },
+    "spine": { label: "Structural Spine", desc: "CFRP truss backbone with X-bracing. Carries power bus and heat pipe manifolds." },
+    "dragonfly_link": { label: "Dragonfly ISL Terminal", desc: "1550nm laser, 100+ Gbps, \u03bcrad gimbal pointing. Dragonfly topology." },
+    "structure": { label: "Structural Stiffening", desc: "CFRP longerons + Al battens + Ti root blocks + eddy-current dampers." },
+    "cluster_node": { label: "Hex-Cell Node", desc: null },
+    "scale_ref": { label: "Starlink V2 mini \u2014 Scale Reference", desc: "SpaceX Starlink V2 mini satellite shown at 1:1 scale.\n\nDimensions: 7.0m wingspan \u00d7 3.5m body \u00d7 0.05m thick\nMass: ~800 kg\nPower: ~2.5 kW (solar)\nOrbit: 540-570 km, 53\u00b0 inclination\nLaunch: Falcon 9 (21 per launch) or Starship (60+ per launch)\nPayload: Ka/Ku-band phased array + laser ISL\nLaser ISL: ~10 Gbps optical, 1550 nm\nDesign life: 5-7 years\n\nThe bus bottom IS the radiator \u2014 no separate thermal system. This is the heritage design for the hex-cell architecture: scale up the self-contained concept.\n\nSize comparison: DP1 \u2248 7\u00d7 solar area, DP2 \u2248 29\u00d7 solar area, DP3 \u2248 168\u00d7 solar area of a single Starlink." },
+};
+
+// =====================================================================
+// GEOMETRY BUILDERS
+// =====================================================================
+let stationGroup = new THREE.Group();
+scene.add(stationGroup);
+let partRegistry = [];
+
+function addPart(mesh, partType, label) {
+    mesh.userData = { partType, label };
+    stationGroup.add(mesh);
+    partRegistry.push({ mesh, partType, label, originalMaterial: mesh.material });
+}
+function box(sx, sy, sz) { return new THREE.BoxGeometry(sx, sy, sz); }
+
+function buildWingStructure(rootPos, span, chord, spanDir, chordDir, normalDir) {
+    for (const frac of [-0.3, 0.3]) {
+        const geo = box(spanDir[0]?span:0.06, spanDir[1]?span:0.06, spanDir[2]?span:0.06);
+        const mesh = new THREE.Mesh(geo, MAT.truss);
+        mesh.position.set(
+            rootPos[0]+spanDir[0]*span/2+chordDir[0]*frac*chord-normalDir[0]*0.05,
+            rootPos[1]+spanDir[1]*span/2+chordDir[1]*frac*chord-normalDir[1]*0.05,
+            rootPos[2]+spanDir[2]*span/2+chordDir[2]*frac*chord-normalDir[2]*0.05
+        );
+        addPart(mesh, "structure", "Longeron");
+    }
+    const nBat = Math.max(1, Math.floor(span/4));
+    for (let i = 1; i <= nBat; i++) {
+        const t = i*4; if (t > span-0.5) continue;
+        const bL = 0.6*chord;
+        const geo = box(chordDir[0]?bL:0.04, chordDir[1]?bL:0.04, chordDir[2]?bL:0.04);
+        const mesh = new THREE.Mesh(geo, MAT.brace);
+        mesh.position.set(rootPos[0]+spanDir[0]*t-normalDir[0]*0.05, rootPos[1]+spanDir[1]*t-normalDir[1]*0.05, rootPos[2]+spanDir[2]*t-normalDir[2]*0.05);
+        addPart(mesh, "structure", "Batten");
+    }
+    const rg = box(0.2,0.15,0.1); const rm = new THREE.Mesh(rg, MAT.pipe);
+    rm.position.set(rootPos[0]-normalDir[0]*0.08, rootPos[1]-normalDir[1]*0.08, rootPos[2]-normalDir[2]*0.08);
+    addPart(rm, "structure", "Root Stiffener");
+    const dg = new THREE.CylinderGeometry(0.04,0.04,0.2,8); const dm = new THREE.Mesh(dg, MAT.brace);
+    dm.position.set(rootPos[0]+spanDir[0]*span-normalDir[0]*0.1, rootPos[1]+spanDir[1]*span-normalDir[1]*0.1, rootPos[2]+spanDir[2]*span-normalDir[2]*0.1);
+    if (chordDir[2]) dm.rotation.x = Math.PI/2;
+    if (chordDir[0]) dm.rotation.z = Math.PI/2;
+    addPart(dm, "structure", "Tip Damper");
+}
+
+function buildSpineBracing(bot, top, seg) {
+    const hw = 0.3;
+    const n = Math.max(1, Math.floor((top-bot)/seg));
+    const h = (top-bot)/n;
+    for (let i = 0; i < n; i++) {
+        const yb = bot+i*h, yt = yb+h;
+        const bl = Math.sqrt(h*h+(2*hw)*(2*hw));
+        for (const [a,b2] of [[hw,-hw],[-hw,hw]]) {
+            const g = new THREE.CylinderGeometry(0.025,0.025,bl,6);
+            const m = new THREE.Mesh(g, MAT.brace); m.position.set((a+b2)/2,(yb+yt)/2,0);
+            m.lookAt(b2,yt,0); m.rotateX(Math.PI/2); addPart(m,"structure","X-Brace");
+        }
+        for (const [a,b2] of [[hw,-hw],[-hw,hw]]) {
+            const g = new THREE.CylinderGeometry(0.025,0.025,bl,6);
+            const m = new THREE.Mesh(g, MAT.brace); m.position.set(0,(yb+yt)/2,(a+b2)/2);
+            m.lookAt(0,yt,b2); m.rotateX(Math.PI/2); addPart(m,"structure","X-Brace");
+        }
+    }
+}
+
+function buildRadStiff(c, w, h, ax) {
+    for (const f of [-0.25,0.25]) {
+        let geo, pos;
+        if (ax==='Z') { geo=box(0.06,h,0.06); pos=[c[0]+f*w,c[1],c[2]-0.05]; }
+        else if (ax==='X') { geo=box(0.06,w,0.06); pos=[c[0]-0.05,c[1],c[2]+f*h]; }
+        else { geo=box(w,0.06,0.06); pos=[c[0],c[1]-0.05,c[2]+f*h]; }
+        const m = new THREE.Mesh(geo,MAT.truss); m.position.set(...pos);
+        addPart(m,"structure","Radiator Longeron");
+    }
+}
+
+// =====================================================================
+// buildDP1B — AI Sat Mini
+// =====================================================================
+function buildDP1B(cfg) {
+    const bW = 4.0, bD = 2.0, bH = 0.12;
+    const wingChord = 3.0;
+    const wingSpan = Math.ceil(cfg.solarM2 / 2 / wingChord);
+    const radC = Math.sqrt(cfg.radM2 / 4);
+    const radS = 4 * radC;
+
+    // Bus body
+    const bus = new THREE.Mesh(box(bW, bH, bD), MAT.hub);
+    addPart(bus, "hub", `Spacecraft Bus (${bW}m \u00d7 ${bD}m \u00d7 ${bH}m)`);
+
+    // Seam lines
+    const seamMat = new THREE.MeshStandardMaterial({color:0x111115, roughness:0.5});
+    for (let i=1;i<3;i++){const s=new THREE.Mesh(box(0.010,bH+0.01,bD*0.95),seamMat);s.position.set(-bW/2+bW*i/3,0,0);stationGroup.add(s);}
+    const cs2=new THREE.Mesh(box(bW*0.95,bH+0.01,0.010),seamMat);stationGroup.add(cs2);
+
+    // Sun face (+Y) = MLI
+    const sunFace = new THREE.Mesh(box(bW*0.97,0.004,bD*0.97),MAT.mli);
+    sunFace.position.set(0,bH/2+0.003,0); stationGroup.add(sunFace);
+
+    // PMAD
+    const pmad = new THREE.Mesh(box(bW*0.3,bH*0.5,bD*0.25),MAT.gold);
+    pmad.position.set(0,bH*0.12,bD*0.2); addPart(pmad,"hub","PMAD + Flight Computer");
+
+    // Antenna
+    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.3,0.08,16),MAT.antenna);
+    ant.position.set(0,bH/2+0.06,-bD*0.15); addPart(ant,"hub","Ka-band Phased Array");
+
+    // Roll-out solar wings
+    const wingY = bH/2+0.012;
+    for (let side=0;side<2;side++){
+        const dir=side===0?1:-1;
+        const rootX=dir*(bW/2+0.06);
+        const cx=dir*(bW/2+wingSpan/2+0.06);
+
+        const root=new THREE.Mesh(box(0.10,0.04,wingChord*0.6),MAT.truss);
+        root.position.set(rootX,wingY,0); addPart(root,"structure","Wing Root / Spool");
+
+        const hG=new THREE.CylinderGeometry(0.015,0.015,wingChord*0.4,8);
+        const h=new THREE.Mesh(hG,MAT.pipe);h.position.set(rootX,wingY,0);h.rotation.x=Math.PI/2;stationGroup.add(h);
+
+        const wing=new THREE.Mesh(box(wingSpan,0.010,wingChord),MAT.pv);
+        wing.position.set(cx,wingY,0);addPart(wing,"pv_wing",`Solar Wing ${dir>0?'+':'-'}X (${wingSpan}m \u00d7 ${wingChord}m)`);
+
+        const back=new THREE.Mesh(box(wingSpan,0.005,wingChord),MAT.pvBack);
+        back.position.set(cx,wingY-0.008,0);stationGroup.add(back);
+
+        for(const sf of [-0.35,0.35]){const sp=new THREE.Mesh(box(wingSpan*0.97,0.012,0.012),MAT.truss);sp.position.set(cx,wingY-0.012,sf*wingChord);stationGroup.add(sp);}
+
+        for(const gz of [0.008,-0.008]){const g=new THREE.Mesh(box(0.14,0.005,0.06),MAT.truss);g.position.set(rootX+dir*0.04,wingY+gz,0);stationGroup.add(g);}
+
+        const segC=Math.max(15,Math.ceil(wingSpan/3));
+        for(let s=1;s<=segC;s++){const xs=cx+dir*(-wingSpan/2+wingSpan*s/(segC+1));const sm=new THREE.Mesh(box(0.003,0.005,wingChord*0.94),MAT.seam);sm.position.set(xs,wingY+0.006,0);stationGroup.add(sm);}
+
+        const tr=new THREE.Mesh(box(wingSpan*0.35,0.008,0.008),MAT.hub);
+        tr.position.set(dir*(bW/2+wingSpan*0.2+0.06),wingY+0.018,0);stationGroup.add(tr);
+    }
+
+    // Deployable radiator fin
+    const radArea1B = cfg.radM2;
+    const radAspect1B = 1/6;
+    const radLen1B = Math.sqrt(radArea1B * radAspect1B);
+    const radH1B = radArea1B / radLen1B;
+    const radThick = 0.025;
+    const radGap1B = 0.15;
+
+    const hpMat1B = new THREE.MeshStandardMaterial({color: 0xd0d0dd, roughness: 0.35, metalness: 0.4});
+
+    const gpuCount = cfg.gpuCount || 48;
+    const [ow,oh,od] = cfg.oruSize || [0.6, 0.4, 0.06];
+
+    const radX1B = 0;
+    const radY1B = -(bH / 2 + radH1B / 2 + radGap1B);
+    const radZ1B = 0;
+
+    const hinge1B = new THREE.Mesh(box(radLen1B * 0.3, 0.04, 0.03), MAT.truss);
+    hinge1B.position.set(0, -(bH / 2 + 0.02), 0);
+    stationGroup.add(hinge1B);
+
+    const radPanel1B = new THREE.Mesh(box(radLen1B, radH1B, radThick), MAT.rad);
+    radPanel1B.position.set(radX1B, radY1B, radZ1B);
+    addPart(radPanel1B, "radiator", `Deployable Radiator \u2014 ${radArea1B.toFixed(0)}m\u00b2 (${radLen1B.toFixed(1)}m \u00d7 ${radH1B.toFixed(1)}m)`);
+
+    for (let hp = 0; hp < 3; hp++) {
+        const hpX = -radLen1B / 2 + radLen1B * (hp + 1) / 4;
+        const hpM = new THREE.Mesh(box(0.006, radH1B * 0.9, radThick + 0.003), hpMat1B);
+        hpM.position.set(hpX, radY1B, radZ1B);
+        stationGroup.add(hpM);
+    }
+
+    for (let f = 1; f <= 3; f++) {
+        const foldY = -radH1B / 2 + radH1B * f / 4;
+        const foldLine = new THREE.Mesh(box(radLen1B * 0.95, 0.008, radThick + 0.004), MAT.seam);
+        foldLine.position.set(0, radY1B + foldY, radZ1B);
+        stationGroup.add(foldLine);
+    }
+
+    // ORUs on -Z face
+    const fCols1B = Math.max(1, Math.floor(Math.sqrt(gpuCount * radAspect1B)));
+    const fRows1B = Math.max(1, Math.floor(gpuCount / fCols1B));
+    const fsw1B = radLen1B / (fCols1B + 1), fsh1B = radH1B / (fRows1B + 1);
+    for (let c = 0; c < fCols1B; c++) for (let r = 0; r < fRows1B; r++) {
+        const oruIdx = c * fRows1B + r;
+        if (oruIdx >= gpuCount) break;
+        const role = getORURole(oruIdx, cfg.oruPrimaryRole || 'decode');
+        const ox = -radLen1B / 2 + fsw1B * (c + 1);
+        const oy = -radH1B / 2 + fsh1B * (r + 1);
+        const oru = new THREE.Mesh(box(ow, oh, od), role.mat);
+        oru.position.set(ox, radY1B + oy, radZ1B - (radThick / 2 + od / 2));
+        addPart(oru, "oru", `ORU [${c},${r}] \u2014 ${role.label}`);
+    }
+
+    // Manifolds on bus
+    const hot=new THREE.Mesh(box(bW*0.6,0.012,0.012),MAT.oru);hot.position.set(0,-bH/2+0.015,bD*0.15);addPart(hot,"structure","Hot Manifold");
+    const cold=new THREE.Mesh(box(bW*0.6,0.012,0.012),MAT.pipe);cold.position.set(0,-bH/2+0.015,-bD*0.15);addPart(cold,"structure","Cold Manifold");
+
+    // ISL terminals
+    for(let i=0;i<(cfg.islCount||4);i++){const a=i*Math.PI/2+Math.PI/4;const lt=new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,0.08,8),MAT.antenna);lt.position.set(Math.cos(a)*bW*0.35,bH/2+0.06,Math.sin(a)*bD*0.3);addPart(lt,"dragonfly_link","ISL Terminal "+(i+1));}
+
+    // Scale reference: Starlink V2 mini
+    const refGroup=new THREE.Group();
+    const refBody=new THREE.Mesh(box(1.3,0.05,0.8),new THREE.MeshStandardMaterial({color:0xff8800,transparent:true,opacity:0.5}));
+    const refP1=new THREE.Mesh(box(3.5,0.01,1.7),new THREE.MeshStandardMaterial({color:0xff8800,transparent:true,opacity:0.3}));
+    refP1.position.set(2.4,0,0);const refP2=refP1.clone();refP2.position.set(-2.4,0,0);
+    refGroup.add(refBody,refP1,refP2);
+    const bb=new THREE.Box3().setFromObject(stationGroup);
+    refGroup.position.set(-bW*0.4,bb.min.y-2,bD*0.4);
+    refGroup.userData={partType:'scale_ref',label:'Starlink V2 mini (7m \u00d7 3.5m) \u2014 scale reference'};
+    stationGroup.add(refGroup);
+    const slL='Starlink V2 mini (7m \u00d7 3.5m) \u2014 scale reference';
+    partRegistry.push({mesh:refBody,partType:'scale_ref',label:slL,originalMaterial:refBody.material});
+    partRegistry.push({mesh:refP1,partType:'scale_ref',label:slL,originalMaterial:refP1.material});
+    partRegistry.push({mesh:refP2,partType:'scale_ref',label:slL,originalMaterial:refP2.material});
+}
+
+// =====================================================================
+// buildDP2 — Vera Rubin
+// =====================================================================
+function buildDP2(cfg) {
+    const hubX=1.2,hubY=0.8,hubZ=0.6;
+    const hub = new THREE.Mesh(box(hubX,hubY,hubZ),MAT.hub); addPart(hub,"hub","Spacecraft Bus");
+    const pmad = new THREE.Mesh(box(hubX*0.8,hubY*0.8,hubZ*0.25),MAT.gold);
+    pmad.position.set(0,0,hubZ/2+hubZ*0.125); addPart(pmad,"hub","PMAD");
+    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.4,0.15,16),MAT.antenna);
+    ant.rotation.z=Math.PI/2; ant.position.set(hubX/2+0.1,0,0); addPart(ant,"hub","Ground Antenna");
+
+    // Skinny-and-long roll-out panels
+    const pvC = 3.5;
+    const pvS = Math.ceil(cfg.solarM2 / 2 / pvC);
+    const pvY = hubY/2+0.02;
+    for (const s of [1,-1]) {
+        const f = new THREE.Mesh(box(pvS,0.02,pvC),MAT.pv); f.position.set(s*pvS/2,pvY+0.015,0);
+        addPart(f,"pv_wing",`PV ${s>0?'+':'-'}X`);
+        const b = new THREE.Mesh(box(pvS,0.02,pvC),MAT.pvBack); b.position.set(s*pvS/2,pvY-0.015,0);
+        addPart(b,"pv_wing",`PV Back ${s>0?'+':'-'}X`);
+        for (let x=4;x<pvS;x+=4) { const sm=new THREE.Mesh(box(0.03,0.015,pvC),MAT.seam); sm.position.set(s*x,pvY+0.015,0); stationGroup.add(sm); }
+    }
+    buildWingStructure([0,pvY,0],pvS,pvC,[1,0,0],[0,0,1],[0,1,0]);
+    buildWingStructure([0,pvY,0],pvS,pvC,[-1,0,0],[0,0,1],[0,1,0]);
+
+    // Deployment hinges at PV wing roots
+    for (const s of [1, -1]) {
+        const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.12, 12), MAT.pipe);
+        hinge.position.set(s * hubX/2, pvY, 0);
+        hinge.rotation.z = Math.PI / 2;
+        addPart(hinge, "structure", "PV Deployment Hinge");
+    }
+
+    // Deployable radiator fin
+    const radArea = cfg.radM2;
+    const radAspect = 1/6;
+    const radLen = Math.sqrt(radArea * radAspect);
+    const radH = radArea / radLen;
+    const radThick = 0.03;
+    const radGap = 0.2;
+
+    const hpMat = new THREE.MeshStandardMaterial({color: 0xd0d0dd, roughness: 0.35, metalness: 0.4});
+    const frameMat = new THREE.MeshStandardMaterial({color: 0xaaaabc, roughness: 0.4, metalness: 0.5});
+
+    const oc = Math.min(Math.floor(cfg.computeKw * 1000 / cfg.gpuPowerW), 300);
+    const [ow, oh, od] = cfg.oruSize;
+
+    const radX = 0;
+    const radY2 = -(hubY / 2 + radH / 2 + radGap);
+    const radZ = 0;
+
+    const hinge = new THREE.Mesh(box(radLen * 0.4, 0.06, 0.04), MAT.truss);
+    hinge.position.set(0, -(hubY / 2 + 0.03), 0);
+    stationGroup.add(hinge);
+
+    const radPanel = new THREE.Mesh(box(radLen, radH, radThick), MAT.rad);
+    radPanel.position.set(radX, radY2, radZ);
+    addPart(radPanel, "radiator", `Deployable Radiator \u2014 ${radArea.toFixed(0)}m\u00b2 (${radLen.toFixed(1)}m \u00d7 ${radH.toFixed(1)}m)`);
+
+    for (let hp = 0; hp < 4; hp++) {
+        const hpX = -radLen / 2 + radLen * (hp + 1) / 5;
+        const hpMesh = new THREE.Mesh(box(0.008, radH * 0.9, radThick + 0.003), hpMat);
+        hpMesh.position.set(hpX, radY2, radZ);
+        stationGroup.add(hpMesh);
+    }
+
+    // Edge frame
+    for (const [fw, fh, fx2, fy2] of [
+        [radLen + 0.03, 0.02, 0, radH / 2],
+        [radLen + 0.03, 0.02, 0, -radH / 2],
+        [0.02, radH, radLen / 2, 0],
+        [0.02, radH, -radLen / 2, 0],
+    ]) {
+        const fr = new THREE.Mesh(box(fw, fh, radThick + 0.006), frameMat);
+        fr.position.set(fx2, radY2 + fy2, radZ);
+        stationGroup.add(fr);
+    }
+
+    // Fold lines
+    for (let f = 1; f <= 3; f++) {
+        const foldY = -radH / 2 + radH * f / 4;
+        const foldLine = new THREE.Mesh(box(radLen * 0.95, 0.01, radThick + 0.005), MAT.seam);
+        foldLine.position.set(0, radY2 + foldY, radZ);
+        stationGroup.add(foldLine);
+    }
+
+    // ORUs on -Z face (distributed — not centralized for lite)
+    const finCols = Math.max(1, Math.floor(Math.sqrt(oc * radAspect)));
+    const finRows = Math.max(1, Math.floor(oc / finCols));
+    const sw = radLen / (finCols + 1), sh = radH / (finRows + 1);
+    for (let c = 0; c < finCols; c++) for (let r = 0; r < finRows; r++) {
+        const oruIdx = c * finRows + r;
+        if (oruIdx >= oc) break;
+        const role = getORURole(oruIdx, cfg.oruPrimaryRole || 'decode');
+        const ox = -radLen / 2 + sw * (c + 1);
+        const oy = -radH / 2 + sh * (r + 1);
+        const oru = new THREE.Mesh(box(ow, oh, od), role.mat);
+        oru.position.set(ox, radY2 + oy, radZ - (radThick / 2 + od / 2));
+        addPart(oru, "oru", `ORU [${c},${r}] \u2014 ${role.label}`);
+    }
+
+    // Thermal manifold pipes
+    const manifoldMat = new THREE.MeshStandardMaterial({color:0xcc4422,metalness:0.5,roughness:0.4,emissive:0xaa2211,emissiveIntensity:0.12});
+    const returnMat = new THREE.MeshStandardMaterial({color:0x3366aa,metalness:0.5,roughness:0.4,emissive:0x1133aa,emissiveIntensity:0.12});
+    const pipeLen = Math.abs(radY2) - hubY/2;
+    if (pipeLen > 0.5) {
+        const pipeMidY = -(hubY/2 + pipeLen/2);
+        const hotM = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, pipeLen, 8), manifoldMat);
+        hotM.position.set(-radLen * 0.15, pipeMidY, 0);
+        addPart(hotM, "structure", "Thermal Manifold (hot)");
+        const coldM = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, pipeLen, 8), returnMat);
+        coldM.position.set(radLen * 0.15, pipeMidY, 0);
+        addPart(coldM, "structure", "Thermal Manifold (cold return)");
+        const xManifold = new THREE.Mesh(box(radLen * 0.4, 0.02, 0.02), manifoldMat);
+        xManifold.position.set(0, -(hubY/2 + 0.04), 0);
+        stationGroup.add(xManifold);
+    }
+
+    // Laser terminals
+    for (let i=0;i<4;i++) {
+        const a=i*Math.PI/2;
+        const lt=new THREE.Mesh(new THREE.CylinderGeometry(0.15,0.15,0.4,8),MAT.antenna);
+        lt.position.set(Math.cos(a)*0.8,0,Math.sin(a)*0.8);
+        lt.rotation.x=Math.PI/2*Math.cos(a); lt.rotation.z=Math.PI/2*Math.sin(a);
+        addPart(lt,"dragonfly_link","ISL Terminal "+(i+1));
+    }
+
+    // Scale reference: Starlink V2 mini
+    const refGroupDP2 = new THREE.Group();
+    const refBodyDP2 = new THREE.Mesh(box(1.3, 0.05, 0.8), new THREE.MeshStandardMaterial({color: 0xff8800, transparent: true, opacity: 0.5}));
+    const refPanel1DP2 = new THREE.Mesh(box(3.5, 0.01, 1.7), new THREE.MeshStandardMaterial({color: 0xff8800, transparent: true, opacity: 0.3}));
+    refPanel1DP2.position.set(2.4, 0, 0);
+    const refPanel2DP2 = refPanel1DP2.clone();
+    refPanel2DP2.position.set(-2.4, 0, 0);
+    refGroupDP2.add(refBodyDP2, refPanel1DP2, refPanel2DP2);
+    const bboxDP2 = new THREE.Box3().setFromObject(stationGroup);
+    const bsizeDP2 = bboxDP2.getSize(new THREE.Vector3());
+    refGroupDP2.position.set(-bsizeDP2.x * 0.4, bboxDP2.min.y - 3, bsizeDP2.z * 0.3);
+    refGroupDP2.userData = { partType: 'scale_ref', label: 'Starlink V2 mini (7m \u00d7 3.5m) \u2014 scale reference' };
+    stationGroup.add(refGroupDP2);
+    const slLabelDP2 = 'Starlink V2 mini (7m \u00d7 3.5m) \u2014 scale reference';
+    partRegistry.push({mesh: refBodyDP2, partType: 'scale_ref', label: slLabelDP2, originalMaterial: refBodyDP2.material});
+    partRegistry.push({mesh: refPanel1DP2, partType: 'scale_ref', label: slLabelDP2, originalMaterial: refPanel1DP2.material});
+    partRegistry.push({mesh: refPanel2DP2, partType: 'scale_ref', label: slLabelDP2, originalMaterial: refPanel2DP2.material});
+}
+
+// =====================================================================
+// buildCluster — Hex-Cell DP2 x5
+// =====================================================================
+function buildCluster(cfgKey) {
+    const baseCfg = CONFIGS[cfgKey.replace('_CLUSTER','')];
+    const nodeCount = baseCfg.clusterSize || 4;
+    const pvC = 3.5;
+    const pvS = Math.ceil(baseCfg.solarM2 / 2 / pvC);
+    const wingspan = pvS * 2 + 5;
+    const hexR = wingspan * 1.1;
+
+    const positions = [];
+    const nodeRoles = [];
+    const nodeGroupIdx = [];
+    const nodePrimary = [];
+
+    const spacing = hexR;
+    const primaryGap = spacing * 0.6;
+
+    // Primary nodes
+    positions.push([-primaryGap/2, 0, 0]);
+    nodeRoles.push('routing');
+    nodeGroupIdx.push(-1);
+    nodePrimary.push(true);
+
+    positions.push([primaryGap/2, 0, 0]);
+    nodeRoles.push('routing');
+    nodeGroupIdx.push(-1);
+    nodePrimary.push(true);
+
+    // Edge nodes (DP2: 5 nodes -> 2 primary + 3 edge)
+    const edgeCount = nodeCount - 2;
+    const branchRoles = ['prefill', 'decode', 'context', 'KV-cache-server', 'prefill', 'decode', 'context', 'scheduler'];
+    const branchLabels = ['PREFILL', 'DECODE', 'CONTEXT', 'KV-CACHE', 'PREFILL-2', 'DECODE-2', 'CONTEXT-2', 'SCHEDULER'];
+
+    const branches = [
+        { angle: Math.PI * 0.8,  dist: 1.0, parent: 0 },
+        { angle: -Math.PI * 0.2, dist: 1.0, parent: 1 },
+        { angle: -Math.PI * 0.7, dist: 1.1, parent: 1 },
+    ];
+    for (let i = 0; i < branches.length; i++) {
+        const b = branches[i];
+        const parentPos = positions[b.parent];
+        const x = parentPos[0] + Math.cos(b.angle) * spacing * b.dist;
+        const z = parentPos[2] + Math.sin(b.angle) * spacing * b.dist;
+        positions.push([x, 0, z]);
+        nodeRoles.push(branchRoles[i % branchRoles.length]);
+        nodeGroupIdx.push(i < 1 ? 0 : 1);
+        nodePrimary.push(false);
+    }
+
+    // Build each node
+    const saved = stationGroup;
+    for (let n = 0; n < positions.length; n++) {
+        const [x, y, z] = positions[n];
+        const role = nodeRoles[n];
+        const isPrimary = nodePrimary[n];
+        const gIdx = nodeGroupIdx[n];
+        const nodeLabel = isPrimary
+            ? `Primary ${n + 1} \u2014 ROUTING (redundant core)`
+            : `Hex-Cell ${n + 1} \u2014 ${branchLabels[(n - 2) % branchLabels.length]}`;
+
+        const group = new THREE.Group();
+        group.position.set(x, y, z);
+        group.userData = {
+            partType: "cluster_node",
+            label: `Node ${n + 1} \u2014 ${nodeLabel}`,
+            clusterRole: role,
+            nodeIndex: n,
+            groupIndex: gIdx,
+            isPrimary: isPrimary
+        };
+        stationGroup = group;
+
+        const nodeCfg = { ...baseCfg };
+        if (isPrimary) {
+            nodeCfg.oruPrimaryRole = n === 0 ? 'prefill' : 'decode';
+        } else {
+            nodeCfg.oruPrimaryRole = role;
+        }
+        buildDP2(nodeCfg);
+        saved.add(group);
+    }
+    stationGroup = saved;
+
+    // ISL link rendering
+    const linkR = 0.5;
+    const spineLinkMat = new THREE.MeshStandardMaterial({
+        color: 0xffdd00, transparent: true, opacity: 0.7,
+        emissive: 0xffaa00, emissiveIntensity: 0.5
+    });
+    const branchLinkMat = new THREE.MeshStandardMaterial({
+        color: 0x00ffcc, transparent: true, opacity: 0.5,
+        emissive: 0x00ffcc, emissiveIntensity: 0.3
+    });
+    const crossLinkMat = new THREE.MeshStandardMaterial({
+        color: 0xff8800, transparent: true, opacity: 0.4,
+        emissive: 0xff6600, emissiveIntensity: 0.25
+    });
+
+    function addLink(i, j, mat, r, label) {
+        const [x1, y1, z1] = positions[i], [x2, y2, z2] = positions[j];
+        const dx = x2 - x1, dy = y2 - y1, dz = z2 - z1;
+        const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (len < 0.01) return;
+        const geo = new THREE.CylinderGeometry(r, r, len, 6);
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set((x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2);
+        mesh.lookAt(x2, y2, z2);
+        mesh.rotateX(Math.PI / 2);
+        addPart(mesh, "dragonfly_link", label);
+    }
+
+    // Primary spine
+    addLink(0, 1, spineLinkMat, linkR * 1.5, 'Primary Spine: Core 1 \u2194 Core 2 (redundant link)');
+
+    // Branch links
+    for (let n = 2; n < positions.length; n++) {
+        const parentIdx = nodeGroupIdx[n] === 0 ? 0 : 1;
+        addLink(parentIdx, n, branchLinkMat, linkR,
+            `Branch Link: Primary ${parentIdx + 1} \u2194 Hex-Cell ${n + 1} [${branchLabels[(n-2) % branchLabels.length]}]`);
+    }
+
+    // Cross-branch links
+    const branch0 = [], branch1 = [];
+    for (let n = 2; n < positions.length; n++) {
+        if (nodeGroupIdx[n] === 0) branch0.push(n);
+        else branch1.push(n);
+    }
+    const crossCount = Math.min(branch0.length, branch1.length, 1);
+    for (let c = 0; c < crossCount; c++) {
+        addLink(branch0[c % branch0.length], branch1[c % branch1.length], crossLinkMat, linkR * 0.5,
+            `Cross-Branch Link: Branch A[${c}] \u2194 Branch B[${c}]`);
+    }
+
+    // Intra-branch mesh
+    [branch0, branch1].forEach((branch, bi) => {
+        for (let a = 0; a < branch.length; a++) {
+            for (let b = a + 1; b < branch.length; b++) {
+                const [xa,,za] = positions[branch[a]], [xb,,zb] = positions[branch[b]];
+                const dist = Math.sqrt((xa-xb)**2 + (za-zb)**2);
+                if (dist < spacing * 1.5) {
+                    addLink(branch[a], branch[b], branchLinkMat, linkR * 0.4,
+                        `Intra-Branch ${bi+1}: Cell ${branch[a]+1} \u2194 Cell ${branch[b]+1}`);
+                }
+            }
+        }
+    });
+
+    // Hex-cell boundary indicators
+    const hexOutlineMat = new THREE.MeshStandardMaterial({
+        color: 0x445566, transparent: true, opacity: 0.06,
+        emissive: 0x223344, emissiveIntensity: 0.08, side: THREE.DoubleSide
+    });
+    const primaryOutlineMat = new THREE.MeshStandardMaterial({
+        color: 0xffcc00, transparent: true, opacity: 0.08,
+        emissive: 0x665500, emissiveIntensity: 0.12, side: THREE.DoubleSide
+    });
+    for (let n = 0; n < positions.length; n++) {
+        const [x, y, z] = positions[n];
+        const outlineR = 25;
+        const hexGeo = new THREE.RingGeometry(outlineR * 0.6, outlineR, 6);
+        const hex = new THREE.Mesh(hexGeo, nodePrimary[n] ? primaryOutlineMat : hexOutlineMat);
+        hex.position.set(x, (y || 0) - 3, z);
+        hex.rotation.x = -Math.PI / 2;
+        stationGroup.add(hex);
+    }
+}
+
+// =====================================================================
+// STATE & SWITCHING
+// =====================================================================
+let currentConfig = 'DP2';
+
+function switchConfig(key) {
+    currentConfig = key;
+    // Clear scene
+    while(stationGroup.children.length) stationGroup.remove(stationGroup.children[0]);
+    partRegistry = [];
+    // Build
+    if (key.includes('CLUSTER')) {
+        buildCluster(key);
+    } else {
+        const cfg = CONFIGS[key];
+        if (cfg.isDP1B) buildDP1B(cfg);
+        else buildDP2(cfg);
+    }
+    // Update sidebar
+    const cfg = CONFIGS[key.replace('_CLUSTER','')] || CONFIGS.DP2;
+    const m = computeMetrics(cfg);
+    updateKPIs(cfg, m);
+    document.getElementById('tab-overview').innerHTML = renderOverview(cfg, m);
+    // Auto-frame camera
+    const bbox = new THREE.Box3().setFromObject(stationGroup);
+    const center = bbox.getCenter(new THREE.Vector3());
+    const size = bbox.getSize(new THREE.Vector3());
+    const vFov = camera.fov * Math.PI / 180;
+    const aspect = camera.aspect || 1;
+    const hFov = 2 * Math.atan(Math.tan(vFov/2) * aspect);
+    const distV = (size.y / 2) / Math.tan(vFov / 2);
+    const distH = (Math.max(size.x, size.z) / 2) / Math.tan(hFov / 2);
+    const fitDist = Math.max(distV, distH) * 1.4;
+    camera.position.set(center.x + fitDist*0.35, center.y + fitDist*0.45, center.z - fitDist*0.7);
+    controls.target.copy(center);
+    camera.near = Math.max(0.05, fitDist * 0.002);
+    camera.far = fitDist * 20;
+    controls.maxDistance = fitDist * 5;
+    controls.minDistance = fitDist * 0.02;
+    camera.updateProjectionMatrix();
+    // Update tabs
+    document.querySelectorAll('.config-tab').forEach(b => b.classList.toggle('active', b.dataset.config === key));
+
+    // Update role legend
+    const legend = document.getElementById('role-legend');
+    if (legend) {
+        const cfgL = CONFIGS[key.replace('_CLUSTER','')] || CONFIGS.DP2;
+        const isCluster = key.includes('CLUSTER');
+        let roles = [['#e64033','DECODE','60%','Token generation (memory-BW)'],
+             ['#3373e6','PREFILL','25%','Prompt processing (compute-bound)'],
+             ['#33bf4d','CONTEXT','15%','KV-cache storage']];
+        if (isCluster) {
+            roles.push(['#ffaa00','ROUTING','primary','Primary hex-cell routing + scheduling']);
+        }
+
+        legend.innerHTML = `<div class="legend-title">ORU ROLES ${isCluster ? '(hex-cell \u2014 per cell bias)' : ''}</div>` +
+            roles.map(([c,n,p,d]) => `<div class="legend-item"><span class="legend-dot" style="background:${c}"></span>${n} <span class="legend-pct" title="${d}">${p}</span></div>`).join('');
+        legend.style.display = 'block';
+    }
+}
+
+// =====================================================================
+// CLICK INSPECTION
+// =====================================================================
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let hoveredPart = null;
+
+canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    const hits = raycaster.intersectObjects(stationGroup.children, true);
+    if (hits.length > 0) {
+        let obj = hits[0].object;
+        while (obj && !obj.userData.partType) obj = obj.parent;
+        if (obj && obj.userData.partType) {
+            if (currentConfig.includes('CLUSTER')) {
+                let nodeObj = obj;
+                while (nodeObj && nodeObj.userData.partType !== 'cluster_node') nodeObj = nodeObj.parent;
+                if (nodeObj && nodeObj.userData.partType === 'cluster_node') {
+                    showPartInfo('cluster_node', nodeObj.userData.label);
+                    return;
+                }
+            }
+            showPartInfo(obj.userData.partType, obj.userData.label);
+        }
+    }
+});
+
+// Hover highlight
+canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    const hits = raycaster.intersectObjects(stationGroup.children, true);
+
+    if (hoveredPart) {
+        const entry = partRegistry.find(p => p.mesh === hoveredPart);
+        if (entry) hoveredPart.material = entry.originalMaterial;
+        hoveredPart = null;
+    }
+    if (hits.length > 0) {
+        let obj = hits[0].object;
+        while (obj && !obj.userData.partType) obj = obj.parent;
+        if (obj && obj.userData.partType) {
+            hoveredPart = obj;
+            obj.material = MAT.highlight;
+            canvas.style.cursor = 'pointer';
+            return;
+        }
+    }
+    canvas.style.cursor = 'grab';
+});
+
+function showPartInfo(partType, label) {
+    const db = PART_DB[partType];
+    if (!db) return;
+    const cfg = CONFIGS[currentConfig.replace('_CLUSTER','')] || CONFIGS.DP2;
+    const m = computeMetrics(cfg);
+    let desc = db.desc;
+    if (partType === 'pv_wing') {
+        desc = `${cfg.solarCell}, ${(cfg.solarCellEff*100).toFixed(0)}% AM0 BOL efficiency, rad-hardened. CFRP honeycomb substrate.`;
+    }
+    let clusterExtra = '';
+    if (partType === 'cluster_node') {
+        const roleDescriptions = {
+            'prefill': 'Edge hex-cell handling compute-bound prompt processing and KV-cache generation.',
+            'decode': 'Edge hex-cell running memory-BW-bound autoregressive token generation.',
+            'context': 'Edge hex-cell storing and serving long-context KV-cache segments across the cluster.',
+            'routing': 'Primary hex-cell routing inference requests and balancing load across edge cells.',
+            'KV-cache-server': 'Edge hex-cell acting as dedicated KV-cache pool with high-bandwidth memory.',
+            'inference': 'General-purpose inference hex-cell.',
+            'compute': 'General compute hex-cell.'
+        };
+        const roleParts = label.match(/\u2014 (.+)/);
+        const role = roleParts ? roleParts[1].toLowerCase() : 'compute';
+        const isPrimary = label.includes('Primary');
+        desc = roleDescriptions[role] || `Hex-cell running ${role} workload.`;
+        clusterExtra = `
+            <h3>Hex-Cell Info</h3>
+            <div class="metric-row"><span class="metric-label">Type</span><span class="metric-value ${isPrimary ? 'warning' : 'orbital'}">${isPrimary ? '\u2b21 PRIMARY' : '\u2b21 EDGE'}</span></div>
+            <div class="metric-row"><span class="metric-label">Role</span><span class="metric-value">${role.toUpperCase()}</span></div>
+            <div class="metric-row"><span class="metric-label">Bus power</span><span class="metric-value">${cfg.busPwr} kW</span></div>
+            <div class="metric-row"><span class="metric-label">ISL bandwidth</span><span class="metric-value">${cfg.islRateGbps * cfg.islCount} Gbps</span></div>
+            <div class="metric-row"><span class="metric-label">Topology</span><span class="metric-value">${cfg.clusterTopology}</span></div>
+            <div class="metric-row"><span class="metric-label">Cluster size</span><span class="metric-value">${cfg.clusterSize} hex-cells</span></div>
+        `;
+    }
+    // ORU role info
+    let oruRoleExtra = '';
+    if (partType === 'oru') {
+        const roleMatch = label.match(/\u2014 (DECODE|PREFILL|CONTEXT|COMPUTE)/);
+        if (roleMatch) {
+            const roleName = roleMatch[1].toLowerCase();
+            const roleInfo = ORU_ROLES[roleName];
+            if (roleInfo) {
+                oruRoleExtra = `
+                    <h3>Inference Role: <span style="color:${roleInfo.color}">${roleInfo.label}</span></h3>
+                    <div style="font-size:11px;color:#aab;margin-bottom:8px">${roleInfo.desc}</div>
+                `;
+            }
+        }
+    }
+    // ORU detail
+    let oruExtra = '';
+    if (partType === 'oru') {
+        desc = `${cfg.gpuType}. ${cfg.oruPackaging}. Direct thermal path to radiator via ${cfg.oruThermalInterface.toLowerCase()}.`;
+        oruExtra = `
+            <h3>GPU/ASIC</h3>
+            <div class="metric-row"><span class="metric-label">Chip</span><span class="metric-value">${cfg.gpuType}</span></div>
+            <div class="metric-row"><span class="metric-label">Process</span><span class="metric-value">${cfg.gpuProcess}</span></div>
+            <div class="metric-row"><span class="metric-label">TDP</span><span class="metric-value">${cfg.gpuPowerW} W</span></div>
+            <div class="metric-row"><span class="metric-label">GFLOPS/W</span><span class="metric-value">${cfg.gpuGFLOPS_W.toLocaleString()}</span></div>
+            <h3>Memory</h3>
+            <div class="metric-row"><span class="metric-label">Type</span><span class="metric-value">${cfg.gpuMemType}</span></div>
+            <div class="metric-row"><span class="metric-label">Capacity</span><span class="metric-value">${cfg.gpuMemGB} GB</span></div>
+            <div class="metric-row"><span class="metric-label">Bandwidth</span><span class="metric-value">${cfg.gpuMemBwTBs} TB/s</span></div>
+            <h3>Interconnect</h3>
+            <div class="metric-row"><span class="metric-label">Topology</span><span class="metric-value">${cfg.gpuInterconnect}</span></div>
+            ${cfg.gpuNvlinkBwGBs > 0 ? `<div class="metric-row"><span class="metric-label">NVLink BW</span><span class="metric-value">${cfg.gpuNvlinkBwGBs} GB/s</span></div>` : ''}
+            <h3>ORU Packaging</h3>
+            <div class="metric-row"><span class="metric-label">Package</span><span class="metric-value">${cfg.oruPackaging}</span></div>
+            <div class="metric-row"><span class="metric-label">VRM</span><span class="metric-value">${cfg.oruVRM}</span></div>
+            <div class="metric-row"><span class="metric-label">Thermal path</span><span class="metric-value">${cfg.oruThermalInterface}</span></div>
+            <div class="metric-row"><span class="metric-label">ORU size</span><span class="metric-value">${cfg.oruSize.map(d=>(d*100).toFixed(0)+'cm').join(' \u00d7 ')}</span></div>
+        `;
+    }
+    const panel = document.getElementById('info-panel');
+    document.getElementById('info-content').innerHTML = `
+        <h2>${label}</h2>
+        <p style="font-size:12px;color:#aaa;margin-bottom:8px">${desc}</p>
+        <h3>Configuration</h3>
+        <div class="metric-row"><span class="metric-label">Part type</span><span class="metric-value">${db.label}</span></div>
+        <div class="metric-row"><span class="metric-label">Platform</span><span class="metric-value">${cfg.shortName}</span></div>
+        ${oruRoleExtra}
+        ${oruExtra}
+        ${clusterExtra}
+    `;
+    panel.style.display = 'block';
+}
+
+window.closeInfo = () => { document.getElementById('info-panel').style.display = 'none'; };
+
+// Sidebar tab switching
+document.querySelectorAll('.sidebar-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const content = document.getElementById('tab-' + tab.dataset.tab);
+        if (content) content.classList.add('active');
+    });
+});
+
+// Config tab switching
+document.querySelectorAll('.config-tab').forEach(btn => {
+    btn.addEventListener('click', () => switchConfig(btn.dataset.config));
+});
+
+// =====================================================================
+// RESIZE & RENDER LOOP
+// =====================================================================
+function onResize() {
+    const rect = viewport.getBoundingClientRect();
+    renderer.setSize(rect.width, rect.height);
+    camera.aspect = rect.width / rect.height;
+    camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', onResize);
+
+function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+}
+
+// Init
+onResize();
+switchConfig('DP2');
+animate();
+
+</script>
+</body>
+</html>
