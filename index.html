@@ -421,6 +421,9 @@ const CONFIGS = {
         batchSize: 8, seqLen: 2048,
         radHardening: 0.55,
         launchVehicle: "Falcon 9",
+        combinedUtilization: 0.9025, radAvailability: 0.95, operationalConfidence: 0.95,
+        inferenceMix: { '8B': 0.40, '70B': 0.35, '405B': 0.20, '1T': 0.05 },
+        groundBenchmark: { gpuHrRate: 2.90, source: 'SemiAnalysis TCO GB300 NVL72', label: 'Ground TCO' },
     },
     T1: {
         name: "T1 Tanj Hex Flat-Pack", shortName: "T1",
@@ -456,6 +459,9 @@ const CONFIGS = {
         batchSize: 16, seqLen: 2048,
         radHardening: 0.70,
         launchVehicle: "Falcon 9",
+        combinedUtilization: 0.9025, radAvailability: 0.95, operationalConfidence: 0.95,
+        inferenceMix: { '8B': 0.40, '70B': 0.35, '405B': 0.20, '1T': 0.05 },
+        groundBenchmark: { gpuHrRate: 2.90, source: 'SemiAnalysis TCO GB300 NVL72', label: 'Ground TCO' },
     },
     DP1B: {
         name: "DP1B AI Sat Mini", shortName: "DP1B",
@@ -493,6 +499,9 @@ const CONFIGS = {
         tensorParallel: 2, pipelineParallel: 1,
         batchSize: 16, seqLen: 4096,
         radHardening: 0.60,
+        combinedUtilization: 0.9025, radAvailability: 0.95, operationalConfidence: 0.95,
+        inferenceMix: { '8B': 0.40, '70B': 0.35, '405B': 0.20, '1T': 0.05 },
+        groundBenchmark: { gpuHrRate: 2.90, source: 'SemiAnalysis TCO GB300 NVL72', label: 'Ground TCO' },
     },
     DP2: {
         name: "DP2 Space-1 Vera Rubin", shortName: "DP2",
@@ -523,6 +532,9 @@ const CONFIGS = {
         clusterRoles: ["prefill","decode","context","routing"], maxClusterSize: 16,
         tensorParallel: 4, pipelineParallel: 2,
         batchSize: 32, seqLen: 4096, radHardening: 0.65,
+        combinedUtilization: 0.9025, radAvailability: 0.95, operationalConfidence: 0.95,
+        inferenceMix: { '8B': 0.40, '70B': 0.35, '405B': 0.20, '1T': 0.05 },
+        groundBenchmark: { gpuHrRate: 2.90, source: 'SemiAnalysis TCO GB300 NVL72', label: 'Ground TCO' },
     },
     DP2B: {
         name: "DP2B Space-1 Vera Rubin Hub", shortName: "DP2B",
@@ -553,6 +565,9 @@ const CONFIGS = {
         clusterRoles: ["hub-prefill","decode","context"], maxClusterSize: 8,
         tensorParallel: 4, pipelineParallel: 2,
         batchSize: 32, seqLen: 4096, radHardening: 0.65,
+        combinedUtilization: 0.9025, radAvailability: 0.95, operationalConfidence: 0.95,
+        inferenceMix: { '8B': 0.40, '70B': 0.35, '405B': 0.20, '1T': 0.05 },
+        groundBenchmark: { gpuHrRate: 2.90, source: 'SemiAnalysis TCO GB300 NVL72', label: 'Ground TCO' },
     },
     DP3: {
         name: "DP3 Tesla D3 Photonic", shortName: "DP3",
@@ -586,6 +601,9 @@ const CONFIGS = {
         clusterRoles: ["prefill","decode","context","routing","KV-cache-server"], maxClusterSize: 64,
         tensorParallel: 8, pipelineParallel: 4,
         batchSize: 64, seqLen: 8192, radHardening: 0.80,
+        combinedUtilization: 0.9025, radAvailability: 0.95, operationalConfidence: 0.95,
+        inferenceMix: { '8B': 0.40, '70B': 0.35, '405B': 0.20, '1T': 0.05 },
+        groundBenchmark: { gpuHrRate: 2.90, source: 'SemiAnalysis TCO GB300 NVL72', label: 'Ground TCO' },
     },
     DP3B: {
         name: "DP3B D3 Electrical", shortName: "DP3B",
@@ -617,6 +635,9 @@ const CONFIGS = {
         clusterRoles: ["prefill","decode","context","KV-cache-server","scheduler"], maxClusterSize: 32,
         tensorParallel: 8, pipelineParallel: 4,
         batchSize: 128, seqLen: 8192, radHardening: 0.70,
+        combinedUtilization: 0.9025, radAvailability: 0.95, operationalConfidence: 0.95,
+        inferenceMix: { '8B': 0.40, '70B': 0.35, '405B': 0.20, '1T': 0.05 },
+        groundBenchmark: { gpuHrRate: 2.90, source: 'SemiAnalysis TCO GB300 NVL72', label: 'Ground TCO' },
     },
 };
 
@@ -3182,13 +3203,19 @@ Net delta/cluster:   <span class="${(radCostDelta + launchCostPenalty) < 0 ? 'hi
 // and future exports can reuse the same math.
 // =====================================================================
 
-// ── MODEL MIX (shared between orbital and ground) ──
-const INFERENCE_MODELS = [
-    { name: '8B', params: 8e9, weight: 0.25, quant: 'INT8', bytesPerParam: 1 },
-    { name: '70B', params: 70e9, weight: 0.45, quant: 'FP8', bytesPerParam: 1 },
-    { name: '405B', params: 405e9, weight: 0.20, quant: 'FP8', bytesPerParam: 1 },
-    { name: '1T', params: 1e12, weight: 0.10, quant: 'FP4', bytesPerParam: 0.5 },
-];
+// ── MODEL SPECS (separated from business mix) ──
+const INFERENCE_MODEL_SPECS = {
+    '8B':   { params: 8e9,   quant: 'INT8', bytesPerParam: 1 },
+    '70B':  { params: 70e9,  quant: 'FP8',  bytesPerParam: 1 },
+    '405B': { params: 405e9, quant: 'FP8',  bytesPerParam: 1 },
+    '1T':   { params: 1e12,  quant: 'FP4',  bytesPerParam: 0.5 },
+};
+
+// ── DEFAULT INFERENCE MIX (per-config overridable via cfg.inferenceMix) ──
+const DEFAULT_INFERENCE_MIX = { '8B': 0.40, '70B': 0.35, '405B': 0.20, '1T': 0.05 };
+const INFERENCE_MODELS = Object.entries(INFERENCE_MODEL_SPECS).map(([name, spec]) => ({
+    name, ...spec, weight: DEFAULT_INFERENCE_MIX[name] || 0,
+}));
 
 // ── GROUND GPU SPECS (for comparison) ──
 const GROUND_GPU_SPECS = {
@@ -3199,7 +3226,6 @@ const GROUND_GPU_SPECS = {
 };
 
 // ── PRICING CONSTANTS ──
-const TARGET_GPU_HR_RATE = 2.90;  // $/GPU-hr from SemiAnalysis TCO (capital $2.28 + hosting $0.62)
 const GROUND_POWER_COST_KWH = 0.08;
 const GROUND_PUE = 1.35;
 const GROUND_MFU = 0.40;
@@ -3212,9 +3238,10 @@ function computeTokenomics(cfg, m) {
     // 1. Hardware inputs
     t.gpuCount = m.oruCount * cs;
     t.satLife = cfg.satLife || 5;
-    t.utilization = 0.85;
-    t.radPenalty = cfg.radHardening || 0.60;
-    t.totalGpuHours = t.gpuCount * t.satLife * 8760 * t.utilization;
+    t.combinedUtilization = cfg.combinedUtilization || 0.9025;
+    t.radAvailability = cfg.radAvailability || 0.95;
+    t.operationalConfidence = cfg.operationalConfidence || 0.95;
+    t.totalGpuHours = t.gpuCount * t.satLife * 8760 * t.combinedUtilization;
     t.memBwPerGpu = cfg.gpuMemBwTBs * 1e12;
     t.tflopsPerGpu = (m.effectiveTFLOPS / m.oruCount) * 1e12;
 
@@ -3223,50 +3250,61 @@ function computeTokenomics(cfg, m) {
     t.weightedDecodeTokS = 0;
     t.weightedPrefillTokS = 0;
 
-    for (const mod of INFERENCE_MODELS) {
-        const modelMemGB = mod.params * mod.bytesPerParam / 1e9;
+    const mix = cfg.inferenceMix || DEFAULT_INFERENCE_MIX;
+    const mixSum = Object.values(mix).reduce((s, v) => s + v, 0);
+    if (Math.abs(mixSum - 1) > 0.01) console.warn('Inference mix weights sum to ' + mixSum + ', expected 1.0');
+
+    for (const [modelName, spec] of Object.entries(INFERENCE_MODEL_SPECS)) {
+        const weight = mix[modelName] || 0;
+        if (weight <= 0) continue;
+        const modelMemGB = spec.params * spec.bytesPerParam / 1e9;
         const gpusNeeded = Math.max(1, Math.ceil(modelMemGB / cfg.gpuMemGB));
         const copies = Math.max(1, Math.floor(t.gpuCount / gpusNeeded));
-        const decodeTokSPerCopy = (t.memBwPerGpu * gpusNeeded) / (mod.params * mod.bytesPerParam);
-        const prefillTokSPerCopy = (t.tflopsPerGpu * gpusNeeded) / (2 * mod.params);
+        const decodeTokSPerCopy = (t.memBwPerGpu * gpusNeeded) / (spec.params * spec.bytesPerParam);
+        const prefillTokSPerCopy = (t.tflopsPerGpu * gpusNeeded) / (2 * spec.params);
         const totalDecode = decodeTokSPerCopy * copies;
         const totalPrefill = prefillTokSPerCopy * copies;
 
         t.modelResults.push({
-            ...mod, modelMemGB, gpusNeeded, copies,
+            name: modelName, ...spec, weight, modelMemGB, gpusNeeded, copies,
             decodeTokSPerCopy, prefillTokSPerCopy,
             totalDecode, totalPrefill,
-            weightedDecode: totalDecode * mod.weight,
-            weightedPrefill: totalPrefill * mod.weight,
+            weightedDecode: totalDecode * weight,
+            weightedPrefill: totalPrefill * weight,
         });
-        t.weightedDecodeTokS += totalDecode * mod.weight;
-        t.weightedPrefillTokS += totalPrefill * mod.weight;
+        t.weightedDecodeTokS += totalDecode * weight;
+        t.weightedPrefillTokS += totalPrefill * weight;
     }
 
     t.blendedTokS = t.weightedDecodeTokS;  // decode-limited system
-    t.tokPerDay = t.blendedTokS * 86400 * t.utilization * t.radPenalty;
+    t.tokPerDay = t.blendedTokS * 86400 * t.combinedUtilization;
     t.tokPerYear = t.tokPerDay * 365;
     t.tokLifetime = t.tokPerYear * t.satLife;
 
-    // 3. Pricing (derived from GPU-hr rate)
-    t.targetGpuHrRate = TARGET_GPU_HR_RATE;
-    t.effTokPerGpuHr = (t.blendedTokS * t.utilization * t.radPenalty) / t.gpuCount * 3600;
-    t.impliedPricePerMTok = t.targetGpuHrRate / (t.effTokPerGpuHr / 1e6);
+    // 3. Pricing (derived from ground benchmark GPU-hr rate)
+    t.groundBenchmark = cfg.groundBenchmark || { gpuHrRate: null, source: 'none', label: 'No benchmark' };
+    t.targetGpuHrRate = t.groundBenchmark.gpuHrRate;
+    t.effTokPerGpuHr = (t.blendedTokS * t.combinedUtilization) / t.gpuCount * 3600;
+    t.benchmarkImpliedPricePerMTok = t.targetGpuHrRate != null ? t.targetGpuHrRate / (t.effTokPerGpuHr / 1e6) : null;
     t.priceTiers = [
         { name: 'Premium (real-time, SLA)', mult: 2.0, frac: 0.10 },
         { name: 'Standard (API, batch)', mult: 1.0, frac: 0.45 },
         { name: 'Economy (async, off-peak)', mult: 0.5, frac: 0.35 },
         { name: 'Training compute (FLOPS)', mult: 0.3, frac: 0.10 },
     ];
-    t.blendedPrice = 0;
-    for (const tier of t.priceTiers) t.blendedPrice += t.impliedPricePerMTok * tier.mult * tier.frac;
+    t.benchmarkBlendedPricePerMTok = 0;
+    if (t.benchmarkImpliedPricePerMTok != null) {
+        for (const tier of t.priceTiers) t.benchmarkBlendedPricePerMTok += t.benchmarkImpliedPricePerMTok * tier.mult * tier.frac;
+    } else {
+        t.benchmarkBlendedPricePerMTok = null;
+    }
 
     // 4. Revenue
-    t.revenuePerYear = (t.tokPerYear / 1e6) * t.blendedPrice;
-    t.revenueLifetime = t.revenuePerYear * t.satLife;
+    t.revenuePerYear = t.benchmarkBlendedPricePerMTok != null ? (t.tokPerYear / 1e6) * t.benchmarkBlendedPricePerMTok : null;
+    t.revenueLifetime = t.revenuePerYear != null ? t.revenuePerYear * t.satLife : null;
     t.tokPerMonth = t.tokPerDay * 30;
-    t.revenuePerDay = (t.tokPerDay / 1e6) * t.blendedPrice;
-    t.revenuePerMonth = t.revenuePerDay * 30;
+    t.revenuePerDay = t.benchmarkBlendedPricePerMTok != null ? (t.tokPerDay / 1e6) * t.benchmarkBlendedPricePerMTok : null;
+    t.revenuePerMonth = t.revenuePerDay != null ? t.revenuePerDay * 30 : null;
 
     // 5. Cost structure
     t.launchCost = (cfg.dryMassKg || 1000) * (cfg.launchCostPerKg || 500) * cs;
@@ -3281,17 +3319,17 @@ function computeTokenomics(cfg, m) {
 
     // 6. Unit economics
     t.costPerMTok = t.totalCost / (t.tokLifetime / 1e6);
-    t.grossMargin = (t.blendedPrice - t.costPerMTok) / t.blendedPrice;
+    t.grossMargin = t.benchmarkBlendedPricePerMTok != null ? (t.benchmarkBlendedPricePerMTok - t.costPerMTok) / t.benchmarkBlendedPricePerMTok : null;
     t.costPerGpuHour = t.totalCost / t.totalGpuHours;
-    t.costVsTargetRatio = t.costPerGpuHour / t.targetGpuHrRate;
-    t.netIncome = t.revenueLifetime - t.totalCost;
-    t.roic = t.netIncome / t.totalCapex;
-    t.annualNetCashFlow = t.revenuePerYear - t.annualOpex;
-    t.paybackYears = t.annualNetCashFlow > 0 ? t.totalCapex / t.annualNetCashFlow : Infinity;
+    t.costVsTargetRatio = t.targetGpuHrRate != null ? t.costPerGpuHour / t.targetGpuHrRate : Infinity;
+    t.netIncome = t.revenueLifetime != null ? t.revenueLifetime - t.totalCost : null;
+    t.roic = t.netIncome != null ? t.netIncome / t.totalCapex : null;
+    t.annualNetCashFlow = t.revenuePerYear != null ? t.revenuePerYear - t.annualOpex : null;
+    t.paybackYears = (t.annualNetCashFlow != null && t.annualNetCashFlow > 0) ? t.totalCapex / t.annualNetCashFlow : Infinity;
 
     // 7. IRR (Newton's method)
     t.irr = 0;
-    if (t.annualNetCashFlow > 0 && t.totalCapex > 0) {
+    if (t.annualNetCashFlow != null && t.annualNetCashFlow > 0 && t.totalCapex > 0) {
         let g = 0.15;
         for (let i = 0; i < 100; i++) {
             let npv = -t.totalCapex, dnpv = 0;
@@ -3319,18 +3357,20 @@ function computeTokenomics(cfg, m) {
     t.groundLifetimeCost = t.groundTotalCapex + t.groundFacilityCost + t.groundAnnualOpex * t.satLife;
 
     let gTokS = 0;
-    for (const mod of INFERENCE_MODELS) {
-        const gMem = mod.params * mod.bytesPerParam / 1e9;
+    for (const [modelName, spec] of Object.entries(INFERENCE_MODEL_SPECS)) {
+        const weight = mix[modelName] || 0;
+        if (weight <= 0) continue;
+        const gMem = spec.params * spec.bytesPerParam / 1e9;
         const gGpu = Math.max(1, Math.ceil(gMem / t.gSpec.memGB));
         const gCop = Math.max(1, Math.floor(t.gpuCount / gGpu));
-        gTokS += ((t.gSpec.memBwTBs * 1e12) * gGpu / (mod.params * mod.bytesPerParam) * gCop) * mod.weight;
+        gTokS += ((t.gSpec.memBwTBs * 1e12) * gGpu / (spec.params * spec.bytesPerParam) * gCop) * weight;
     }
-    t.groundTokPerDay = gTokS * 86400 * 0.90;
+    t.groundTokPerDay = gTokS * 86400 * 0.95;  // ground utilization (no rad penalty, 95% operational)
     t.groundTokLifetime = t.groundTokPerDay * 365 * t.satLife;
     t.groundCostPerMTok = t.groundLifetimeCost / (t.groundTokLifetime / 1e6);
     t.groundCostPerGpuHour = t.groundLifetimeCost / (t.gpuCount * t.satLife * 8760 * GROUND_MFU);
     t.orbitalAdvantage = t.groundCostPerMTok / t.costPerMTok;
-    t.viableVsTarget = t.costPerGpuHour <= t.targetGpuHrRate;
+    t.viableVsTarget = t.targetGpuHrRate != null ? t.costPerGpuHour <= t.targetGpuHrRate : null;
 
     return t;
 }
@@ -3341,9 +3381,9 @@ function renderTokenomics(cfg, m) {
     const t = computeTokenomics(cfg, m);
 
     // All values precomputed in computeTokenomics(cfg, m)
-    const { gpuCount, satLife, utilization, radPenalty, totalGpuHours,
+    const { gpuCount, satLife, combinedUtilization, totalGpuHours,
             blendedTokS, tokPerDay, tokPerYear, tokLifetime,
-            blendedPrice, impliedPricePerMTok, effTokPerGpuHr, priceTiers,
+            benchmarkBlendedPricePerMTok, benchmarkImpliedPricePerMTok, effTokPerGpuHr, priceTiers,
             revenuePerYear, revenueLifetime,
             launchCost, satBuildCost, totalCapex,
             groundStationOpex, missionControlOpex, insuranceOpex,
@@ -3370,7 +3410,7 @@ ${mr.name} (${mr.quant}): ${mr.gpusNeeded} GPU/copy × ${mr.copies} copies
     // Map price tiers to include computed pricePerMTok and fraction for template compatibility
     const priceTiersDisplay = t.priceTiers.map(tier => ({
         name: tier.name,
-        pricePerMTok: impliedPricePerMTok * tier.mult,
+        pricePerMTok: benchmarkImpliedPricePerMTok != null ? benchmarkImpliedPricePerMTok * tier.mult : null,
         fraction: tier.frac,
     }));
 
@@ -3382,11 +3422,11 @@ ${mr.name} (${mr.quant}): ${mr.gpusNeeded} GPU/copy × ${mr.copies} copies
         </div>
         <div class="calc-block"><span class="comment">// Weighted model mix → aggregate throughput</span>
 <span class="comment">// Decode: memory-BW bound | Prefill: compute bound</span>
-<span class="comment">// Radiation penalty: ${(radPenalty*100).toFixed(0)}% performance retention</span>
+<span class="comment">// Combined utilization: ${(combinedUtilization*100).toFixed(2)}%</span>
 
 ${modelBreakdown}
 System throughput (decode-limited): <span class="highlight">${(blendedTokS/1000).toFixed(1)}k tok/s</span>
-After util (${(utilization*100).toFixed(0)}%) + radiation: <span class="highlight">${(blendedTokS*utilization*radPenalty/1000).toFixed(1)}k tok/s</span>
+After combined utilization (${(combinedUtilization*100).toFixed(2)}%): <span class="highlight">${(blendedTokS*combinedUtilization/1000).toFixed(1)}k tok/s</span>
 
 Daily:    <span class="highlight">${(tokPerDay/1e9).toFixed(2)} B tokens</span>
 Monthly:  <span class="highlight">${(tokPerMonth/1e9).toFixed(1)} B tokens</span>
@@ -3399,15 +3439,15 @@ Lifetime: <span class="highlight">${(tokLifetime/1e12).toFixed(2)} T tokens</spa
             <span class="card-title">Pricing & Revenue</span>
             <span class="card-badge" style="background:rgba(26,138,106,0.15);color:var(--orbital)">$/MTok</span>
         </div>
-        <div class="metric-row"><span class="metric-label">Blended price</span><span class="metric-value accent">$${blendedPrice.toFixed(2)}/MTok</span></div>
+        <div class="metric-row"><span class="metric-label">Benchmark-derived price</span><span class="metric-value accent">${benchmarkBlendedPricePerMTok != null ? '$'+benchmarkBlendedPricePerMTok.toFixed(2)+'/MTok' : 'N/A'}</span></div>
         ${priceTiersDisplay.map(pt => `
-        <div class="metric-row"><span class="metric-label">${pt.name}</span><span class="metric-value">$${pt.pricePerMTok.toFixed(2)}/MTok (${(pt.fraction*100).toFixed(0)}%)</span></div>
+        <div class="metric-row"><span class="metric-label">${pt.name}</span><span class="metric-value">${pt.pricePerMTok != null ? '$'+pt.pricePerMTok.toFixed(2)+'/MTok' : 'N/A'} (${(pt.fraction*100).toFixed(0)}%)</span></div>
         `).join('')}
         <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
-        <div class="metric-row"><span class="metric-label">Daily revenue</span><span class="metric-value orbital">$${(revenuePerDay/1000).toFixed(1)}k</span></div>
-        <div class="metric-row"><span class="metric-label">Monthly revenue</span><span class="metric-value orbital">$${(revenuePerMonth/1e6).toFixed(2)}M</span></div>
-        <div class="metric-row"><span class="metric-label">Annual revenue</span><span class="metric-value orbital">$${(revenuePerYear/1e6).toFixed(1)}M</span></div>
-        <div class="metric-row"><span class="metric-label">Lifetime revenue</span><span class="metric-value accent">$${(revenueLifetime/1e6).toFixed(1)}M</span></div>
+        <div class="metric-row"><span class="metric-label">Daily revenue</span><span class="metric-value orbital">${revenuePerDay != null ? '$'+(revenuePerDay/1000).toFixed(1)+'k' : 'N/A'}</span></div>
+        <div class="metric-row"><span class="metric-label">Monthly revenue</span><span class="metric-value orbital">${revenuePerMonth != null ? '$'+(revenuePerMonth/1e6).toFixed(2)+'M' : 'N/A'}</span></div>
+        <div class="metric-row"><span class="metric-label">Annual revenue</span><span class="metric-value orbital">${revenuePerYear != null ? '$'+(revenuePerYear/1e6).toFixed(1)+'M' : 'N/A'}</span></div>
+        <div class="metric-row"><span class="metric-label">Lifetime revenue</span><span class="metric-value accent">${revenueLifetime != null ? '$'+(revenueLifetime/1e6).toFixed(1)+'M' : 'N/A'}</span></div>
         </div>
     </div>
 
@@ -3439,17 +3479,17 @@ Lifetime: <span class="highlight">${(tokLifetime/1e12).toFixed(2)} T tokens</spa
             <span class="card-badge" style="background:rgba(122,75,168,0.15);color:var(--purple)">ROIC</span>
         </div>
         <div class="metric-row"><span class="metric-label">Cost per MTok</span><span class="metric-value accent">$${costPerMTok.toFixed(2)}</span></div>
-        <div class="metric-row"><span class="metric-label">Blended price</span><span class="metric-value">$${blendedPrice.toFixed(2)}/MTok</span></div>
-        <div class="metric-row"><span class="metric-label">Gross margin</span><span class="metric-value ${grossMargin > 0 ? 'orbital' : 'ground'}">${(grossMargin*100).toFixed(1)}%</span></div>
+        <div class="metric-row"><span class="metric-label">Benchmark-derived price</span><span class="metric-value">${benchmarkBlendedPricePerMTok != null ? '$'+benchmarkBlendedPricePerMTok.toFixed(2)+'/MTok' : 'N/A'}</span></div>
+        <div class="metric-row"><span class="metric-label">Gross margin</span><span class="metric-value ${grossMargin != null && grossMargin > 0 ? 'orbital' : 'ground'}">${grossMargin != null ? (grossMargin*100).toFixed(1)+'%' : 'N/A'}</span></div>
         <div class="metric-row"><span class="metric-label">Cost per GPU-hour</span><span class="metric-value">$${costPerGpuHour.toFixed(2)}</span></div>
-        <div class="metric-row"><span class="metric-label">Target GPU-hr rate</span><span class="metric-value orbital">$${targetGpuHrRate.toFixed(2)}/GPU-hr</span></div>
+        <div class="metric-row"><span class="metric-label">Target GPU-hr rate</span><span class="metric-value orbital">${targetGpuHrRate != null ? '$'+targetGpuHrRate.toFixed(2)+'/GPU-hr' : 'N/A'}</span></div>
         <div class="metric-row"><span class="metric-label">Tok/GPU-hr</span><span class="metric-value">${(effTokPerGpuHr/1e6).toFixed(1)}M tok</span></div>
         <div class="metric-row"><span class="metric-label">Ground GPU-hr rate</span><span class="metric-value">~$2.50-6.00/GPU-hr (market)</span></div>
         <div class="metric-row"><span class="metric-label">LCOC (gross)</span><span class="metric-value">${m.lcocGross ? '$'+m.lcocGross.toFixed(2)+'/GPU-hr' : 'N/A'}</span></div>
 
         <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
-        <div class="metric-row"><span class="metric-label">Lifetime net income</span><span class="metric-value ${netIncome > 0 ? 'orbital' : 'ground'}">$${(netIncome/1e6).toFixed(1)}M</span></div>
-        <div class="metric-row"><span class="metric-label">ROIC</span><span class="metric-value ${roic > 0 ? 'orbital' : 'ground'}">${(roic*100).toFixed(0)}%</span></div>
+        <div class="metric-row"><span class="metric-label">Lifetime net income</span><span class="metric-value ${netIncome != null && netIncome > 0 ? 'orbital' : 'ground'}">${netIncome != null ? '$'+(netIncome/1e6).toFixed(1)+'M' : 'N/A'}</span></div>
+        <div class="metric-row"><span class="metric-label">ROIC</span><span class="metric-value ${roic != null && roic > 0 ? 'orbital' : 'ground'}">${roic != null ? (roic*100).toFixed(0)+'%' : 'N/A'}</span></div>
         <div class="metric-row"><span class="metric-label">Payback period</span><span class="metric-value ${paybackYears < satLife ? 'orbital' : 'ground'}">${paybackYears > 0 && paybackYears < 100 ? paybackYears.toFixed(1)+' years' : 'N/A'}</span></div>
         <div class="metric-row"><span class="metric-label">IRR</span><span class="metric-value ${irr > 0.15 ? 'orbital' : irr > 0 ? 'warning' : 'ground'}">${irr <= -0.95 ? 'N/A (negative CF)' : (irr*100).toFixed(1)+'%'}</span></div>
         </div>
@@ -3469,7 +3509,7 @@ GPU type:       ${gSpec.name.substring(0,16).padEnd(16)}${cfg.gpuType.substring(
 CAPEX:          $${(groundTotalCapex/1e6).toFixed(1).padStart(6)}M      $${(totalCapex/1e6).toFixed(1).padStart(6)}M
 OPEX/yr:        $${(t.groundAnnualOpex/1e6).toFixed(1).padStart(6)}M      $${(annualOpex/1e6).toFixed(1).padStart(6)}M
 TCO (${satLife}yr):     $${(groundLifetimeCost/1e6).toFixed(1).padStart(6)}M      $${(totalCost/1e6).toFixed(1).padStart(6)}M
-Throughput:     ${(groundTokPerDay/86400/1000).toFixed(0).padStart(6)}k t/s    ${(blendedTokS*utilization*radPenalty/1000).toFixed(0).padStart(6)}k t/s
+Throughput:     ${(groundTokPerDay/86400/1000).toFixed(0).padStart(6)}k t/s    ${(blendedTokS*combinedUtilization/1000).toFixed(0).padStart(6)}k t/s
 $/MTok:         $${groundCostPerMTok.toFixed(2).padStart(6)}       $${costPerMTok.toFixed(2).padStart(6)}
 ───────────────────────────────────────
 <span class="${orbitalAdvantage > 1 ? 'highlight' : 'error'}">Orbital is ${orbitalAdvantage > 1 ? (orbitalAdvantage).toFixed(1)+'× cheaper' : (1/orbitalAdvantage).toFixed(1)+'× more expensive'} per token</span>
@@ -3480,7 +3520,7 @@ ${orbitalAdvantage > 1 ? '✓ Space cooling + free solar outweigh launch cost' :
 <span class="comment">//   ✓ Free 24/7 solar → zero energy cost</span>
 <span class="comment">//   ✓ No land, permitting, water, grid connection</span>
 <span class="comment">// Orbital disadvantages:</span>
-<span class="comment">//   ✗ Radiation (${(radPenalty*100).toFixed(0)}% performance retained)</span>
+<span class="comment">//   ✗ Combined utilization (${(combinedUtilization*100).toFixed(2)}%)</span>
 <span class="comment">//   ✗ Bandwidth bottleneck (ISL + ground contact)</span>
 <span class="comment">//   ✗ No physical servicing, 5yr design life</span>
 <span class="comment">//   ✗ Launch risk + insurance cost</span></div>
@@ -3497,8 +3537,8 @@ Global GPU count:              ~${(2e6 * Math.pow(1.45, (cfg.year - 2025)) / 1e6
 
 This ${cfg.shortName} ${cs > 1 ? 'cluster' : 'station'}:
   ${gpuCount.toLocaleString()} GPUs × ${satLife} years
-  Annual revenue: $${(revenuePerYear/1e6).toFixed(1)}M
-  ${(revenuePerYear / (50e9 * Math.pow(1.45, (cfg.year - 2025))) * 100).toFixed(4)}% of total market</div>
+  Annual revenue: ${revenuePerYear != null ? '$'+(revenuePerYear/1e6).toFixed(1)+'M' : 'N/A'}
+  ${revenuePerYear != null ? (revenuePerYear / (50e9 * Math.pow(1.45, (cfg.year - 2025))) * 100).toFixed(4)+'% of total market' : ''}</div>
     </div>
     `;
 }
