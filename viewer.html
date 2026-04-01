@@ -361,7 +361,6 @@ body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', 
             <button class="sidebar-tab" data-tab="models">Tokenomics</button>
             <button class="sidebar-tab" data-tab="physics">Physics</button>
             <button class="sidebar-tab" data-tab="cluster">Cluster</button>
-            <button class="sidebar-tab" data-tab="aisat">AI Sat</button>
         </div>
         <div class="tab-content active" id="tab-overview"></div>
         <div class="tab-content" id="tab-compute"></div>
@@ -369,7 +368,6 @@ body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', 
         <div class="tab-content" id="tab-models"></div>
         <div class="tab-content" id="tab-physics"></div>
         <div class="tab-content" id="tab-cluster"></div>
-        <div class="tab-content" id="tab-aisat"></div>
     </div>
 </div>
 
@@ -5083,7 +5081,6 @@ function switchConfig(key) {
     document.getElementById('tab-models').innerHTML = renderModels(cfg, m) + renderTokenomics(cfg, m);
     document.getElementById('tab-physics').innerHTML = renderPhysics(cfg, m);
     document.getElementById('tab-cluster').innerHTML = renderCluster(cfg, m);
-    document.getElementById('tab-aisat').innerHTML = renderAISat();
     // Reset camera
     // Auto-frame camera to fit model bounding box
     const bbox = new THREE.Box3().setFromObject(stationGroup);
@@ -5366,10 +5363,19 @@ document.querySelectorAll('.config-tab').forEach(btn => {
 // Handle URL hash on load — e.g. #aisat, #physics/DP3, #tokenomics
 function handleHash() {
     const hash = location.hash.replace('#', '');
-    if (!hash) return;
+    if (!hash) { exitAISatMode(); return; }
     const parts = hash.split('/');
     const tabName = parts[0];
     const configName = parts[1];
+
+    // #aisat → full-screen CAD of DP1B (no sidebar)
+    if (tabName === 'aisat') {
+        enterAISatMode();
+        return;
+    } else {
+        exitAISatMode();
+    }
+
     // Switch config first (if specified)
     if (configName && CONFIGS[configName]) {
         switchConfig(configName);
@@ -5379,6 +5385,47 @@ function handleHash() {
         activateTab(tabName);
     }
 }
+
+function enterAISatMode() {
+    const sidebar = document.querySelector('.sidebar');
+    const app = document.querySelector('.app');
+    if (sidebar) sidebar.style.display = 'none';
+    if (app) app.style.gridTemplateColumns = '1fr';
+    switchConfig('DP1B');
+    // Add a back button overlay
+    let backBtn = document.getElementById('aisat-back');
+    if (!backBtn) {
+        backBtn = document.createElement('button');
+        backBtn.id = 'aisat-back';
+        backBtn.textContent = '← Back to Explorer';
+        backBtn.style.cssText = 'position:fixed;top:80px;left:16px;z-index:9999;padding:8px 16px;background:rgba(26,138,106,0.9);color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600;backdrop-filter:blur(4px)';
+        backBtn.addEventListener('click', () => { location.hash = ''; });
+        document.body.appendChild(backBtn);
+    }
+    backBtn.style.display = 'block';
+    // Add title overlay
+    let title = document.getElementById('aisat-title');
+    if (!title) {
+        title = document.createElement('div');
+        title.id = 'aisat-title';
+        title.style.cssText = 'position:fixed;bottom:60px;left:16px;z-index:9999;color:#7fdbca;font-size:20px;font-weight:700;font-family:inherit;text-shadow:0 2px 8px rgba(0,0,0,0.8)';
+        title.innerHTML = 'AI Sat Mini <span style="font-size:12px;color:#aab;font-weight:400">100 kW · 48 GPUs · SpaceX heritage</span>';
+        document.body.appendChild(title);
+    }
+    title.style.display = 'block';
+}
+
+function exitAISatMode() {
+    const sidebar = document.querySelector('.sidebar');
+    const app = document.querySelector('.app');
+    if (sidebar) sidebar.style.display = '';
+    if (app) app.style.gridTemplateColumns = '';
+    const backBtn = document.getElementById('aisat-back');
+    if (backBtn) backBtn.style.display = 'none';
+    const title = document.getElementById('aisat-title');
+    if (title) title.style.display = 'none';
+}
+
 window.addEventListener('hashchange', handleHash);
 
 // =====================================================================
