@@ -312,6 +312,34 @@ body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', 
 </style>
 </head>
 <body>
+<!-- Password gate -->
+<div id="auth-gate" style="position:fixed;inset:0;z-index:99999;background:#0a0f14;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Sans',sans-serif">
+    <div style="text-align:center;max-width:360px;padding:40px">
+        <div style="font-size:28px;margin-bottom:8px">⬡</div>
+        <h2 style="color:#e8e4dc;margin:0 0 6px;font-size:18px;font-weight:600">Orbital Compute</h2>
+        <p style="color:#8a8475;font-size:12px;margin:0 0 24px">Station Technical Explorer — Full Model</p>
+        <input id="auth-pw" type="password" placeholder="Enter access code"
+            style="width:100%;padding:12px 16px;background:#141a22;border:1px solid #2a3040;border-radius:6px;color:#e8e4dc;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box;margin-bottom:12px"
+            autofocus>
+        <button id="auth-btn"
+            style="width:100%;padding:10px;background:#1a8a6a;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Access Model</button>
+        <p id="auth-err" style="color:#c44a3a;font-size:11px;margin:8px 0 0;display:none">Incorrect access code</p>
+    </div>
+</div>
+<script>
+(function(){
+    const HASH = '0b82742981d652e0fe2abe2665f08a8d70fec84463dc4e46e59aae7cccd3ff80'; // sha256 of password
+    async function sha256(s){const d=new TextEncoder().encode(s);const h=await crypto.subtle.digest('SHA-256',d);return Array.from(new Uint8Array(h)).map(b=>b.toString(16).padStart(2,'0')).join('');}
+    if(sessionStorage.getItem('oc_auth')==='1'){document.getElementById('auth-gate').style.display='none';}
+    document.getElementById('auth-btn').onclick=async function(){
+        const pw=document.getElementById('auth-pw').value;
+        const h=await sha256(pw);
+        if(h===HASH){sessionStorage.setItem('oc_auth','1');document.getElementById('auth-gate').style.display='none';}
+        else{document.getElementById('auth-err').style.display='block';document.getElementById('auth-pw').value='';}
+    };
+    document.getElementById('auth-pw').onkeydown=function(e){if(e.key==='Enter')document.getElementById('auth-btn').click();};
+})();
+</script>
 <div class="app">
     <!-- Top navigation bar -->
     <div class="top-bar">
@@ -404,9 +432,8 @@ const CONFIGS = {
         radPanels: 0,  // body-mount radiator — no separate panels
         // Economics (2026 spreadsheet) — satLife 5yr per spreadsheet
         year: 2026, satLife: 5, waccOrbital: 0.15,
-        launchCostPerKg: 1500, dryMassKg: 760,
+        launchCostPerKg: 800, dryMassKg: 760,
         // GPU unit cost: $45,000/GPU from spreadsheet
-        // LCOC re-derived: totalGpuHours = 16 GPUs × 5yr × 8760hr × 0.85 util
         // totalProgramCost kept from spreadsheet
         totalProgramCost: 12225487,
         massSolar: 174, massRadiator: 132, massCompute: 40, massStructure: 245,
@@ -420,7 +447,7 @@ const CONFIGS = {
         tensorParallel: 1, pipelineParallel: 1,
         batchSize: 8, seqLen: 2048,
         radHardening: 0.55,
-        launchVehicle: "Falcon 9",
+        launchVehicle: "Starship",
         combinedUtilization: 0.9025, radAvailability: 0.95, operationalConfidence: 0.95,
         inferenceMix: { '8B': 0.40, '70B': 0.35, '405B': 0.20, '1T': 0.05 },
         groundBenchmark: { gpuHrRate: 2.90, source: 'SemiAnalysis TCO GB300 NVL72', label: 'Ground TCO' },
@@ -445,7 +472,7 @@ const CONFIGS = {
         busDia: 2.5, busL: 0.045,
         // Economics (same 2026 basis as DP1) — satLife 5yr
         year: 2026, satLife: 5, waccOrbital: 0.15,
-        launchCostPerKg: 1500, dryMassKg: 760,
+        launchCostPerKg: 800, dryMassKg: 760,
         totalProgramCost: 12225487,
         massSolar: 174, massRadiator: 132, massCompute: 40, massStructure: 245,
         // Networking — 4 ISL per spreadsheet
@@ -458,7 +485,7 @@ const CONFIGS = {
         tensorParallel: 1, pipelineParallel: 1,
         batchSize: 16, seqLen: 2048,
         radHardening: 0.70,
-        launchVehicle: "Falcon 9",
+        launchVehicle: "Starship",
         combinedUtilization: 0.9025, radAvailability: 0.95, operationalConfidence: 0.95,
         inferenceMix: { '8B': 0.40, '70B': 0.35, '405B': 0.20, '1T': 0.05 },
         groundBenchmark: { gpuHrRate: 2.90, source: 'SemiAnalysis TCO GB300 NVL72', label: 'Ground TCO' },
@@ -466,9 +493,10 @@ const CONFIGS = {
     DP1B: {
         name: "DP1B AI Sat Mini", shortName: "DP1B",
         busPwr: 100, computeKw: 92, thermalKw: 100,
-        // Radiator from spreadsheet: 70kW at 320K radiator temp, ~320 W/m²
-        //   reqRadM2 = 219 m² (more conservative than 370K assumption)
-        solarM2: 360, radM2: 219, radTempK: 320,
+        // Radiator: 10m × 40m = 400 m², 320K radiator temp
+        solarM2: 1700, radM2: 400, radTempK: 320,
+        radPanelW: 10, radPanelLen: 40,
+        solarPanelLen: 170, solarPanelW: 10,     // unfurled dimensions (m)
         earthVF: 0.24, sidedness: 1.80,
         gpuPowerW: 1400, gpuCount: 48, gpuType: "NVIDIA B300 (rad-screened)",
         gpuGFLOPS_W: 5000, gpuMemGB: 192, gpuMemType: "HBM3E",
@@ -480,15 +508,16 @@ const CONFIGS = {
         oruPackaging: "CoWoS-L, 2.5D interposer, 8-HBM3E stack",
         orbit: "Dawn-dusk SSO, 625 km", altitude: 625,
         isPhotonic: false, isDP3: false, isDP1: false, isDP1B: true, spineLen: 0,
-        solarCell: "Monocrystalline silicon (c-Si)", solarCellEff: 0.22, solarCellGen: "Silicon",
-        // Geometry: scaled-up Starlink V2 mini form factor
-        // 4m × 2m flat bus, skinny roll-out wings ±X (60m × 3m each)
-        // Separate DP2-style radiator panel below bus (~75 m²)
+        solarCell: "CIGS thin-film flexible (MiaSolé / Ascent Solar)", solarCellEff: 0.043, solarCellGen: "Thin-film",
+        // Geometry: SpaceX AI Sat Mini form factor
+        // 4m × 2m flat bus, roll-out wings ±X (83m × 10m each, 170m tip-to-tip)
+        // 1700 m² thin-film @ 4.3% eff → 100 kW (ultra-light flexible arrays)
+        // Separate DP2-style deployable radiator panel below bus (~219 m²)
         // Economics (2027 Starship launch)
         year: 2027, satLife: 5, waccOrbital: 0.15,
-        launchCostPerKg: 800, dryMassKg: 1650, launchVehicle: "Starship",
+        launchCostPerKg: 800, dryMassKg: 1930, launchVehicle: "Starship",
         totalProgramCost: 15200000,
-        massSolar: 360, massRadiator: 1892, massCompute: 120, massStructure: 600,
+        massSolar: 510, massRadiator: 1600, massCompute: 120, massStructure: 700,
         // Networking
         islCount: 4, islRateGbps: 100, islWavelength: "1550 nm", islModulation: "DP-QPSK",
         islApertureCm: 8, islPointingUrad: 1.5, islFEC: "LDPC 5/6",
@@ -534,7 +563,7 @@ const CONFIGS = {
         batchSize: 32, seqLen: 4096, radHardening: 0.65,
         combinedUtilization: 0.9025, radAvailability: 0.95, operationalConfidence: 0.95,
         inferenceMix: { '8B': 0.40, '70B': 0.35, '405B': 0.20, '1T': 0.05 },
-        groundBenchmark: { gpuHrRate: 2.90, source: 'SemiAnalysis TCO GB300 NVL72', label: 'Ground TCO' },
+        groundBenchmark: { gpuHrRate: 4.80, source: 'SemiAnalysis TCO Vera Rubin NVL72 (scaled)', label: 'Ground TCO' },
     },
     DP2B: {
         name: "DP2B Space-1 Vera Rubin Hub", shortName: "DP2B",
@@ -567,7 +596,7 @@ const CONFIGS = {
         batchSize: 32, seqLen: 4096, radHardening: 0.65,
         combinedUtilization: 0.9025, radAvailability: 0.95, operationalConfidence: 0.95,
         inferenceMix: { '8B': 0.40, '70B': 0.35, '405B': 0.20, '1T': 0.05 },
-        groundBenchmark: { gpuHrRate: 2.90, source: 'SemiAnalysis TCO GB300 NVL72', label: 'Ground TCO' },
+        groundBenchmark: { gpuHrRate: 4.80, source: 'SemiAnalysis TCO Vera Rubin NVL72 (scaled)', label: 'Ground TCO' },
     },
     DP3: {
         name: "DP3 Tesla D3 Photonic", shortName: "DP3",
@@ -1046,7 +1075,7 @@ function renderOverview(cfg, m) {
 
     <div class="card">
         <div class="card-header"><span class="card-title">Power Budget</span></div>
-        <div class="metric-row"><span class="metric-label">Solar array</span><span class="metric-value">${cfg.solarM2.toFixed(0)} m²</span></div>
+        <div class="metric-row"><span class="metric-label">Solar array</span><span class="metric-value">${cfg.solarM2.toFixed(0)} m²${cfg.solarPanelLen ? ` — ${cfg.solarPanelLen}m × ${cfg.solarPanelW}m` : ''}</span></div>
         <div class="metric-row"><span class="metric-label">Cell technology</span><span class="metric-value" style="font-size:10px">${cfg.solarCell || 'III-V MJ'}</span></div>
         <div class="metric-row"><span class="metric-label">Cell efficiency (AM0)</span><span class="metric-value accent">${((cfg.solarCellEff||0.20)*100).toFixed(0)}%</span></div>
         <div class="metric-row"><span class="metric-label">Generated (BOL)</span><span class="metric-value orbital">${(m.solarGenW/1000).toFixed(1)} kW</span></div>
@@ -1084,7 +1113,7 @@ function renderOverview(cfg, m) {
             <span class="card-badge" style="background:rgba(200,120,40,0.2);color:#e8a030">BOM</span>
         </div>
 
-        <div class="section-header">Solar Arrays — ${cfg.solarM2.toFixed(0)} m²</div>
+        <div class="section-header">Solar Arrays — ${cfg.solarM2.toFixed(0)} m²${cfg.solarPanelLen ? ` (${cfg.solarPanelLen}m × ${cfg.solarPanelW}m)` : ''}</div>
         ${cfg.solarCellGen === 'Perovskite tandem' ? `
         <div class="metric-row"><span class="metric-label">Cell type</span><span class="metric-value">CsPbI₃/c-Si tandem</span></div>
         <div class="metric-row"><span class="metric-label">Cell manufacturer</span><span class="metric-value accent">Oxford PV / Swift Solar</span></div>
@@ -3218,9 +3247,11 @@ const INFERENCE_MODELS = Object.entries(INFERENCE_MODEL_SPECS).map(([name, spec]
 }));
 
 // ── GROUND GPU SPECS (for comparison) ──
+// Ground GPUs run at full clocks, full bandwidth, NVL72 memory pooling
+// Orbital GPUs are rad-screened: downclocked ~15-25%, no NVLink pooling (standalone ORUs)
 const GROUND_GPU_SPECS = {
-    'NVIDIA B300':       { name: 'B300 NVL72 (ground)', cost: 45000, tdpW: 1200, memGB: 192, memBwTBs: 8.0, tflops: 9000 },
-    'NVIDIA Vera Rubin': { name: 'Vera Rubin NVL72 (ground)', cost: 75000, tdpW: 1800, memGB: 288, memBwTBs: 12.0, tflops: 15000 },
+    'NVIDIA B300':       { name: 'B300 NVL72 (ground)', cost: 45000, tdpW: 1200, memGB: 288, memBwTBs: 10.0, tflops: 9000 },
+    'NVIDIA Vera Rubin': { name: 'Vera Rubin NVL72 (ground)', cost: 75000, tdpW: 1800, memGB: 384, memBwTBs: 16.0, tflops: 15000 },
     'Tesla D3 Photonic': { name: 'D3 Photonic (ground)', cost: 40000, tdpW: 300, memGB: 64, memBwTBs: 12.0, tflops: 18000 },
     'Tesla D3':          { name: 'D3 Electrical (ground)', cost: 30000, tdpW: 350, memGB: 256, memBwTBs: 8.0, tflops: 6000 },
 };
@@ -3347,28 +3378,57 @@ function computeTokenomics(cfg, m) {
         t.irr = -1;
     }
 
-    // 8. Ground comparison
+    // 8. Ground comparison — use benchmark TCO rate from spreadsheet
     const gpuTypeKey = Object.keys(GROUND_GPU_SPECS).find(k => cfg.gpuType.includes(k)) || 'NVIDIA B300';
     t.gSpec = GROUND_GPU_SPECS[gpuTypeKey];
+    // Ground TCO from benchmark $/GPU-hr (includes datacenter staff, networking, grid, facility, etc.)
+    const groundGpuHrRate = t.targetGpuHrRate || 2.90;
+    t.groundCostPerGpuHour = groundGpuHrRate;
+    const groundTotalGpuHrs = t.gpuCount * t.satLife * 8760 * 0.95;  // 95% ground uptime
+    t.groundLifetimeCost = groundGpuHrRate * groundTotalGpuHrs;
+    // Break down for display
     t.groundTotalCapex = t.gpuCount * t.gSpec.cost;
     t.groundAnnualPower = t.gpuCount * (t.gSpec.tdpW / 1000) * GROUND_PUE * 8760 * GROUND_POWER_COST_KWH;
     t.groundFacilityCost = t.gpuCount * 2000;
-    t.groundAnnualOpex = t.groundAnnualPower + (t.groundTotalCapex + t.groundFacilityCost) * 0.08;
-    t.groundLifetimeCost = t.groundTotalCapex + t.groundFacilityCost + t.groundAnnualOpex * t.satLife;
+    t.groundAnnualOpex = (t.groundLifetimeCost - t.groundTotalCapex - t.groundFacilityCost) / t.satLife;
+    t.groundBenchmarkSource = t.groundBenchmark.source || 'SemiAnalysis';
 
     let gTokS = 0;
+    t.perModelComparison = [];
     for (const [modelName, spec] of Object.entries(INFERENCE_MODEL_SPECS)) {
         const weight = mix[modelName] || 0;
         if (weight <= 0) continue;
+        // Ground throughput for this model
         const gMem = spec.params * spec.bytesPerParam / 1e9;
         const gGpu = Math.max(1, Math.ceil(gMem / t.gSpec.memGB));
         const gCop = Math.max(1, Math.floor(t.gpuCount / gGpu));
-        gTokS += ((t.gSpec.memBwTBs * 1e12) * gGpu / (spec.params * spec.bytesPerParam) * gCop) * weight;
+        const gModelTokS = (t.gSpec.memBwTBs * 1e12) * gGpu / (spec.params * spec.bytesPerParam) * gCop;
+        gTokS += gModelTokS * weight;
+
+        // Per-model $/MTok: if ALL tokens were this model, what would cost be?
+        // Orbital: same total cost, but throughput = this model's decode tok/s only
+        const orbMR = t.modelResults.find(mr => mr.name === modelName);
+        if (orbMR) {
+            const orbTokS = orbMR.totalDecode;  // orbital throughput for this model alone
+            const orbTokLifetime = orbTokS * t.combinedUtilization * 86400 * 365 * t.satLife;
+            const orbCostPerMTok = t.totalCost / (orbTokLifetime / 1e6);
+            const gTokLifetime = gModelTokS * 0.95 * 86400 * 365 * t.satLife;
+            const gCostPerMTok = t.groundLifetimeCost / (gTokLifetime / 1e6);
+            t.perModelComparison.push({
+                name: modelName,
+                label: spec.label || modelName,
+                params: spec.params,
+                orbTokS, orbCostPerMTok,
+                gModelTokS, gCostPerMTok,
+                advantage: gCostPerMTok / orbCostPerMTok,
+                weight,
+            });
+        }
     }
     t.groundTokPerDay = gTokS * 86400 * 0.95;  // ground utilization (no rad penalty, 95% operational)
     t.groundTokLifetime = t.groundTokPerDay * 365 * t.satLife;
     t.groundCostPerMTok = t.groundLifetimeCost / (t.groundTokLifetime / 1e6);
-    t.groundCostPerGpuHour = t.groundLifetimeCost / (t.gpuCount * t.satLife * 8760 * GROUND_MFU);
+    // groundCostPerGpuHour already set from benchmark rate above
     t.orbitalAdvantage = t.groundCostPerMTok / t.costPerMTok;
     t.viableVsTarget = t.targetGpuHrRate != null ? t.costPerGpuHour <= t.targetGpuHrRate : null;
 
@@ -3394,7 +3454,7 @@ function renderTokenomics(cfg, m) {
             groundTotalCapex, groundLifetimeCost, groundCostPerMTok, orbitalAdvantage,
             groundTokPerDay, groundTokLifetime,
             tokPerMonth, revenuePerDay, revenuePerMonth,
-            costVsTargetRatio, viableVsTarget } = t;
+            costVsTargetRatio, viableVsTarget, perModelComparison } = t;
 
     // Build model breakdown string from precomputed results
     let modelBreakdown = '';
@@ -3512,17 +3572,64 @@ TCO (${satLife}yr):     $${(groundLifetimeCost/1e6).toFixed(1).padStart(6)}M    
 Throughput:     ${(groundTokPerDay/86400/1000).toFixed(0).padStart(6)}k t/s    ${(blendedTokS*combinedUtilization/1000).toFixed(0).padStart(6)}k t/s
 $/MTok:         $${groundCostPerMTok.toFixed(2).padStart(6)}       $${costPerMTok.toFixed(2).padStart(6)}
 ───────────────────────────────────────
-<span class="${orbitalAdvantage > 1 ? 'highlight' : 'error'}">Orbital is ${orbitalAdvantage > 1 ? (orbitalAdvantage).toFixed(1)+'× cheaper' : (1/orbitalAdvantage).toFixed(1)+'× more expensive'} per token</span>
-${orbitalAdvantage > 1 ? '✓ Space cooling + free solar outweigh launch cost' : '✗ Launch cost dominates — need cheaper $/kg or more GPUs/sat'}
+<span class="${orbitalAdvantage > 1 ? 'highlight' : 'error'}">Orbital is ${orbitalAdvantage > 1 ? (orbitalAdvantage).toFixed(1)+'× cheaper' : (1/orbitalAdvantage).toFixed(1)+'× more expensive'} per token (blended)</span></div>
+    </div>
 
-<span class="comment">// Orbital advantages:</span>
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">$/MTok by Model Size</span>
+            <span class="card-badge" style="background:rgba(58,122,184,0.15);color:var(--accent)">PER-MODEL</span>
+        </div>
+        <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px">
+            <thead>
+                <tr style="border-bottom:2px solid var(--border-dark);text-align:left">
+                    <th style="padding:6px 8px">Model</th>
+                    <th style="padding:6px 8px;text-align:right">Ground<br><span style="font-size:9px;opacity:0.7">$/MTok</span></th>
+                    <th style="padding:6px 8px;text-align:right">Orbital<br><span style="font-size:9px;opacity:0.7">$/MTok</span></th>
+                    <th style="padding:6px 8px;text-align:right">Δ</th>
+                    <th style="padding:6px 8px;text-align:right">Ground<br><span style="font-size:9px;opacity:0.7">tok/s</span></th>
+                    <th style="padding:6px 8px;text-align:right">Orbital<br><span style="font-size:9px;opacity:0.7">tok/s</span></th>
+                </tr>
+            </thead>
+            <tbody>
+            ${perModelComparison.map(pm => `
+                <tr style="border-bottom:1px solid var(--border)">
+                    <td style="padding:5px 8px;font-weight:600">${pm.name}<br><span style="font-size:9px;opacity:0.6;font-weight:400">${(pm.weight*100).toFixed(0)}% of mix</span></td>
+                    <td style="padding:5px 8px;text-align:right;color:var(--ground)">$${pm.gCostPerMTok.toFixed(2)}</td>
+                    <td style="padding:5px 8px;text-align:right;color:var(--orbital);font-weight:600">$${pm.orbCostPerMTok.toFixed(2)}</td>
+                    <td style="padding:5px 8px;text-align:right;color:${pm.advantage > 1 ? 'var(--orbital)' : 'var(--ground)'};font-weight:600">${pm.advantage > 1 ? pm.advantage.toFixed(1)+'× cheaper' : (1/pm.advantage).toFixed(1)+'× costlier'}</td>
+                    <td style="padding:5px 8px;text-align:right;opacity:0.8">${pm.gModelTokS > 1000 ? (pm.gModelTokS/1000).toFixed(1)+'k' : pm.gModelTokS.toFixed(0)}</td>
+                    <td style="padding:5px 8px;text-align:right;opacity:0.8">${pm.orbTokS > 1000 ? (pm.orbTokS/1000).toFixed(1)+'k' : pm.orbTokS.toFixed(0)}</td>
+                </tr>
+            `).join('')}
+                <tr style="border-top:2px solid var(--border-dark);font-weight:700">
+                    <td style="padding:6px 8px">Blended</td>
+                    <td style="padding:6px 8px;text-align:right;color:var(--ground)">$${groundCostPerMTok.toFixed(2)}</td>
+                    <td style="padding:6px 8px;text-align:right;color:var(--orbital)">$${costPerMTok.toFixed(2)}</td>
+                    <td style="padding:6px 8px;text-align:right;color:${orbitalAdvantage > 1 ? 'var(--orbital)' : 'var(--ground)'}">${orbitalAdvantage > 1 ? orbitalAdvantage.toFixed(1)+'× cheaper' : (1/orbitalAdvantage).toFixed(1)+'× costlier'}</td>
+                    <td style="padding:6px 8px;text-align:right">${(groundTokPerDay/86400/1000).toFixed(1)}k</td>
+                    <td style="padding:6px 8px;text-align:right">${(blendedTokS*combinedUtilization/1000).toFixed(1)}k</td>
+                </tr>
+            </tbody>
+        </table>
+        </div>
+        <div style="margin-top:8px;font-size:10px;opacity:0.6;line-height:1.4">
+            Per-model $/MTok assumes 100% of capacity dedicated to that model.<br>
+            Decode-limited (memory-BW bound). Larger models → fewer copies → higher $/MTok.
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">Trade-offs</span></div>
+        <div class="calc-block"><span class="comment">// Orbital advantages:</span>
 <span class="comment">//   ✓ Zero cooling (radiate to 3K) → no PUE overhead</span>
 <span class="comment">//   ✓ Free 24/7 solar → zero energy cost</span>
 <span class="comment">//   ✓ No land, permitting, water, grid connection</span>
 <span class="comment">// Orbital disadvantages:</span>
 <span class="comment">//   ✗ Combined utilization (${(combinedUtilization*100).toFixed(2)}%)</span>
 <span class="comment">//   ✗ Bandwidth bottleneck (ISL + ground contact)</span>
-<span class="comment">//   ✗ No physical servicing, 5yr design life</span>
+<span class="comment">//   ✗ No physical servicing, ${satLife}yr design life</span>
 <span class="comment">//   ✗ Launch risk + insurance cost</span></div>
     </div>
 
@@ -3898,10 +4005,11 @@ function buildDP1B(cfg) {
     // ================================================================
     // DP1B AI SAT MINI — SpaceX 100kW AI satellite
     //
-    // Scaled-up Starlink V2 mini — SAME FORM FACTOR, just ~4× bigger.
+    // Scaled-up Starlink V2 mini — SpaceX AI Sat form factor.
     //
-    // Starlink V2 mini:  1.3m × 0.8m × 0.05m body, 7m wingspan, ~2.5 kW
-    // AI Sat Mini:       5.0m × 2.5m × 0.15m body, 35m wingspan, 100 kW
+    // Physical dimensions: 170m unfurled × 10m wide, 100 kW
+    // Active cell area ~360 m² (packing factor ~22% on structural frame)
+    // Roll-out solar wings with cells in strips separated by booms/hinges
     //
     // Layout (identical to Starlink, just bigger):
     //   - Flat rectangular bus body, oriented horizontally
@@ -3912,8 +4020,9 @@ function buildDP1B(cfg) {
     //   - 4 ISL laser terminals
     // ================================================================
     const bW = 4.0, bD = 2.0, bH = 0.12;  // bus body: X × Z × Y (flat, like Starlink)
-    const wingChord = 3.0;                 // Z chord — set by spool width (fairing constraint)
-    const wingSpan = Math.ceil(cfg.solarM2 / 2 / wingChord);  // X span per wing (~60m for 360 m²)
+    const totalLen = cfg.solarPanelLen || 170;   // 170m tip-to-tip unfurled
+    const wingChord = cfg.solarPanelW || 10;     // 10m width (Z chord)
+    const wingSpan = Math.ceil((totalLen - bW) / 2);  // ~83m per wing
     // Radiator panel below bus (DP2-style, separate from bus)
     const radC = Math.sqrt(cfg.radM2 / 4);  // chord
     const radS = 4 * radC;                   // span (4:1 aspect — long and narrow)
@@ -3980,11 +4089,9 @@ function buildDP1B(cfg) {
     // ── DEPLOYABLE RADIATOR FINS (same architecture as DP2) ──
     // Vertical fin panels fold out from ±Z bus edges
     // Tall along Y, wide along X, thin along Z — like vertical walls
-    // Single radiator panel on anti-sun side (-Z), same as DP2
-    const radArea1B = cfg.radM2;
-    const radAspect1B = 1/6;  // tall and narrow: height = 6× width
-    const radLen1B = Math.sqrt(radArea1B * radAspect1B);  // X (narrow)
-    const radH1B = radArea1B / radLen1B;
+    // Single radiator panel on anti-sun side, 10m × 40m
+    const radLen1B = cfg.radPanelW || 10;   // X width (matches bus/solar width)
+    const radH1B = cfg.radPanelLen || 40;   // Y height (hangs below bus)
     const radThick = 0.025;
     const radGap1B = 0.15;
 
@@ -4005,7 +4112,7 @@ function buildDP1B(cfg) {
     // Single radiator panel (XY plane, -Z face to deep space)
     const radPanel1B = new THREE.Mesh(box(radLen1B, radH1B, radThick), MAT.rad);
     radPanel1B.position.set(radX1B, radY1B, radZ1B);
-    addPart(radPanel1B, "radiator", `Deployable Radiator — ${radArea1B.toFixed(0)}m² (${radLen1B.toFixed(1)}m × ${radH1B.toFixed(1)}m)`);
+    addPart(radPanel1B, "radiator", `Deployable Radiator — ${(radLen1B * radH1B).toFixed(0)}m² (${radLen1B.toFixed(1)}m × ${radH1B.toFixed(1)}m)`);
 
     // Heat pipes
     for (let hp = 0; hp < 3; hp++) {
@@ -4024,7 +4131,7 @@ function buildDP1B(cfg) {
     }
 
     // ORUs on -Z face
-    const fCols1B = Math.max(1, Math.floor(Math.sqrt(gpuCount * radAspect1B)));
+    const fCols1B = Math.max(1, Math.floor(Math.sqrt(gpuCount * (radLen1B / radH1B))));
     const fRows1B = Math.max(1, Math.floor(gpuCount / fCols1B));
     const fsw1B = radLen1B / (fCols1B + 1), fsh1B = radH1B / (fRows1B + 1);
     for (let c = 0; c < fCols1B; c++) for (let r = 0; r < fRows1B; r++) {
@@ -5177,12 +5284,12 @@ function switchConfig(key) {
     } else if (key.includes('DRAGONFLY')) {
         buildDragonfly(key);
     } else {
-        const cfg = CONFIGS[key];
-        if (cfg.isDP3) buildDP3(cfg);
-        else if (cfg.isDP1B) buildDP1B(cfg);
-        else if (cfg.isHexpack) buildT1(cfg);
-        else if (cfg.isDP1) buildDP1(cfg);
-        else buildDP2(cfg);
+        const cfgB = CONFIGS[key];
+        if (cfgB.isDP3) buildDP3(cfgB);
+        else if (cfgB.isDP1B) buildDP1B(cfgB);
+        else if (cfgB.isHexpack) buildT1(cfgB);
+        else if (cfgB.isDP1) buildDP1(cfgB);
+        else buildDP2(cfgB);
     }
     // Update sidebar
     const cfg = CONFIGS[key.replace('_CLUSTER','').replace('_DRAGONFLY','')] || CONFIGS.DP2;

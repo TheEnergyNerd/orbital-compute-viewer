@@ -262,6 +262,34 @@ body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', 
 </style>
 </head>
 <body>
+<!-- Password gate -->
+<div id="auth-gate" style="position:fixed;inset:0;z-index:99999;background:#0a0f14;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Sans',sans-serif">
+    <div style="text-align:center;max-width:360px;padding:40px">
+        <div style="font-size:28px;margin-bottom:8px">⬡</div>
+        <h2 style="color:#e8e4dc;margin:0 0 6px;font-size:18px;font-weight:600">Orbital Compute</h2>
+        <p style="color:#8a8475;font-size:12px;margin:0 0 24px">Station Technical Explorer — Lite</p>
+        <input id="auth-pw" type="password" placeholder="Enter access code"
+            style="width:100%;padding:12px 16px;background:#141a22;border:1px solid #2a3040;border-radius:6px;color:#e8e4dc;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box;margin-bottom:12px"
+            autofocus>
+        <button id="auth-btn"
+            style="width:100%;padding:10px;background:#1a8a6a;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Access Model</button>
+        <p id="auth-err" style="color:#c44a3a;font-size:11px;margin:8px 0 0;display:none">Incorrect access code</p>
+    </div>
+</div>
+<script>
+(function(){
+    const HASH = '0b82742981d652e0fe2abe2665f08a8d70fec84463dc4e46e59aae7cccd3ff80'; // sha256 of password
+    async function sha256(s){const d=new TextEncoder().encode(s);const h=await crypto.subtle.digest('SHA-256',d);return Array.from(new Uint8Array(h)).map(b=>b.toString(16).padStart(2,'0')).join('');}
+    if(sessionStorage.getItem('oc_auth')==='1'){document.getElementById('auth-gate').style.display='none';}
+    document.getElementById('auth-btn').onclick=async function(){
+        const pw=document.getElementById('auth-pw').value;
+        const h=await sha256(pw);
+        if(h===HASH){sessionStorage.setItem('oc_auth','1');document.getElementById('auth-gate').style.display='none';}
+        else{document.getElementById('auth-err').style.display='block';document.getElementById('auth-pw').value='';}
+    };
+    document.getElementById('auth-pw').onkeydown=function(e){if(e.key==='Enter')document.getElementById('auth-btn').click();};
+})();
+</script>
 <div class="app">
     <!-- Top navigation bar -->
     <div class="top-bar">
@@ -323,7 +351,9 @@ const CONFIGS = {
     DP1B: {
         name: "DP1B AI Sat Mini", shortName: "DP1B",
         busPwr: 100, computeKw: 92, thermalKw: 100,
-        solarM2: 360, radM2: 219, radTempK: 320,
+        solarM2: 1700, radM2: 400, radTempK: 320,
+        solarPanelLen: 170, solarPanelW: 10,
+        radPanelW: 10, radPanelLen: 40,
         earthVF: 0.24, sidedness: 1.80,
         gpuPowerW: 1400, gpuCount: 48, gpuType: "NVIDIA B300 (rad-screened)",
         gpuGFLOPS_W: 5000, gpuMemGB: 192, gpuMemType: "HBM3E",
@@ -772,8 +802,9 @@ function buildRadStiff(c, w, h, ax) {
 // =====================================================================
 function buildDP1B(cfg) {
     const bW = 4.0, bD = 2.0, bH = 0.12;
-    const wingChord = 3.0;
-    const wingSpan = Math.ceil(cfg.solarM2 / 2 / wingChord);
+    const totalLen = cfg.solarPanelLen || 170;
+    const wingChord = cfg.solarPanelW || 10;
+    const wingSpan = Math.ceil((totalLen - bW) / 2);
     const radC = Math.sqrt(cfg.radM2 / 4);
     const radS = 4 * radC;
 
@@ -829,10 +860,8 @@ function buildDP1B(cfg) {
     }
 
     // Deployable radiator fin
-    const radArea1B = cfg.radM2;
-    const radAspect1B = 1/6;
-    const radLen1B = Math.sqrt(radArea1B * radAspect1B);
-    const radH1B = radArea1B / radLen1B;
+    const radLen1B = cfg.radPanelW || 10;
+    const radH1B = cfg.radPanelLen || 40;
     const radThick = 0.025;
     const radGap1B = 0.15;
 
@@ -851,7 +880,7 @@ function buildDP1B(cfg) {
 
     const radPanel1B = new THREE.Mesh(box(radLen1B, radH1B, radThick), MAT.rad);
     radPanel1B.position.set(radX1B, radY1B, radZ1B);
-    addPart(radPanel1B, "radiator", `Deployable Radiator \u2014 ${radArea1B.toFixed(0)}m\u00b2 (${radLen1B.toFixed(1)}m \u00d7 ${radH1B.toFixed(1)}m)`);
+    addPart(radPanel1B, "radiator", `Deployable Radiator \u2014 ${(radLen1B * radH1B).toFixed(0)}m\u00b2 (${radLen1B.toFixed(1)}m \u00d7 ${radH1B.toFixed(1)}m)`);
 
     for (let hp = 0; hp < 3; hp++) {
         const hpX = -radLen1B / 2 + radLen1B * (hp + 1) / 4;
@@ -868,7 +897,7 @@ function buildDP1B(cfg) {
     }
 
     // ORUs on -Z face
-    const fCols1B = Math.max(1, Math.floor(Math.sqrt(gpuCount * radAspect1B)));
+    const fCols1B = Math.max(1, Math.floor(Math.sqrt(gpuCount * (radLen1B / radH1B))));
     const fRows1B = Math.max(1, Math.floor(gpuCount / fCols1B));
     const fsw1B = radLen1B / (fCols1B + 1), fsh1B = radH1B / (fRows1B + 1);
     for (let c = 0; c < fCols1B; c++) for (let r = 0; r < fRows1B; r++) {
