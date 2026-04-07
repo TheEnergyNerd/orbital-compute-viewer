@@ -278,7 +278,7 @@ body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', 
 </div>
 <script>
 (function(){
-    const HASH = '0b82742981d652e0fe2abe2665f08a8d70fec84463dc4e46e59aae7cccd3ff80'; // sha256 of password
+    const HASH = 'c5b7dc5354185a809f124ef0ccf00ebeecbb544f6e95c22c6a9af3086299df3a'; // sha256 of password
     async function sha256(s){const d=new TextEncoder().encode(s);const h=await crypto.subtle.digest('SHA-256',d);return Array.from(new Uint8Array(h)).map(b=>b.toString(16).padStart(2,'0')).join('');}
     if(sessionStorage.getItem('oc_auth')==='1'){document.getElementById('auth-gate').style.display='none';}
     document.getElementById('auth-btn').onclick=async function(){

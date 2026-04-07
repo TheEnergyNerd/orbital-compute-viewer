@@ -328,7 +328,7 @@ body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', 
 </div>
 <script>
 (function(){
-    const HASH = '0b82742981d652e0fe2abe2665f08a8d70fec84463dc4e46e59aae7cccd3ff80'; // sha256 of password
+    const HASH = 'c5b7dc5354185a809f124ef0ccf00ebeecbb544f6e95c22c6a9af3086299df3a'; // sha256 of password
     async function sha256(s){const d=new TextEncoder().encode(s);const h=await crypto.subtle.digest('SHA-256',d);return Array.from(new Uint8Array(h)).map(b=>b.toString(16).padStart(2,'0')).join('');}
     if(sessionStorage.getItem('oc_auth')==='1'){document.getElementById('auth-gate').style.display='none';}
     document.getElementById('auth-btn').onclick=async function(){
@@ -508,16 +508,17 @@ const CONFIGS = {
         oruPackaging: "CoWoS-L, 2.5D interposer, 8-HBM3E stack",
         orbit: "Dawn-dusk SSO, 625 km", altitude: 625,
         isPhotonic: false, isDP3: false, isDP1: false, isDP1B: true, spineLen: 0,
-        solarCell: "CIGS thin-film flexible (MiaSolé / Ascent Solar)", solarCellEff: 0.043, solarCellGen: "Thin-film",
+        solarCell: "Silicon (space-grade, flexible roll-out)", solarCellEff: 0.20, solarCellGen: "Silicon",
+        solarCostPerW: 1.00,
         // Geometry: SpaceX AI Sat Mini form factor
         // 4m × 2m flat bus, roll-out wings ±X (83m × 10m each, 170m tip-to-tip)
-        // 1700 m² thin-film @ 4.3% eff → 100 kW (ultra-light flexible arrays)
-        // Separate DP2-style deployable radiator panel below bus (~219 m²)
+        // 1700 m² silicon @ 20% eff → ~463 kW total, 100 kW to compute
+        // Separate DP2-style deployable radiator panel below bus (~400 m²)
         // Economics (2027 Starship launch)
         year: 2027, satLife: 5, waccOrbital: 0.15,
-        launchCostPerKg: 800, dryMassKg: 1930, launchVehicle: "Starship",
-        totalProgramCost: 15200000,
-        massSolar: 510, massRadiator: 1600, massCompute: 120, massStructure: 700,
+        launchCostPerKg: 800, dryMassKg: 3970, launchVehicle: "Starship",
+        totalProgramCost: 15700000,
+        massSolar: 2550, massRadiator: 1600, massCompute: 120, massStructure: 700,
         // Networking
         islCount: 4, islRateGbps: 100, islWavelength: "1550 nm", islModulation: "DP-QPSK",
         islApertureCm: 8, islPointingUrad: 1.5, islFEC: "LDPC 5/6",
