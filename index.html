@@ -387,21 +387,15 @@ body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', 
             <button class="sidebar-tab" data-tab="compute">Compute</button>
             <button class="sidebar-tab" data-tab="network">Network</button>
             <button class="sidebar-tab" data-tab="models">Tokenomics</button>
-            <button class="sidebar-tab" data-tab="physics">Physics</button>
             <button class="sidebar-tab" data-tab="cluster">Cluster</button>
             <button class="sidebar-tab" data-tab="industry">Industry</button>
-            <button class="sidebar-tab" data-tab="foundry">Foundry</button>
-            <button class="sidebar-tab" data-tab="market">Market</button>
         </div>
         <div class="tab-content active" id="tab-overview"></div>
         <div class="tab-content" id="tab-compute"></div>
         <div class="tab-content" id="tab-network"></div>
         <div class="tab-content" id="tab-models"></div>
-        <div class="tab-content" id="tab-physics"></div>
         <div class="tab-content" id="tab-cluster"></div>
         <div class="tab-content" id="tab-industry"></div>
-        <div class="tab-content" id="tab-foundry"></div>
-        <div class="tab-content" id="tab-market"></div>
     </div>
 </div>
 
@@ -1563,7 +1557,7 @@ window.applyCustomModel = function() {
     // Re-render the models tab
     const cfg = CONFIGS[currentConfig.replace('_CLUSTER','').replace('_DRAGONFLY','')] || CONFIGS.DP2;
     const m = computeMetrics(cfg);
-    document.getElementById('tab-models').innerHTML = renderModels(cfg, m) + renderTokenomics(cfg, m);
+    document.getElementById('tab-models').innerHTML = renderModels(cfg, m) + renderTokenomics(cfg, m) + renderMarket(cfg, m);
     // Scroll to results
     setTimeout(() => {
         const el = document.getElementById('custom-results');
@@ -6086,14 +6080,11 @@ function switchConfig(key) {
     const m = computeMetrics(cfg);
     updateKPIs(cfg, m);
     document.getElementById('tab-overview').innerHTML = renderOverview(cfg, m);
-    document.getElementById('tab-compute').innerHTML = renderCompute(cfg, m);
+    document.getElementById('tab-compute').innerHTML = renderCompute(cfg, m) + renderPhysics(cfg, m);
     document.getElementById('tab-network').innerHTML = renderNetwork(cfg, m);
-    document.getElementById('tab-models').innerHTML = renderModels(cfg, m) + renderTokenomics(cfg, m);
-    document.getElementById('tab-physics').innerHTML = renderPhysics(cfg, m);
+    document.getElementById('tab-models').innerHTML = renderModels(cfg, m) + renderTokenomics(cfg, m) + renderMarket(cfg, m);
     document.getElementById('tab-cluster').innerHTML = renderCluster(cfg, m);
-    document.getElementById('tab-industry').innerHTML = renderIndustry(cfg, m);
-    document.getElementById('tab-foundry').innerHTML = renderFoundry(cfg, m);
-    document.getElementById('tab-market').innerHTML = renderMarket(cfg, m);
+    document.getElementById('tab-industry').innerHTML = renderIndustry(cfg, m) + renderFoundry(cfg, m);
     // Reset camera
     // Auto-frame camera to fit model bounding box
     const bbox = new THREE.Box3().setFromObject(stationGroup);
@@ -6393,9 +6384,12 @@ function handleHash() {
     if (configName && CONFIGS[configName]) {
         switchConfig(configName);
     }
+    // Redirect merged tabs
+    const tabRedirects = { physics: 'compute', foundry: 'industry', market: 'models' };
+    const resolvedTab = tabRedirects[tabName] || tabName;
     // Then activate tab
-    if (document.getElementById('tab-' + tabName)) {
-        activateTab(tabName);
+    if (document.getElementById('tab-' + resolvedTab)) {
+        activateTab(resolvedTab);
     }
 }
 
