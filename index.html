@@ -1117,165 +1117,15 @@ function renderOverview(cfg, m) {
         <div class="metric-row"><span class="metric-label">RTT latency</span><span class="metric-value orange">${m.totalLatencyMs.toFixed(1)} ms</span></div>
     </div>
 
-    <div class="card">
+    <div class="card" style="cursor:pointer" onclick="activateTab('industry')">
         <div class="card-header">
             <span class="card-title">Supply Chain & Materials</span>
-            <span class="card-badge" style="background:rgba(200,120,40,0.2);color:#e8a030">BOM</span>
+            <span class="card-badge" style="background:rgba(200,120,40,0.2);color:#e8a030">→ INDUSTRY TAB</span>
         </div>
-
-        <div class="section-header">Solar Arrays — ${cfg.solarM2.toFixed(0)} m²${cfg.solarPanelLen ? ` (${cfg.solarPanelLen}m × ${cfg.solarPanelW}m)` : ''}</div>
-        ${cfg.solarCellGen === 'Perovskite tandem' ? `
-        <div class="metric-row"><span class="metric-label">Cell type</span><span class="metric-value">CsPbI₃/c-Si tandem</span></div>
-        <div class="metric-row"><span class="metric-label">Cell manufacturer</span><span class="metric-value accent">Oxford PV / Swift Solar</span></div>
-        <div class="metric-row"><span class="metric-label">Substrate</span><span class="metric-value">CZ Si wafer (Wacker / LONGi)</span></div>
-        <div class="metric-row"><span class="metric-label">Perovskite deposition</span><span class="metric-value">Slot-die coating (custom)</span></div>
-        <div class="metric-row"><span class="metric-label">Encapsulant</span><span class="metric-value">ALD Al₂O₃ + edge seal (Encapsulix)</span></div>
-        ` : `
-        <div class="metric-row"><span class="metric-label">Cell type</span><span class="metric-value">Mono-cSi (IBC or PERC)</span></div>
-        <div class="metric-row"><span class="metric-label">Cell manufacturer</span><span class="metric-value accent">SunPower / Spectrolab</span></div>
-        <div class="metric-row"><span class="metric-label">Substrate</span><span class="metric-value">CZ Si wafer (Wacker Chemie)</span></div>
-        `}
-        <div class="metric-row"><span class="metric-label">Coverglass</span><span class="metric-value">CMG 100 μm (Qioptiq)</span></div>
-        <div class="metric-row"><span class="metric-label">Panel substrate</span><span class="metric-value">Al honeycomb + CFRP face (Hexcel)</span></div>
-        <div class="metric-row"><span class="metric-label">Deployment mechanism</span><span class="metric-value">${cfg.isDP1 ? 'Accordion fold (Redwire)' : 'Roll-out (Redwire ROSA)'}</span></div>
-        <div class="metric-row"><span class="metric-label">Wiring harness</span><span class="metric-value">Kapton-insulated Cu (TE Connectivity)</span></div>
-
-        <div class="section-header">Radiator — ${cfg.radM2.toFixed(0)} m² (flat-plate)</div>
-        <div class="metric-row"><span class="metric-label">Architecture</span><span class="metric-value accent">Flat-plate direct-conduction (SpaceX heritage)</span></div>
-        <div class="metric-row"><span class="metric-label">Panel material</span><span class="metric-value">Al 6061-T6 flat plate, 3-5mm thick</span></div>
-        <div class="metric-row"><span class="metric-label">Thermal path</span><span class="metric-value">ORU bolts direct to Al plate — no heat pipes</span></div>
-        <div class="metric-row"><span class="metric-label">Surface coating</span><span class="metric-value">Carbon black (high-ε thermal coating)</span></div>
-        <div class="metric-row"><span class="metric-label">ε / α</span><span class="metric-value">0.91–0.93 / 0.14–0.17 (BOL)</span></div>
-        <div class="metric-row"><span class="metric-label">MMOD tolerance</span><span class="metric-value orbital">✓ No pressurized fluid — hole = local hot spot only</span></div>
-        <div class="metric-row"><span class="metric-label">Mass</span><span class="metric-value">${(cfg.radM2 * 2.5).toFixed(0)} kg (2.5 kg/m² Al plate)</span></div>
-        <div class="metric-row"><span class="metric-label">Deployment</span><span class="metric-value">${cfg.isDP3 ? 'Robotic assembly (MDA/Canadarm)' : 'Accordion fold + spring hinge (Moog)'}</span></div>
-        <div class="metric-row"><span class="metric-label">Heritage</span><span class="metric-value">Starlink bus thermal (body = radiator)</span></div>
-        ${cfg.isPhotonic ? `<div class="metric-row"><span class="metric-label">Cryo radiator</span><span class="metric-value">OSR tiles (Qioptiq) + MLI (Sheldahl)</span></div>` : ''}
-        <div style="font-size:9px;color:var(--muted);margin-top:4px;padding:4px;background:rgba(0,0,0,0.2);border-radius:3px">
-            Why flat-plate over honeycomb+heat-pipes: No ammonia working fluid = no single-point MMOD failure.
-            Heat spreads through solid aluminum conduction. Both faces radiate to space.
-            Starlink uses this — the bus bottom IS the radiator. Scale it up.
+        <div style="font-size:11px;color:var(--muted);line-height:1.5">
+            Full BOM, component suppliers, semiconductor supply chain, publicly-traded tickers,
+            and space compute operator analysis are centralized in the <b style="color:var(--orbital)">Industry</b> tab.
         </div>
-
-        <div class="section-header">Compute — ${m.gpuCount} GPUs (${m.oruCount} × NVL${m.gpusPerOru} trays)</div>
-        ${cfg.gpuType.includes('GB300') ? `
-        <div class="metric-row"><span class="metric-label">GPU die</span><span class="metric-value accent">NVIDIA GB300 (TSMC 4NP)</span></div>
-        <div class="metric-row"><span class="metric-label">Foundry</span><span class="metric-value">TSMC Fab 18 (Tainan)</span></div>
-        <div class="metric-row"><span class="metric-label">HBM3E</span><span class="metric-value">SK Hynix (8-Hi, 24GB/stack)</span></div>
-        <div class="metric-row"><span class="metric-label">Interposer</span><span class="metric-value">CoWoS-L (TSMC InFO-L)</span></div>
-        <div class="metric-row"><span class="metric-label">Substrate</span><span class="metric-value">ABF organic (Ibiden / Shinko)</span></div>
-        ` : cfg.gpuType.includes('Vera Rubin') ? `
-        <div class="metric-row"><span class="metric-label">GPU die</span><span class="metric-value accent">NVIDIA Vera Rubin Ultra (TSMC 3nm)</span></div>
-        <div class="metric-row"><span class="metric-label">Foundry</span><span class="metric-value">TSMC N3E (Tainan / Arizona)</span></div>
-        <div class="metric-row"><span class="metric-label">HBM3E</span><span class="metric-value">SK Hynix / Samsung (12-Hi, 36GB)</span></div>
-        <div class="metric-row"><span class="metric-label">Interposer</span><span class="metric-value">CoWoS-L (TSMC, organic bridge)</span></div>
-        <div class="metric-row"><span class="metric-label">Substrate</span><span class="metric-value">ABF organic (Ibiden / Shinko)</span></div>
-        ` : cfg.gpuType.includes('D3 Photonic') ? `
-        <div class="metric-row"><span class="metric-label">Photonic IC</span><span class="metric-value accent">Si₃N₄ PIC (Ligentec / IMEC)</span></div>
-        <div class="metric-row"><span class="metric-label">Foundry</span><span class="metric-value">Ligentec (Lausanne) / IMEC (Leuven)</span></div>
-        <div class="metric-row"><span class="metric-label">Modulators</span><span class="metric-value">LiNbO₃ thin-film (HyperLight)</span></div>
-        <div class="metric-row"><span class="metric-label">Detectors</span><span class="metric-value">NbN SNSPD (Quantum Opus / PhotonSpot)</span></div>
-        <div class="metric-row"><span class="metric-label">Cryo-SRAM</span><span class="metric-value">Intel 4K-compatible SRAM (custom)</span></div>
-        <div class="metric-row"><span class="metric-label">Cryocooler</span><span class="metric-value">Sunpower CryoTel GT (Ametek)</span></div>
-        ` : `
-        <div class="metric-row"><span class="metric-label">GPU die</span><span class="metric-value accent">Tesla D3 (Samsung 2nm GAA)</span></div>
-        <div class="metric-row"><span class="metric-label">Foundry</span><span class="metric-value">Samsung (Pyeongtaek P3)</span></div>
-        <div class="metric-row"><span class="metric-label">HBM4</span><span class="metric-value">SK Hynix (16-Hi, 64GB/stack)</span></div>
-        <div class="metric-row"><span class="metric-label">Packaging</span><span class="metric-value">Foveros 3D + EMIB (Intel / ASE)</span></div>
-        <div class="metric-row"><span class="metric-label">D2D interconnect</span><span class="metric-value">UCIe 2.0 (die-to-die, 40 GT/s)</span></div>
-        `}
-        <div class="metric-row"><span class="metric-label">VRM</span><span class="metric-value">GaN FET (EPC / GaN Systems)</span></div>
-        <div class="metric-row"><span class="metric-label">Rad screening</span><span class="metric-value">${cfg.radHardening >= 0.7 ? 'RHBD + TMR ECC (Cobham / Microchip)' : 'COTS-screened + SEU mitigation'}</span></div>
-        <div class="metric-row"><span class="metric-label">Thermal paste</span><span class="metric-value">Indium solder TIM (Indium Corp)</span></div>
-
-        <div class="section-header">Structure</div>
-        <div class="metric-row"><span class="metric-label">Primary structure</span><span class="metric-value">${cfg.isDP3 ? 'CFRP truss (Toray T800 / Hexcel)' : 'Al 7075 honeycomb (Hexcel)'}</span></div>
-        <div class="metric-row"><span class="metric-label">Longerons</span><span class="metric-value">CFRP square tube (Toray / Mitsubishi)</span></div>
-        <div class="metric-row"><span class="metric-label">Fasteners</span><span class="metric-value">A286 / Ti-6Al-4V (SPS Technologies)</span></div>
-        <div class="metric-row"><span class="metric-label">Hinges</span><span class="metric-value">Spring-loaded SMA (Moog / Starsys)</span></div>
-        <div class="metric-row"><span class="metric-label">MLI blankets</span><span class="metric-value">Mylar/Dacron (Sheldahl / Dunmore)</span></div>
-
-        <div class="section-header">ADCS & Propulsion</div>
-        <div class="metric-row"><span class="metric-label">Star tracker</span><span class="metric-value">Ball Aerospace CT-2020</span></div>
-        <div class="metric-row"><span class="metric-label">IMU</span><span class="metric-value">Honeywell MIMU (space-grade)</span></div>
-        <div class="metric-row"><span class="metric-label">Reaction wheels</span><span class="metric-value">Rockwell Collins / Honeywell HR14</span></div>
-        <div class="metric-row"><span class="metric-label">Thrusters</span><span class="metric-value">${cfg.isDP3 ? 'Hall-effect EP (Busek BHT-600)' : 'Krypton cold-gas (Enpropulsion)'}</span></div>
-        <div class="metric-row"><span class="metric-label">GPS</span><span class="metric-value">SSTL SGR-ReSI (dual-freq)</span></div>
-
-        <div class="section-header">Communications</div>
-        <div class="metric-row"><span class="metric-label">ISL laser</span><span class="metric-value">Mynaric CONDOR Mk3</span></div>
-        <div class="metric-row"><span class="metric-label">ISL detector</span><span class="metric-value">InGaAs APD / SNSPD (IDQ / Mynaric)</span></div>
-        <div class="metric-row"><span class="metric-label">Ground optical terminal</span><span class="metric-value">CACI / SA Photonics OGT</span></div>
-        <div class="metric-row"><span class="metric-label">RF backup</span><span class="metric-value">Ka-band SSPA (General Dynamics)</span></div>
-        <div class="metric-row"><span class="metric-label">Flight computer</span><span class="metric-value">RAD5545 (BAE Systems) / LEON5 (Cobham)</span></div>
-        <div class="metric-row"><span class="metric-label">NAND storage</span><span class="metric-value">3D NAND QLC (Samsung / Kioxia, rad-screened)</span></div>
-
-        <div class="section-header">Power</div>
-        <div class="metric-row"><span class="metric-label">PMAD / MPPT</span><span class="metric-value">SiC MOSFET PPU (Infineon / Wolfspeed)</span></div>
-        <div class="metric-row"><span class="metric-label">Power bus</span><span class="metric-value">48V regulated (EPC GaN half-bridge)</span></div>
-        <div class="metric-row"><span class="metric-label">Battery (eclipse)</span><span class="metric-value">${cfg.orbit.includes('dawn-dusk') ? 'None (dawn-dusk SSO, ~0% eclipse)' : 'Li-ion (EaglePicher / SAFT)'}</span></div>
-        <div class="metric-row"><span class="metric-label">Harness</span><span class="metric-value">Cu/Al hybrid (TE / Raychem)</span></div>
-
-        <div class="section-header">Launch</div>
-        <div class="metric-row"><span class="metric-label">Vehicle</span><span class="metric-value accent">${cfg.launchVehicle || 'Falcon 9'}</span></div>
-        <div class="metric-row"><span class="metric-label">Integrator</span><span class="metric-value">SpaceX (direct) / Momentus (rideshare)</span></div>
-        <div class="metric-row"><span class="metric-label">Dispenser</span><span class="metric-value">${cfg.dryMassKg > 5000 ? 'Payload adapter ring (RUAG)' : 'ESPA ring (Moog) / flat-sat stack'}</span></div>
-        <div class="metric-row"><span class="metric-label">Separation system</span><span class="metric-value">Lightband (PSC) / Motorized (RUAG)</span></div>
-
-        <div class="section-header">Aluminum & Raw Materials</div>
-        <div class="metric-row"><span class="metric-label">Al 6061-T6 plate</span><span class="metric-value">Alcoa / Kaiser Aluminum (USA)</span></div>
-        <div class="metric-row"><span class="metric-label">Al 7075 (structure)</span><span class="metric-value">Constellium / Aleris (EU/USA)</span></div>
-        <div class="metric-row"><span class="metric-label">Ti-6Al-4V (fasteners)</span><span class="metric-value">TIMET / VSMPO-AVISMA</span></div>
-        <div class="metric-row"><span class="metric-label">CFRP prepreg</span><span class="metric-value">Toray T800 / Hexcel HexPly</span></div>
-        <div class="metric-row"><span class="metric-label">Kapton film</span><span class="metric-value">DuPont (USA)</span></div>
-        <div class="metric-row"><span class="metric-label">Indium solder TIM</span><span class="metric-value">Indium Corporation (USA)</span></div>
-        <div class="metric-row"><span class="metric-label">GaN substrates</span><span class="metric-value">Wolfspeed / II-VI (USA)</span></div>
-
-        <div class="section-header">Thermal Management</div>
-        <div class="metric-row"><span class="metric-label">Carbon black coating</span><span class="metric-value">Acktar (Israel) / MAP (USA)</span></div>
-        <div class="metric-row"><span class="metric-label">Heat pipes</span><span class="metric-value">Advanced Cooling Tech (ACT) / Thermacore</span></div>
-        <div class="metric-row"><span class="metric-label">Loop heat pipes</span><span class="metric-value">Northrop Grumman / IberEspacio (EU)</span></div>
-        <div class="metric-row"><span class="metric-label">Vapor chambers</span><span class="metric-value">Boyd Corp / Aavid (thermal solutions)</span></div>
-        ${cfg.centralized ? `
-        <div class="metric-row"><span class="metric-label">Pumped fluid loop</span><span class="metric-value accent">Northrop TCS / Collins Aerospace</span></div>
-        <div class="metric-row"><span class="metric-label">PAO-2 coolant</span><span class="metric-value">Nye Lubricants / Chemours</span></div>
-        <div class="metric-row"><span class="metric-label">Fluid pump</span><span class="metric-value">Micropump (IDEX) / Atos Space</span></div>
-        <div class="metric-row"><span class="metric-label">Heat exchanger</span><span class="metric-value">Lytron / API Heat Transfer</span></div>
-        ` : ''}
-        ${cfg.isPhotonic ? `
-        <div class="metric-row"><span class="metric-label">Cryocooler (4K)</span><span class="metric-value accent">Sunpower CryoTel (Ametek)</span></div>
-        <div class="metric-row"><span class="metric-label">Cryocooler (77K)</span><span class="metric-value">Thales Cryogenics / Ricor</span></div>
-        <div class="metric-row"><span class="metric-label">MLI blankets</span><span class="metric-value">Sheldahl / Dunmore / Quest Thermal</span></div>
-        <div class="metric-row"><span class="metric-label">Cryo harness</span><span class="metric-value">Tekdata / PhoenixTM (cryo-rated)</span></div>
-        ` : ''}
-        <div class="metric-row"><span class="metric-label">Thermal interface</span><span class="metric-value">Indium Corp (solder TIM) / Henkel (thermal pads)</span></div>
-
-        <div class="section-header">Semiconductor Supply Chain</div>
-        <div class="metric-row"><span class="metric-label">Wafer fabrication</span><span class="metric-value">${cfg.gpuProcess.includes('TSMC') ? 'TSMC (Taiwan — Tainan/Hsinchu)' : 'Samsung (Pyeongtaek P3, Korea)'}</span></div>
-        <div class="metric-row"><span class="metric-label">Advanced packaging</span><span class="metric-value">${cfg.gpuProcess.includes('TSMC') ? 'TSMC CoWoS-L (Taiwan)' : 'Samsung I-Cube4 / ASE Group'}</span></div>
-        <div class="metric-row"><span class="metric-label">HBM memory</span><span class="metric-value">SK Hynix (Icheon) / Samsung (Hwaseong)</span></div>
-        <div class="metric-row"><span class="metric-label">Organic substrate</span><span class="metric-value">Ibiden / Shinko Electric (Japan)</span></div>
-        <div class="metric-row"><span class="metric-label">Photomask</span><span class="metric-value">HOYA / Dai Nippon Printing</span></div>
-        <div class="metric-row"><span class="metric-label">EUV lithography</span><span class="metric-value">ASML (Netherlands) — sole supplier</span></div>
-        <div class="metric-row"><span class="metric-label">Testing/burn-in</span><span class="metric-value">Advantest / Teradyne</span></div>
-
-        <div class="section-header">Key Publicly-Traded Suppliers</div>
-        <div style="font-size:10px;color:var(--muted);margin:4px 0">Investors can gain exposure to orbital compute through these supply chain companies:</div>
-        <div class="metric-row"><span class="metric-label">NVDA</span><span class="metric-value">GPU silicon (B300, Vera Rubin)</span></div>
-        <div class="metric-row"><span class="metric-label">TSM</span><span class="metric-value">Wafer fab + advanced packaging</span></div>
-        <div class="metric-row"><span class="metric-label">ASML</span><span class="metric-value">EUV lithography (sole source)</span></div>
-        <div class="metric-row"><span class="metric-label">000660.KS</span><span class="metric-value">SK Hynix — HBM3E/HBM4 memory</span></div>
-        <div class="metric-row"><span class="metric-label">WOLF</span><span class="metric-value">Wolfspeed — SiC/GaN power semiconductors</span></div>
-        <div class="metric-row"><span class="metric-label">AA</span><span class="metric-value">Alcoa — Al 6061-T6 radiator plate</span></div>
-        <div class="metric-row"><span class="metric-label">HXL</span><span class="metric-value">Hexcel — CFRP composites, Al honeycomb</span></div>
-        <div class="metric-row"><span class="metric-label">AME</span><span class="metric-value">Ametek — Sunpower cryocoolers (DP3)</span></div>
-        <div class="metric-row"><span class="metric-label">MYNA</span><span class="metric-value">Mynaric — laser ISL terminals</span></div>
-        <div class="metric-row"><span class="metric-label">RKLB</span><span class="metric-value">Rocket Lab — reaction wheels, star trackers, solar</span></div>
-        <div class="metric-row"><span class="metric-label">NOC</span><span class="metric-value">Northrop Grumman — thermal control systems</span></div>
-        <div class="metric-row"><span class="metric-label">LMT</span><span class="metric-value">Lockheed Martin — space bus heritage</span></div>
-        <div class="metric-row"><span class="metric-label">KTOS</span><span class="metric-value">Kratos — ground station networks</span></div>
-        <div class="metric-row"><span class="metric-label">MOG.A</span><span class="metric-value">Moog — deployment mechanisms, ESPA rings</span></div>
-        <div class="metric-row"><span class="metric-label">TEL</span><span class="metric-value">TE Connectivity — space-rated connectors/harness</span></div>
     </div>
     `;
 }
@@ -4024,6 +3874,164 @@ GPU allocation by model type:
     </div>
 
     ${supplyChainHTML}
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Detailed BOM — ${cfg.shortName}</span>
+            <span class="card-badge" style="background:rgba(200,120,40,0.2);color:#e8a030">COMPONENT LEVEL</span>
+        </div>
+
+        <div class="section-header">Solar Arrays — ${cfg.solarM2.toFixed(0)} m²${cfg.solarPanelLen ? ' (' + cfg.solarPanelLen + 'm × ' + cfg.solarPanelW + 'm)' : ''}</div>
+        ${cfg.solarCellGen === 'Perovskite tandem' ? `
+        <div class="metric-row"><span class="metric-label">Cell type</span><span class="metric-value">CsPbI₃/c-Si tandem</span></div>
+        <div class="metric-row"><span class="metric-label">Cell manufacturer</span><span class="metric-value accent">Oxford PV / Swift Solar</span></div>
+        <div class="metric-row"><span class="metric-label">Substrate</span><span class="metric-value">CZ Si wafer (Wacker / LONGi)</span></div>
+        <div class="metric-row"><span class="metric-label">Perovskite deposition</span><span class="metric-value">Slot-die coating (custom)</span></div>
+        <div class="metric-row"><span class="metric-label">Encapsulant</span><span class="metric-value">ALD Al₂O₃ + edge seal (Encapsulix)</span></div>
+        ` : `
+        <div class="metric-row"><span class="metric-label">Cell type</span><span class="metric-value">Mono-cSi (IBC or PERC)</span></div>
+        <div class="metric-row"><span class="metric-label">Cell manufacturer</span><span class="metric-value accent">SunPower / Spectrolab</span></div>
+        <div class="metric-row"><span class="metric-label">Substrate</span><span class="metric-value">CZ Si wafer (Wacker Chemie)</span></div>
+        `}
+        <div class="metric-row"><span class="metric-label">Coverglass</span><span class="metric-value">CMG 100 µm (Qioptiq)</span></div>
+        <div class="metric-row"><span class="metric-label">Panel substrate</span><span class="metric-value">Al honeycomb + CFRP face (Hexcel)</span></div>
+        <div class="metric-row"><span class="metric-label">Deployment mechanism</span><span class="metric-value">${cfg.isDP1 ? 'Accordion fold (Redwire)' : 'Roll-out (Redwire ROSA)'}</span></div>
+        <div class="metric-row"><span class="metric-label">Wiring harness</span><span class="metric-value">Kapton-insulated Cu (TE Connectivity)</span></div>
+
+        <div class="section-header">Radiator — ${cfg.radM2.toFixed(0)} m² (flat-plate)</div>
+        <div class="metric-row"><span class="metric-label">Architecture</span><span class="metric-value accent">Flat-plate direct-conduction (SpaceX heritage)</span></div>
+        <div class="metric-row"><span class="metric-label">Panel material</span><span class="metric-value">Al 6061-T6 flat plate, 3-5mm thick</span></div>
+        <div class="metric-row"><span class="metric-label">Thermal path</span><span class="metric-value">ORU bolts direct to Al plate — no heat pipes</span></div>
+        <div class="metric-row"><span class="metric-label">Surface coating</span><span class="metric-value">Carbon black (high-ε thermal coating)</span></div>
+        <div class="metric-row"><span class="metric-label">ε / α</span><span class="metric-value">0.91-0.93 / 0.14-0.17 (BOL)</span></div>
+        <div class="metric-row"><span class="metric-label">MMOD tolerance</span><span class="metric-value orbital">✓ No pressurized fluid — hole = local hot spot only</span></div>
+        <div class="metric-row"><span class="metric-label">Mass</span><span class="metric-value">${(cfg.radM2 * 2.5).toFixed(0)} kg (2.5 kg/m² Al plate)</span></div>
+        <div class="metric-row"><span class="metric-label">Deployment</span><span class="metric-value">${cfg.isDP3 ? 'Robotic assembly (MDA/Canadarm)' : 'Accordion fold + spring hinge (Moog)'}</span></div>
+        <div class="metric-row"><span class="metric-label">Heritage</span><span class="metric-value">Starlink bus thermal (body = radiator)</span></div>
+        ${cfg.isPhotonic ? '<div class="metric-row"><span class="metric-label">Cryo radiator</span><span class="metric-value">OSR tiles (Qioptiq) + MLI (Sheldahl)</span></div>' : ''}
+
+        <div class="section-header">Compute — ${m.gpuCount} GPUs (${m.oruCount} × NVL${m.gpusPerOru} trays)</div>
+        ${cfg.gpuType.includes('GB300') || cfg.gpuType.includes('B300') ? `
+        <div class="metric-row"><span class="metric-label">GPU die</span><span class="metric-value accent">NVIDIA B300 (TSMC 4NP)</span></div>
+        <div class="metric-row"><span class="metric-label">Foundry</span><span class="metric-value">TSMC Fab 18 (Tainan)</span></div>
+        <div class="metric-row"><span class="metric-label">HBM3E</span><span class="metric-value">SK Hynix (8-Hi, 24GB/stack)</span></div>
+        <div class="metric-row"><span class="metric-label">Interposer</span><span class="metric-value">CoWoS-L (TSMC InFO-L)</span></div>
+        <div class="metric-row"><span class="metric-label">Substrate</span><span class="metric-value">ABF organic (Ibiden / Shinko)</span></div>
+        ` : cfg.gpuType.includes('Vera Rubin') ? `
+        <div class="metric-row"><span class="metric-label">GPU die</span><span class="metric-value accent">NVIDIA Vera Rubin Ultra (TSMC 3nm)</span></div>
+        <div class="metric-row"><span class="metric-label">Foundry</span><span class="metric-value">TSMC N3E (Tainan / Arizona)</span></div>
+        <div class="metric-row"><span class="metric-label">HBM3E</span><span class="metric-value">SK Hynix / Samsung (12-Hi, 36GB)</span></div>
+        <div class="metric-row"><span class="metric-label">Interposer</span><span class="metric-value">CoWoS-L (TSMC, organic bridge)</span></div>
+        <div class="metric-row"><span class="metric-label">Substrate</span><span class="metric-value">ABF organic (Ibiden / Shinko)</span></div>
+        ` : cfg.gpuType.includes('D3 Photonic') ? `
+        <div class="metric-row"><span class="metric-label">Photonic IC</span><span class="metric-value accent">Si₃N₄ PIC (Ligentec / IMEC)</span></div>
+        <div class="metric-row"><span class="metric-label">Foundry</span><span class="metric-value">Ligentec (Lausanne) / IMEC (Leuven)</span></div>
+        <div class="metric-row"><span class="metric-label">Modulators</span><span class="metric-value">LiNbO₃ thin-film (HyperLight)</span></div>
+        <div class="metric-row"><span class="metric-label">Detectors</span><span class="metric-value">NbN SNSPD (Quantum Opus / PhotonSpot)</span></div>
+        <div class="metric-row"><span class="metric-label">Cryo-SRAM</span><span class="metric-value">Intel 4K-compatible SRAM (custom)</span></div>
+        <div class="metric-row"><span class="metric-label">Cryocooler</span><span class="metric-value">Sunpower CryoTel GT (Ametek)</span></div>
+        ` : `
+        <div class="metric-row"><span class="metric-label">GPU die</span><span class="metric-value accent">Tesla D3 (Samsung 2nm GAA)</span></div>
+        <div class="metric-row"><span class="metric-label">Foundry</span><span class="metric-value">Samsung (Pyeongtaek P3)</span></div>
+        <div class="metric-row"><span class="metric-label">HBM4</span><span class="metric-value">SK Hynix (16-Hi, 64GB/stack)</span></div>
+        <div class="metric-row"><span class="metric-label">Packaging</span><span class="metric-value">Foveros 3D + EMIB (Intel / ASE)</span></div>
+        <div class="metric-row"><span class="metric-label">D2D interconnect</span><span class="metric-value">UCIe 2.0 (die-to-die, 40 GT/s)</span></div>
+        `}
+        <div class="metric-row"><span class="metric-label">VRM</span><span class="metric-value">GaN FET (EPC / GaN Systems)</span></div>
+        <div class="metric-row"><span class="metric-label">Rad screening</span><span class="metric-value">${cfg.radHardening >= 0.7 ? 'RHBD + TMR ECC (Cobham / Microchip)' : 'COTS-screened + SEU mitigation'}</span></div>
+        <div class="metric-row"><span class="metric-label">Thermal paste</span><span class="metric-value">Indium solder TIM (Indium Corp)</span></div>
+
+        <div class="section-header">Structure</div>
+        <div class="metric-row"><span class="metric-label">Primary structure</span><span class="metric-value">${cfg.isDP3 ? 'CFRP truss (Toray T800 / Hexcel)' : 'Al 7075 honeycomb (Hexcel)'}</span></div>
+        <div class="metric-row"><span class="metric-label">Longerons</span><span class="metric-value">CFRP square tube (Toray / Mitsubishi)</span></div>
+        <div class="metric-row"><span class="metric-label">Fasteners</span><span class="metric-value">A286 / Ti-6Al-4V (SPS Technologies)</span></div>
+        <div class="metric-row"><span class="metric-label">Hinges</span><span class="metric-value">Spring-loaded SMA (Moog / Starsys)</span></div>
+        <div class="metric-row"><span class="metric-label">MLI blankets</span><span class="metric-value">Mylar/Dacron (Sheldahl / Dunmore)</span></div>
+
+        <div class="section-header">ADCS & Propulsion</div>
+        <div class="metric-row"><span class="metric-label">Star tracker</span><span class="metric-value">Ball Aerospace CT-2020</span></div>
+        <div class="metric-row"><span class="metric-label">IMU</span><span class="metric-value">Honeywell MIMU (space-grade)</span></div>
+        <div class="metric-row"><span class="metric-label">Reaction wheels</span><span class="metric-value">Rockwell Collins / Honeywell HR14</span></div>
+        <div class="metric-row"><span class="metric-label">Thrusters</span><span class="metric-value">${cfg.isDP3 ? 'Hall-effect EP (Busek BHT-600)' : 'Krypton cold-gas (Enpropulsion)'}</span></div>
+        <div class="metric-row"><span class="metric-label">GPS</span><span class="metric-value">SSTL SGR-ReSI (dual-freq)</span></div>
+
+        <div class="section-header">Communications</div>
+        <div class="metric-row"><span class="metric-label">ISL laser</span><span class="metric-value">Mynaric CONDOR Mk3</span></div>
+        <div class="metric-row"><span class="metric-label">ISL detector</span><span class="metric-value">InGaAs APD / SNSPD (IDQ / Mynaric)</span></div>
+        <div class="metric-row"><span class="metric-label">Ground optical terminal</span><span class="metric-value">CACI / SA Photonics OGT</span></div>
+        <div class="metric-row"><span class="metric-label">RF backup</span><span class="metric-value">Ka-band SSPA (General Dynamics)</span></div>
+        <div class="metric-row"><span class="metric-label">Flight computer</span><span class="metric-value">RAD5545 (BAE Systems) / LEON5 (Cobham)</span></div>
+        <div class="metric-row"><span class="metric-label">NAND storage</span><span class="metric-value">3D NAND QLC (Samsung / Kioxia, rad-screened)</span></div>
+
+        <div class="section-header">Power</div>
+        <div class="metric-row"><span class="metric-label">PMAD / MPPT</span><span class="metric-value">SiC MOSFET PPU (Infineon / Wolfspeed)</span></div>
+        <div class="metric-row"><span class="metric-label">Power bus</span><span class="metric-value">48V regulated (EPC GaN half-bridge)</span></div>
+        <div class="metric-row"><span class="metric-label">Battery (eclipse)</span><span class="metric-value">${cfg.orbit.includes('dawn-dusk') ? 'None (dawn-dusk SSO, ~0% eclipse)' : 'Li-ion (EaglePicher / SAFT)'}</span></div>
+        <div class="metric-row"><span class="metric-label">Harness</span><span class="metric-value">Cu/Al hybrid (TE / Raychem)</span></div>
+
+        <div class="section-header">Launch</div>
+        <div class="metric-row"><span class="metric-label">Vehicle</span><span class="metric-value accent">${cfg.launchVehicle || 'Falcon 9'}</span></div>
+        <div class="metric-row"><span class="metric-label">Integrator</span><span class="metric-value">SpaceX (direct) / Momentus (rideshare)</span></div>
+        <div class="metric-row"><span class="metric-label">Dispenser</span><span class="metric-value">${cfg.dryMassKg > 5000 ? 'Payload adapter ring (RUAG)' : 'ESPA ring (Moog) / flat-sat stack'}</span></div>
+        <div class="metric-row"><span class="metric-label">Separation system</span><span class="metric-value">Lightband (PSC) / Motorized (RUAG)</span></div>
+
+        <div class="section-header">Raw Materials</div>
+        <div class="metric-row"><span class="metric-label">Al 6061-T6 plate</span><span class="metric-value">Alcoa / Kaiser Aluminum (USA)</span></div>
+        <div class="metric-row"><span class="metric-label">Al 7075 (structure)</span><span class="metric-value">Constellium / Aleris (EU/USA)</span></div>
+        <div class="metric-row"><span class="metric-label">Ti-6Al-4V (fasteners)</span><span class="metric-value">TIMET / VSMPO-AVISMA</span></div>
+        <div class="metric-row"><span class="metric-label">CFRP prepreg</span><span class="metric-value">Toray T800 / Hexcel HexPly</span></div>
+        <div class="metric-row"><span class="metric-label">Kapton film</span><span class="metric-value">DuPont (USA)</span></div>
+        <div class="metric-row"><span class="metric-label">Indium solder TIM</span><span class="metric-value">Indium Corporation (USA)</span></div>
+        <div class="metric-row"><span class="metric-label">GaN substrates</span><span class="metric-value">Wolfspeed / II-VI (USA)</span></div>
+
+        <div class="section-header">Thermal Management Components</div>
+        <div class="metric-row"><span class="metric-label">Carbon black coating</span><span class="metric-value">Acktar (Israel) / MAP (USA)</span></div>
+        <div class="metric-row"><span class="metric-label">Heat pipes</span><span class="metric-value">Advanced Cooling Tech (ACT) / Thermacore</span></div>
+        <div class="metric-row"><span class="metric-label">Loop heat pipes</span><span class="metric-value">Northrop Grumman / IberEspacio (EU)</span></div>
+        <div class="metric-row"><span class="metric-label">Vapor chambers</span><span class="metric-value">Boyd Corp / Aavid (thermal solutions)</span></div>
+        ${cfg.centralized ? `
+        <div class="metric-row"><span class="metric-label">Pumped fluid loop</span><span class="metric-value accent">Northrop TCS / Collins Aerospace</span></div>
+        <div class="metric-row"><span class="metric-label">PAO-2 coolant</span><span class="metric-value">Nye Lubricants / Chemours</span></div>
+        <div class="metric-row"><span class="metric-label">Fluid pump</span><span class="metric-value">Micropump (IDEX) / Atos Space</span></div>
+        <div class="metric-row"><span class="metric-label">Heat exchanger</span><span class="metric-value">Lytron / API Heat Transfer</span></div>
+        ` : ''}
+        ${cfg.isPhotonic ? `
+        <div class="metric-row"><span class="metric-label">Cryocooler (4K)</span><span class="metric-value accent">Sunpower CryoTel (Ametek)</span></div>
+        <div class="metric-row"><span class="metric-label">Cryocooler (77K)</span><span class="metric-value">Thales Cryogenics / Ricor</span></div>
+        <div class="metric-row"><span class="metric-label">MLI blankets</span><span class="metric-value">Sheldahl / Dunmore / Quest Thermal</span></div>
+        <div class="metric-row"><span class="metric-label">Cryo harness</span><span class="metric-value">Tekdata / PhoenixTM (cryo-rated)</span></div>
+        ` : ''}
+        <div class="metric-row"><span class="metric-label">Thermal interface</span><span class="metric-value">Indium Corp (solder TIM) / Henkel (thermal pads)</span></div>
+
+        <div class="section-header">Semiconductor Supply Chain</div>
+        <div class="metric-row"><span class="metric-label">Wafer fabrication</span><span class="metric-value">${cfg.gpuProcess.includes('TSMC') ? 'TSMC (Taiwan — Tainan/Hsinchu)' : 'Samsung (Pyeongtaek P3, Korea)'}</span></div>
+        <div class="metric-row"><span class="metric-label">Advanced packaging</span><span class="metric-value">${cfg.gpuProcess.includes('TSMC') ? 'TSMC CoWoS-L (Taiwan)' : 'Samsung I-Cube4 / ASE Group'}</span></div>
+        <div class="metric-row"><span class="metric-label">HBM memory</span><span class="metric-value">SK Hynix (Icheon) / Samsung (Hwaseong)</span></div>
+        <div class="metric-row"><span class="metric-label">Organic substrate</span><span class="metric-value">Ibiden / Shinko Electric (Japan)</span></div>
+        <div class="metric-row"><span class="metric-label">Photomask</span><span class="metric-value">HOYA / Dai Nippon Printing</span></div>
+        <div class="metric-row"><span class="metric-label">EUV lithography</span><span class="metric-value">ASML (Netherlands) — sole supplier</span></div>
+        <div class="metric-row"><span class="metric-label">Testing/burn-in</span><span class="metric-value">Advantest / Teradyne</span></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">Key Publicly-Traded Suppliers</span></div>
+        <div style="font-size:10px;color:var(--muted);margin:4px 0 8px">Investors can gain exposure to orbital compute through these supply chain companies:</div>
+        <div class="metric-row"><span class="metric-label">NVDA</span><span class="metric-value">GPU silicon (B300, Vera Rubin)</span></div>
+        <div class="metric-row"><span class="metric-label">TSM</span><span class="metric-value">Wafer fab + advanced packaging</span></div>
+        <div class="metric-row"><span class="metric-label">ASML</span><span class="metric-value">EUV lithography (sole source)</span></div>
+        <div class="metric-row"><span class="metric-label">000660.KS</span><span class="metric-value">SK Hynix — HBM3E/HBM4 memory</span></div>
+        <div class="metric-row"><span class="metric-label">WOLF</span><span class="metric-value">Wolfspeed — SiC/GaN power semiconductors</span></div>
+        <div class="metric-row"><span class="metric-label">AA</span><span class="metric-value">Alcoa — Al 6061-T6 radiator plate</span></div>
+        <div class="metric-row"><span class="metric-label">HXL</span><span class="metric-value">Hexcel — CFRP composites, Al honeycomb</span></div>
+        <div class="metric-row"><span class="metric-label">AME</span><span class="metric-value">Ametek — Sunpower cryocoolers (DP3)</span></div>
+        <div class="metric-row"><span class="metric-label">MYNA</span><span class="metric-value">Mynaric — laser ISL terminals</span></div>
+        <div class="metric-row"><span class="metric-label">RKLB</span><span class="metric-value">Rocket Lab — reaction wheels, star trackers, solar</span></div>
+        <div class="metric-row"><span class="metric-label">NOC</span><span class="metric-value">Northrop Grumman — thermal control systems</span></div>
+        <div class="metric-row"><span class="metric-label">LMT</span><span class="metric-value">Lockheed Martin — space bus heritage</span></div>
+        <div class="metric-row"><span class="metric-label">KTOS</span><span class="metric-value">Kratos — ground station networks</span></div>
+        <div class="metric-row"><span class="metric-label">MOG.A</span><span class="metric-value">Moog — deployment mechanisms, ESPA rings</span></div>
+        <div class="metric-row"><span class="metric-label">TEL</span><span class="metric-value">TE Connectivity — space-rated connectors/harness</span></div>
+    </div>
     `;
 }
 
