@@ -493,16 +493,16 @@ const CONFIGS = {
     DP1B: {
         name: "DP1B AI Sat Mini", shortName: "DP1B",
         busPwr: 100, computeKw: 92, thermalKw: 100,
-        // Radiator: 10m × 40m = 400 m², 320K radiator temp
-        solarM2: 1700, radM2: 400, radTempK: 320,
-        radPanelW: 10, radPanelLen: 40,
+        // Radiator: 10m × 30m = 300 m², 340K radiator temp → ~125 kW rejection
+        solarM2: 1700, radM2: 300, radTempK: 340,
+        radPanelW: 10, radPanelLen: 30,
         solarPanelLen: 170, solarPanelW: 10,     // unfurled dimensions (m)
         earthVF: 0.24, sidedness: 1.80,
-        gpuPowerW: 1400, gpuCount: 48, gpuType: "NVIDIA B300 (rad-screened)",
+        gpuPowerW: 1400, gpuCount: 48, gpusPerOru: 4, gpuType: "NVIDIA B300 (rad-screened)",
         gpuGFLOPS_W: 5000, gpuMemGB: 192, gpuMemType: "HBM3E",
-        gpuMemBwTBs: 8.0, gpuInterconnect: "NVLink 5.0 + NVSwitch",
+        gpuMemBwTBs: 8.0, gpuInterconnect: "NVLink 5.0 (NVL4 tray)",
         gpuNvlinkBwGBs: 1800, gpuProcess: "TSMC 4NP",
-        oruSize: [0.6, 0.4, 0.06],
+        oruSize: [0.8, 0.5, 0.08],
         oruThermalInterface: "Direct-bond copper to bus cold plate",
         oruVRM: "48V→0.8V GaN buck, 96% eff",
         oruPackaging: "CoWoS-L, 2.5D interposer, 8-HBM3E stack",
@@ -513,7 +513,7 @@ const CONFIGS = {
         // Geometry: SpaceX AI Sat Mini form factor
         // 4m × 2m flat bus, roll-out wings ±X (83m × 10m each, 170m tip-to-tip)
         // 1700 m² silicon @ 20% eff → ~463 kW total, 100 kW to compute
-        // Separate DP2-style deployable radiator panel below bus (~400 m²)
+        // Separate DP2-style deployable radiator panel below bus (~300 m²)
         // Economics (2027 Starship launch)
         year: 2027, satLife: 5, waccOrbital: 0.15,
         launchCostPerKg: 800, dryMassKg: 3970, launchVehicle: "Starship",
@@ -526,7 +526,7 @@ const CONFIGS = {
         contactFraction: 0.32, storeAndForward: true,
         clusterSize: 1, clusterTopology: "standalone",
         clusterRoles: ["inference"], maxClusterSize: 12,
-        tensorParallel: 2, pipelineParallel: 1,
+        tensorParallel: 4, pipelineParallel: 1,
         batchSize: 16, seqLen: 4096,
         radHardening: 0.60,
         combinedUtilization: 0.9025, radAvailability: 0.95, operationalConfidence: 0.95,
@@ -779,12 +779,15 @@ function computeMetrics(cfg) {
     m.thermalMargin = cfg.radM2 / m.reqRadM2;
 
     // Compute — use gpuCount if specified (from spreadsheet), else derive from power
-    m.oruCount = cfg.gpuCount || Math.floor(cfg.computeKw * 1000 / cfg.gpuPowerW);
+    const gpusPerOru = cfg.gpusPerOru || 1;
+    m.gpuCount = cfg.gpuCount || Math.floor(cfg.computeKw * 1000 / cfg.gpuPowerW);
+    m.oruCount = Math.ceil(m.gpuCount / gpusPerOru);  // physical trays (NVL4 = 4 GPUs/tray)
+    m.gpusPerOru = gpusPerOru;
     const computeWatts = cfg.computeKw * 1000;
     const rawGFLOPS = computeWatts * cfg.gpuGFLOPS_W;
     m.rawTFLOPS = rawGFLOPS / 1000;
     m.effectiveTFLOPS = m.rawTFLOPS * cfg.radHardening;
-    m.totalMemTB = (m.oruCount * cfg.gpuMemGB) / 1024;
+    m.totalMemTB = (m.gpuCount * cfg.gpuMemGB) / 1024;
 
     // Networking
     m.islBandwidthGbps = cfg.islCount * cfg.islRateGbps;
@@ -816,8 +819,8 @@ function computeMetrics(cfg) {
     // LCOC derivation from corrected inputs
     // GPU-hours = gpuCount × satLife_years × 8760 hr/yr × utilization
     const utilization = 0.85;  // 85% compute utilization (thermal throttling, maintenance, reboost)
-    m.totalGpuHours = m.oruCount * (cfg.satLife || 5) * 8760 * utilization;
-    m.totalProgramCost = cfg.totalProgramCost || (m.totalMassKg * costPerKg + m.oruCount * 5000);  // fallback: launch + GPU procurement
+    m.totalGpuHours = m.gpuCount * (cfg.satLife || 5) * 8760 * utilization;
+    m.totalProgramCost = cfg.totalProgramCost || (m.totalMassKg * costPerKg + m.gpuCount * 5000);  // fallback: launch + GPU procurement
     m.lcocGross = m.totalProgramCost / m.totalGpuHours;
     // Net LCOC: accounts for contact fraction (can only serve during ground contact for real-time)
     // Store-and-forward workloads can use 100% of compute time
@@ -931,7 +934,7 @@ function getModelServing(cfg, m) {
         // tok/s = totalMemBW_bytes_per_sec / (activeParams * bytesPerParam)
         // This is the autoregressive generation speed (the real user-facing throughput)
         const bytesPerParam = 2; // FP16
-        const totalMemBwBps = m.oruCount * cfg.gpuMemBwTBs * 1e12;
+        const totalMemBwBps = m.gpuCount * cfg.gpuMemBwTBs * 1e12;
         const decodeTokSec = fitsInMem ? totalMemBwBps / (activeP * bytesPerParam) : 0;
 
         // Batch decode: can overlap multiple streams (up to compute saturation)
@@ -1092,7 +1095,7 @@ function renderOverview(cfg, m) {
         <div class="card-header"><span class="card-title">Mass Budget</span></div>
         <div class="metric-row"><span class="metric-label">Solar arrays</span><span class="metric-value">${m.pvMassKg.toFixed(0)} kg</span></div>
         <div class="metric-row"><span class="metric-label">Radiators</span><span class="metric-value">${m.radMassKg.toFixed(0)} kg</span></div>
-        <div class="metric-row"><span class="metric-label">Compute (${m.oruCount} ORUs)</span><span class="metric-value">${m.computeMassKg.toFixed(0)} kg</span></div>
+        <div class="metric-row"><span class="metric-label">Compute (${m.oruCount} trays, ${m.gpuCount} GPUs)</span><span class="metric-value">${m.computeMassKg.toFixed(0)} kg</span></div>
         <div class="metric-row"><span class="metric-label">Structure</span><span class="metric-value">${m.structMassKg.toFixed(0)} kg</span></div>
         <div class="metric-row"><span class="metric-label"><b>Total dry mass</b></span><span class="metric-value warning"><b>${m.totalMassKg.toFixed(0)} kg</b></span></div>
         <div class="metric-row"><span class="metric-label">Est. launch cost</span><span class="metric-value ground">$${m.launchCostM.toFixed(1)}M</span></div>
@@ -1148,7 +1151,7 @@ function renderOverview(cfg, m) {
             Starlink uses this — the bus bottom IS the radiator. Scale it up.
         </div>
 
-        <div class="section-header">Compute — ${m.oruCount} ORUs</div>
+        <div class="section-header">Compute — ${m.gpuCount} GPUs (${m.oruCount} × NVL${m.gpusPerOru} trays)</div>
         ${cfg.gpuType.includes('GB300') ? `
         <div class="metric-row"><span class="metric-label">GPU die</span><span class="metric-value accent">NVIDIA GB300 (TSMC 4NP)</span></div>
         <div class="metric-row"><span class="metric-label">Foundry</span><span class="metric-value">TSMC Fab 18 (Tainan)</span></div>
@@ -1274,7 +1277,7 @@ function renderOverview(cfg, m) {
 function renderCompute(cfg, m) {
     const oruCoverage = (m.oruCount * cfg.oruSize[0] * cfg.oruSize[1] / cfg.radM2 * 100);
     const memBw = cfg.gpuMemBwTBs || 3.35;
-    const aggMemBwTBs = memBw * m.oruCount;
+    const aggMemBwTBs = memBw * m.gpuCount;
     const oruW = cfg.oruSize[0]*100, oruH = cfg.oruSize[1]*100, oruD = cfg.oruSize[2]*100;
     const heatFlux = (cfg.gpuPowerW / (cfg.oruSize[0]*cfg.oruSize[1]) / 10000);
     const tJunction = 85;
@@ -1352,7 +1355,8 @@ function renderCompute(cfg, m) {
 
     <div class="card">
         <div class="card-header"><span class="card-title">Aggregate Compute</span></div>
-        <div class="metric-row"><span class="metric-label">ORU count</span><span class="metric-value">${m.oruCount}</span></div>
+        <div class="metric-row"><span class="metric-label">GPU count</span><span class="metric-value">${m.gpuCount}</span></div>
+        <div class="metric-row"><span class="metric-label">Trays (NVL${m.gpusPerOru})</span><span class="metric-value">${m.oruCount}</span></div>
         <div class="metric-row"><span class="metric-label">Raw TFLOPS</span><span class="metric-value">${m.rawTFLOPS.toFixed(0)}</span></div>
         <div class="metric-row"><span class="metric-label">Effective TFLOPS</span><span class="metric-value accent">${m.effectiveTFLOPS.toFixed(0)}</span></div>
         <div class="metric-row"><span class="metric-label">Total memory</span><span class="metric-value purple">${m.totalMemTB.toFixed(1)} TB</span></div>
@@ -1425,8 +1429,8 @@ function renderCompute(cfg, m) {
             <!-- Stats -->
             <text x="20" y="108" fill="#778" font-size="8">Weight load per step: 70B × 2 bytes = 140 GB</text>
             <text x="20" y="122" fill="#778" font-size="8">Memory BW per unit: ${memBw} TB/s (${cfg.gpuMemType})</text>
-            <text x="20" y="136" fill="#778" font-size="8">Decode rate per unit: <tspan fill="#f0c040" font-weight="600">${decodePerOru} tok/s</tspan></text>
-            <text x="20" y="150" fill="#778" font-size="8">Aggregate (${m.oruCount} units): <tspan fill="#f0c040" font-weight="600">${(decodePerOru * m.oruCount).toLocaleString()} tok/s</tspan></text>
+            <text x="20" y="136" fill="#778" font-size="8">Decode rate per GPU: <tspan fill="#f0c040" font-weight="600">${decodePerOru} tok/s</tspan></text>
+            <text x="20" y="150" fill="#778" font-size="8">Aggregate (${m.gpuCount} GPUs): <tspan fill="#f0c040" font-weight="600">${(decodePerOru * m.gpuCount).toLocaleString()} tok/s</tspan></text>
             <text x="20" y="172" fill="#556" font-size="8" font-style="italic">Arithmetic intensity ≈ 1 → memory-bound · Bottleneck: weight loading, not FLOPS</text>
         </svg></div>
     </div>
@@ -1759,7 +1763,7 @@ function analyzeCustomModel(cfg, m) {
 
     const cs = cfg.clusterSize || 1;
     const totalMemGB = m.totalMemTB * 1024 * cs;
-    const totalMemBwBytesPerS = m.oruCount * cs * cfg.gpuMemBwTBs * 1e12;
+    const totalMemBwBytesPerS = m.gpuCount * cs * cfg.gpuMemBwTBs * 1e12;
     const clusterTFLOPS = m.effectiveTFLOPS * cs;
 
     // Quantization bytes per param
@@ -1816,7 +1820,7 @@ function analyzeCustomModel(cfg, m) {
 
     // $/M tokens — uses cluster-level cost and cluster-level throughput
     const costPerGpuHr = m.lcocNet || cfg.lcocNet || (cfg.busPwr * 1500 / 3600);
-    const clusterGpuCount = m.oruCount * cs;
+    const clusterGpuCount = m.gpuCount * cs;
     const costPerMTok = dollarsPerMTokFromCluster(costPerGpuHr, effTPS, clusterGpuCount);
 
     // Nodes needed if doesn't fit
@@ -1932,7 +1936,7 @@ function renderModels(cfg, m) {
 
     // Decode: memory-bandwidth-bound. Each token reads all params once.
     // Bandwidth per ORU ≈ gpuMemBwTBs * 1e12 bytes/s
-    const totalMemBwBytesPerS = m.oruCount * cs * cfg.gpuMemBwTBs * 1e12;
+    const totalMemBwBytesPerS = m.gpuCount * cs * cfg.gpuMemBwTBs * 1e12;
     const bytesPerParam = 2; // FP16
     const decodeTimePerTokenMs = (refParams * bytesPerParam / totalMemBwBytesPerS) * 1000;
     const decodeTokPerS = decodeTimePerTokenMs > 0 ? 1000 / decodeTimePerTokenMs : 0;
@@ -2061,7 +2065,7 @@ function renderModels(cfg, m) {
     <div class="card">
         <div class="card-header">
             <span class="card-title">Model Serving Capability</span>
-            <span class="card-badge" style="background:rgba(58,122,184,0.2);color:var(--accent)">${m.oruCount * cs} ORUs · ${(m.totalMemTB*cs).toFixed(1)} TB</span>
+            <span class="card-badge" style="background:rgba(58,122,184,0.2);color:var(--accent)">${m.gpuCount * cs} GPUs · ${(m.totalMemTB*cs).toFixed(1)} TB</span>
         </div>
         <table class="model-table">
             <thead><tr>
@@ -2079,7 +2083,7 @@ function renderModels(cfg, m) {
     <div class="card">
         <div class="card-header"><span class="card-title">Parameter Capacity</span></div>
         <div class="calc-block"><span class="comment">// Max model size by quantization (${cs > 1 ? cs+'-node cluster' : 'single node'})</span>
-Total memory: <span class="highlight">${clusterMemGB.toFixed(0)} GB</span> (${m.oruCount * cs} × ${cfg.gpuMemGB} GB ${cfg.gpuMemType})
+Total memory: <span class="highlight">${clusterMemGB.toFixed(0)} GB</span> (${m.gpuCount * cs} × ${cfg.gpuMemGB} GB ${cfg.gpuMemType})
 
 FP16 (2 B/param):   <span class="highlight">${(maxFP16/1e3).toFixed(1)}T params</span>  (${maxFP16.toFixed(0)} GB)
 INT8  (1 B/param):   <span class="highlight">${(maxINT8/1e3).toFixed(1)}T params</span>  (${maxINT8.toFixed(0)} GB)
@@ -2178,7 +2182,7 @@ Arithmetic intensity: ${(2*seqLen/(bytesPerParam)).toFixed(0)} FLOPs/byte (high 
 <span class="comment">// DECODE (memory-bandwidth-bound)</span>
 Each token reads all ${refParamsB.toFixed(0)}B params once
 Read = ${refParamsB.toFixed(0)}B × ${bytesPerParam}B = <span class="highlight">${(refParams*bytesPerParam/1e9).toFixed(0)} GB</span>
-Aggregate mem BW = ${m.oruCount*cs} × ${cfg.gpuMemBwTBs} TB/s = <span class="highlight">${(totalMemBwBytesPerS/1e12).toFixed(1)} TB/s</span>
+Aggregate mem BW = ${m.gpuCount*cs} × ${cfg.gpuMemBwTBs} TB/s = <span class="highlight">${(totalMemBwBytesPerS/1e12).toFixed(1)} TB/s</span>
 Time/token = ${(refParams*bytesPerParam/1e9).toFixed(0)}GB / ${(totalMemBwBytesPerS/1e12).toFixed(1)}TB/s = <span class="highlight">${decodeTimePerTokenMs.toFixed(2)} ms</span>
 Single-stream: <span class="highlight">${decodeTokPerS.toFixed(0)} tok/s</span>
 Arithmetic intensity: 2 FLOPs/byte (low → memory bound)</div>
@@ -2241,7 +2245,7 @@ Arithmetic intensity: 2 FLOPs/byte (low → memory bound)</div>
             const modBatchTps = modDecodeTps * Math.min(cfg.batchSize, 32);
             const modEffTps = Math.min(modBatchTps, bwLimitTokSec);
             const costPerGpuHr2 = m.lcocNet || cfg.lcocNet || (cfg.busPwr * 1500 / 3600);
-            const servingGpuCount = m.oruCount * (cfg.clusterSize || 1);
+            const servingGpuCount = m.gpuCount * (cfg.clusterSize || 1);
             const costPerMTok = dollarsPerMTokFromCluster(costPerGpuHr2, modEffTps, servingGpuCount);
             return `
             <div class="section-header">${mod.name}</div>
@@ -3268,14 +3272,14 @@ function computeTokenomics(cfg, m) {
     const t = {};  // tokenomics result object
 
     // 1. Hardware inputs
-    t.gpuCount = m.oruCount * cs;
+    t.gpuCount = m.gpuCount * cs;
     t.satLife = cfg.satLife || 5;
     t.combinedUtilization = cfg.combinedUtilization || 0.9025;
     t.radAvailability = cfg.radAvailability || 0.95;
     t.operationalConfidence = cfg.operationalConfidence || 0.95;
     t.totalGpuHours = t.gpuCount * t.satLife * 8760 * t.combinedUtilization;
     t.memBwPerGpu = cfg.gpuMemBwTBs * 1e12;
-    t.tflopsPerGpu = (m.effectiveTFLOPS / m.oruCount) * 1e12;
+    t.tflopsPerGpu = (m.effectiveTFLOPS / m.gpuCount) * 1e12;
 
     // 2. Token throughput per model
     t.modelResults = [];
@@ -4099,6 +4103,8 @@ function buildDP1B(cfg) {
     const hpMat1B = new THREE.MeshStandardMaterial({color: 0xd0d0dd, roughness: 0.35, metalness: 0.4});
 
     const gpuCount = cfg.gpuCount || 48;
+    const gpusPerOru = cfg.gpusPerOru || 1;
+    const trayCount = Math.ceil(gpuCount / gpusPerOru);
     const [ow,oh,od] = cfg.oruSize || [0.6, 0.4, 0.06];
 
     const radX1B = 0;
@@ -4131,19 +4137,19 @@ function buildDP1B(cfg) {
         stationGroup.add(foldLine);
     }
 
-    // ORUs on -Z face
-    const fCols1B = Math.max(1, Math.floor(Math.sqrt(gpuCount * (radLen1B / radH1B))));
-    const fRows1B = Math.max(1, Math.floor(gpuCount / fCols1B));
+    // NVL4 trays on -Z face (each tray = gpusPerOru GPUs)
+    const fCols1B = Math.max(1, Math.floor(Math.sqrt(trayCount * (radLen1B / radH1B))));
+    const fRows1B = Math.max(1, Math.floor(trayCount / fCols1B));
     const fsw1B = radLen1B / (fCols1B + 1), fsh1B = radH1B / (fRows1B + 1);
     for (let c = 0; c < fCols1B; c++) for (let r = 0; r < fRows1B; r++) {
         const oruIdx = c * fRows1B + r;
-        if (oruIdx >= gpuCount) break;
+        if (oruIdx >= trayCount) break;
         const role = getORURole(oruIdx, cfg.oruPrimaryRole || 'decode');
         const ox = -radLen1B / 2 + fsw1B * (c + 1);
         const oy = -radH1B / 2 + fsh1B * (r + 1);
         const oru = new THREE.Mesh(box(ow, oh, od), role.mat);
         oru.position.set(ox, radY1B + oy, radZ1B - (radThick / 2 + od / 2));
-        addPart(oru, "oru", `ORU [${c},${r}] — ${role.label}`);
+        addPart(oru, "oru", `NVL${gpusPerOru} Tray [${c},${r}] — ${gpusPerOru}× GPU — ${role.label}`);
     }
 
     // Manifolds on bus
