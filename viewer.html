@@ -389,6 +389,9 @@ body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', 
             <button class="sidebar-tab" data-tab="models">Tokenomics</button>
             <button class="sidebar-tab" data-tab="physics">Physics</button>
             <button class="sidebar-tab" data-tab="cluster">Cluster</button>
+            <button class="sidebar-tab" data-tab="industry">Industry</button>
+            <button class="sidebar-tab" data-tab="foundry">Foundry</button>
+            <button class="sidebar-tab" data-tab="market">Market</button>
         </div>
         <div class="tab-content active" id="tab-overview"></div>
         <div class="tab-content" id="tab-compute"></div>
@@ -396,6 +399,9 @@ body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', 
         <div class="tab-content" id="tab-models"></div>
         <div class="tab-content" id="tab-physics"></div>
         <div class="tab-content" id="tab-cluster"></div>
+        <div class="tab-content" id="tab-industry"></div>
+        <div class="tab-content" id="tab-foundry"></div>
+        <div class="tab-content" id="tab-market"></div>
     </div>
 </div>
 
@@ -3266,6 +3272,251 @@ const GROUND_POWER_COST_KWH = 0.08;
 const GROUND_PUE = 1.35;
 const GROUND_MFU = 0.40;
 
+// ══════════════════════════════════════════════════════════
+// ── INDUSTRY / SUPPLY CHAIN DATA ──
+// ══════════════════════════════════════════════════════════
+
+const SUPPLY_CHAIN = {
+    solarPanels: {
+        component: 'Solar Arrays',
+        icon: '☀',
+        suppliers: [
+            { name: 'Spectrolab (Boeing)', role: 'III-V MJ cells', share: 0.35, costDriverPct: 0.30 },
+            { name: 'SolAero (Rocket Lab)', role: 'IMM 4J cells', share: 0.25, costDriverPct: 0.25 },
+            { name: 'Redwire', role: 'ROSA deployable substrate', share: 0.20, costDriverPct: 0.20 },
+            { name: 'Oxford PV', role: 'Perovskite tandem (emerging)', share: 0.10, costDriverPct: 0.15 },
+            { name: 'Hexcel', role: 'CFRP face sheets & boom tubes', share: 0.10, costDriverPct: 0.10 },
+        ],
+    },
+    radiators: {
+        component: 'Thermal Radiators',
+        icon: '🧊',
+        suppliers: [
+            { name: 'Northrop Grumman', role: 'Deployable radiator panels', share: 0.30, costDriverPct: 0.35 },
+            { name: 'Boyd / Aavid', role: 'Heat pipe assemblies', share: 0.20, costDriverPct: 0.25 },
+            { name: 'Materion', role: 'Thermal coatings (AZ-93, Z-93P)', share: 0.20, costDriverPct: 0.15 },
+            { name: 'Moog', role: 'Hinge & deploy mechanisms', share: 0.15, costDriverPct: 0.15 },
+            { name: 'Alcoa / Novelis', role: 'Al 6061-T6 plate stock', share: 0.15, costDriverPct: 0.10 },
+        ],
+    },
+    chips: {
+        component: 'Compute Silicon',
+        icon: '⬡',
+        suppliers: [
+            { name: 'NVIDIA', role: 'GPU die design (B300 / Rubin)', share: 0.60, costDriverPct: 0.40 },
+            { name: 'TSMC', role: 'Foundry (N4P, N3E, N2)', share: 0.85, costDriverPct: 0.30 },
+            { name: 'SK Hynix', role: 'HBM3E stacks', share: 0.50, costDriverPct: 0.15 },
+            { name: 'Samsung', role: 'HBM3E (alternate source)', share: 0.30, costDriverPct: 0.10 },
+            { name: 'BAE / Microchip', role: 'Rad-hard controller ICs', share: 0.15, costDriverPct: 0.05 },
+        ],
+    },
+    launchVehicles: {
+        component: 'Launch Vehicles',
+        icon: '🚀',
+        suppliers: [
+            { name: 'SpaceX', role: 'Starship / Falcon 9', share: 0.65, costPerKg: 800 },
+            { name: 'Blue Origin', role: 'New Glenn', share: 0.10, costPerKg: 2500 },
+            { name: 'ULA', role: 'Vulcan Centaur', share: 0.12, costPerKg: 8000 },
+            { name: 'Rocket Lab', role: 'Neutron', share: 0.08, costPerKg: 5000 },
+            { name: 'Arianespace', role: 'Ariane 6', share: 0.05, costPerKg: 9000 },
+        ],
+    },
+    thermalSystems: {
+        component: 'Thermal Management',
+        icon: '🔥',
+        suppliers: [
+            { name: 'TE Connectivity', role: 'Thermal interface materials', share: 0.30, costDriverPct: 0.25 },
+            { name: 'Northrop Grumman', role: 'Loop heat pipes', share: 0.25, costDriverPct: 0.30 },
+            { name: 'Advanced Cooling Tech', role: 'Vapor chambers', share: 0.20, costDriverPct: 0.20 },
+            { name: 'Momentive', role: 'Pyrolytic graphite spreaders', share: 0.15, costDriverPct: 0.15 },
+            { name: 'Sunpower (Ametek)', role: 'Cryocoolers (photonic only)', share: 0.10, costDriverPct: 0.10 },
+        ],
+    },
+};
+
+// ── SPACE COMPUTE OPERATORS ──
+const SPACE_OPERATORS = [
+    {
+        name: 'SpaceX',
+        constellation: 'Starlink Compute',
+        launchVehicle: 'Starship',
+        estSats: 500,
+        gpuType: 'NVIDIA B300 (rad-screened)',
+        gpusPerSat: 16,
+        totalGpus: 8000,
+        totalTFLOPS: 8000 * 4500,  // 4500 TFLOPS/GPU derated
+        estCostPerGpuHr: 1.80,
+        preferredModels: ['Llama 3.3 70B', 'Llama 4 405B', 'Mistral Large'],
+        modelBias: 'Open-weight only. Meta partnership. Anti-proprietary API. Throughput over latency.',
+        biasType: 'open',
+        marketSharePct: 45,
+        launchCostPerKg: 800,
+        timeline: '2027-2029',
+        chipNode: '3nm',
+        verticalIntegration: 'Launch + constellation ops + silicon screening',
+    },
+    {
+        name: 'Amazon / Kuiper',
+        constellation: 'Kuiper Compute',
+        launchVehicle: 'New Glenn + Vulcan',
+        estSats: 300,
+        gpuType: 'Custom Trainium3 (space-grade)',
+        gpusPerSat: 24,
+        totalGpus: 7200,
+        totalTFLOPS: 7200 * 5000,
+        estCostPerGpuHr: 2.40,
+        preferredModels: ['Nova Premier', 'Claude via Bedrock', 'Titan models'],
+        modelBias: 'AWS ecosystem. Bedrock API lock-in. Custom silicon cost advantage.',
+        biasType: 'proprietary',
+        marketSharePct: 25,
+        launchCostPerKg: 2500,
+        timeline: '2029-2032',
+        chipNode: '2nm',
+        verticalIntegration: 'Chip design + cloud platform + constellation',
+    },
+    {
+        name: 'Blue Origin',
+        constellation: 'Orbital Reef Compute',
+        launchVehicle: 'New Glenn',
+        estSats: 120,
+        gpuType: 'NVIDIA Vera Rubin (rad-screened)',
+        gpusPerSat: 32,
+        totalGpus: 3840,
+        totalTFLOPS: 3840 * 6000,
+        estCostPerGpuHr: 3.10,
+        preferredModels: ['Claude Opus', 'Claude Sonnet', 'Gemini 2.5 Pro'],
+        modelBias: 'Anthropic partnership. Safety-aligned. Premium SLA tier. Enterprise focus.',
+        biasType: 'premium',
+        marketSharePct: 15,
+        launchCostPerKg: 2500,
+        timeline: '2028-2031',
+        chipNode: '2nm',
+        verticalIntegration: 'Launch + space station heritage',
+    },
+    {
+        name: 'Axiom / Loft Orbital',
+        constellation: 'Orbital Compute Network',
+        launchVehicle: 'Falcon 9 / Neutron',
+        estSats: 80,
+        gpuType: 'NVIDIA B300 (rad-screened)',
+        gpusPerSat: 8,
+        totalGpus: 640,
+        totalTFLOPS: 640 * 4500,
+        estCostPerGpuHr: 2.90,
+        preferredModels: ['GPT-4o', 'Gemini 2.5', 'Llama 70B', 'Mistral Large'],
+        modelBias: 'Model-agnostic marketplace. Sells raw GPU-hours. API router.',
+        biasType: 'neutral',
+        marketSharePct: 8,
+        launchCostPerKg: 3000,
+        timeline: '2028-2030',
+        chipNode: '3nm',
+        verticalIntegration: 'Payload integration + ops',
+    },
+    {
+        name: 'Startups / Indies',
+        constellation: 'Various (rideshare)',
+        launchVehicle: 'Transporter missions',
+        estSats: 50,
+        gpuType: 'Mixed (B300 / AMD MI400)',
+        gpusPerSat: 8,
+        totalGpus: 400,
+        totalTFLOPS: 400 * 4000,
+        estCostPerGpuHr: 3.50,
+        preferredModels: ['Llama', 'Mistral', 'DeepSeek', 'Qwen'],
+        modelBias: 'Cost-optimized. Open models only. No vendor lock-in. Edge inference.',
+        biasType: 'open',
+        marketSharePct: 7,
+        launchCostPerKg: 5000,
+        timeline: '2029+',
+        chipNode: '3nm',
+        verticalIntegration: 'Minimal — pure compute tenant',
+    },
+];
+
+// ── FOUNDRY DATA ──
+const FOUNDRY_DATA = {
+    nodes: [
+        {
+            name: 'N3E (3nm)',
+            vendor: 'TSMC',
+            densityMTr: 292,
+            defectDensityCm2: 0.09,
+            gpuDieAreaMm2: 814,    // B300 die
+            diesPerWafer: 68,
+            costPerWafer: 20000,
+            seuRateRel: 1.0,
+            radScreenYield: 0.55,
+            maturityYear: 2024,
+            spaceReadiness: 'Production',
+            perfPerWatt: 1.0,
+            chipLabel: 'B300 / H100',
+        },
+        {
+            name: 'N2 (2nm)',
+            vendor: 'TSMC',
+            densityMTr: 400,
+            defectDensityCm2: 0.16,
+            gpuDieAreaMm2: 700,    // Vera Rubin die (smaller at higher density)
+            diesPerWafer: 78,
+            costPerWafer: 30000,
+            seuRateRel: 1.35,      // GAA transistors more SEU-susceptible
+            radScreenYield: 0.45,
+            maturityYear: 2026,
+            spaceReadiness: 'Qualification',
+            perfPerWatt: 1.30,
+            chipLabel: 'Vera Rubin',
+        },
+        {
+            name: 'A14 (1.4nm)',
+            vendor: 'TSMC',
+            densityMTr: 550,
+            defectDensityCm2: 0.28,
+            gpuDieAreaMm2: 600,
+            diesPerWafer: 90,
+            costPerWafer: 45000,
+            seuRateRel: 1.8,
+            radScreenYield: 0.35,
+            maturityYear: 2028,
+            spaceReadiness: 'R&D',
+            perfPerWatt: 1.70,
+            chipLabel: 'Next-gen',
+        },
+    ],
+    // Wafer capacity projections
+    tsmcAdvancedMonthly: 120000,  // total advanced node wafer starts/month
+    spaceAllocPct: 0.003,         // initial space allocation (0.3%)
+    spaceAllocGrowth: 0.50,       // 50% annual growth in space wafer allocation
+    projYears: [2026, 2027, 2028, 2029, 2030, 2031, 2032],
+    // Space-grade chip demand (thousands/year)
+    demandK: {
+        years:  [2026, 2027, 2028, 2029, 2030, 2031, 2032],
+        gpus:   [2,    8,    25,   60,   120,  200,  350],
+        hbm:    [16,   64,   200,  480,  960,  1600, 2800],  // HBM stacks
+        ctrl:   [10,   30,   80,   150,  250,  400,  600],   // rad-hard controllers
+    },
+};
+
+// ── CLOUD PROVIDERS (ground) — for disruption analysis ──
+const CLOUD_PROVIDERS = [
+    { name: 'AWS',       gpuRev2025B: 18, inferShare: 0.32, avgMTok: 3.00, margin: 0.35, risk: 'Medium',    spaceHedge: 'Kuiper compute',   color: '#f0a030' },
+    { name: 'Azure',     gpuRev2025B: 15, inferShare: 0.28, avgMTok: 2.80, margin: 0.30, risk: 'Medium-High', spaceHedge: 'None',           color: '#4488cc' },
+    { name: 'GCP',       gpuRev2025B: 10, inferShare: 0.18, avgMTok: 2.50, margin: 0.28, risk: 'High',      spaceHedge: 'None',             color: '#44bb66' },
+    { name: 'CoreWeave', gpuRev2025B: 3,  inferShare: 0.08, avgMTok: 2.20, margin: 0.22, risk: 'Very High', spaceHedge: 'None (pure GPU)',   color: '#cc44aa' },
+    { name: 'Lambda',    gpuRev2025B: 0.8,inferShare: 0.03, avgMTok: 2.00, margin: 0.18, risk: 'Critical',  spaceHedge: 'None',             color: '#ee5555' },
+    { name: 'Together',  gpuRev2025B: 0.3,inferShare: 0.02, avgMTok: 1.80, margin: 0.15, risk: 'Critical',  spaceHedge: 'None',             color: '#8866cc' },
+];
+
+// ── LLM PROVIDER MARKET SHARE (model providers, not cloud) ──
+const LLM_PROVIDERS = [
+    { name: 'OpenAI',    share2025: 0.35, flagship: 'GPT-4o / o3',     spaceExposure: 'Indirect (Azure)',  riskFromBias: 'High' },
+    { name: 'Anthropic', share2025: 0.20, flagship: 'Claude Opus 4.6',  spaceExposure: 'Blue Origin deal',  riskFromBias: 'Low' },
+    { name: 'Google',    share2025: 0.18, flagship: 'Gemini 2.5 Pro',  spaceExposure: 'None direct',       riskFromBias: 'High' },
+    { name: 'Meta',      share2025: 0.15, flagship: 'Llama 4 405B',    spaceExposure: 'SpaceX (open-wt)',  riskFromBias: 'Negative (benefits)' },
+    { name: 'Mistral',   share2025: 0.05, flagship: 'Mistral Large 2', spaceExposure: 'SpaceX (open-wt)',  riskFromBias: 'Negative (benefits)' },
+    { name: 'DeepSeek',  share2025: 0.04, flagship: 'DeepSeek V3',     spaceExposure: 'Indies (open-wt)',  riskFromBias: 'Neutral' },
+    { name: 'Others',    share2025: 0.03, flagship: 'Various',         spaceExposure: 'Minimal',           riskFromBias: 'High' },
+];
+
 // ── PURE COMPUTATION: all tokenomics math ──
 function computeTokenomics(cfg, m) {
     const cs = cfg.clusterSize || 1;
@@ -3654,6 +3905,530 @@ This ${cfg.shortName} ${cs > 1 ? 'cluster' : 'station'}:
     </div>
     `;
 }
+
+// =====================================================================
+// INDUSTRY TAB
+// =====================================================================
+function renderIndustry(cfg, m) {
+    const t = computeTokenomics(cfg, m);
+    // Total fleet from all space operators
+    const totalSpaceGpus = SPACE_OPERATORS.reduce((s, o) => s + o.totalGpus, 0);
+    const totalSpaceTFLOPS = SPACE_OPERATORS.reduce((s, o) => s + o.totalTFLOPS, 0);
+    const totalSpaceSats = SPACE_OPERATORS.reduce((s, o) => s + o.estSats, 0);
+
+    // Model bias breakdown
+    const openGpus = SPACE_OPERATORS.filter(o => o.biasType === 'open').reduce((s, o) => s + o.totalGpus, 0);
+    const proprietaryGpus = SPACE_OPERATORS.filter(o => o.biasType === 'proprietary').reduce((s, o) => s + o.totalGpus, 0);
+    const premiumGpus = SPACE_OPERATORS.filter(o => o.biasType === 'premium').reduce((s, o) => s + o.totalGpus, 0);
+    const neutralGpus = SPACE_OPERATORS.filter(o => o.biasType === 'neutral').reduce((s, o) => s + o.totalGpus, 0);
+    const openPct = (openGpus / totalSpaceGpus * 100).toFixed(0);
+    const propPct = (proprietaryGpus / totalSpaceGpus * 100).toFixed(0);
+    const premPct = (premiumGpus / totalSpaceGpus * 100).toFixed(0);
+    const neutPct = (neutralGpus / totalSpaceGpus * 100).toFixed(0);
+
+    // Supply chain for current config
+    const solarCost = cfg.solarM2 * (cfg.solarCostPerW || 1.0) * 1361 * (cfg.solarCellEff || 0.20);
+    const launchCost = (cfg.dryMassKg || m.totalMassKg) * (cfg.launchCostPerKg || 1500);
+    const computeHwCost = (m.gpuCount || m.oruCount) * 45000;
+    const radCost = cfg.radM2 * 500;  // ~$500/m2 for space-grade radiator
+    const totalBOM = solarCost + launchCost + computeHwCost + radCost;
+
+    // Supply chain cards
+    let supplyChainHTML = '';
+    for (const [key, cat] of Object.entries(SUPPLY_CHAIN)) {
+        const rows = cat.suppliers.map(s => `
+            <div class="metric-row">
+                <span class="metric-label" style="flex:2">${s.name}</span>
+                <span class="metric-value" style="flex:2;font-size:10px;color:var(--muted)">${s.role}</span>
+                <span class="metric-value" style="flex:0.5;text-align:right">${(s.share * 100).toFixed(0)}%</span>
+            </div>
+            <div class="progress-bar" style="height:3px;margin-bottom:4px"><div class="progress-fill" style="width:${s.share * 100}%;background:var(--orbital)"></div></div>
+        `).join('');
+        supplyChainHTML += `
+        <div class="card">
+            <div class="card-header"><span class="card-title">${cat.icon} ${cat.component}</span></div>
+            ${rows}
+        </div>`;
+    }
+
+    // Operators table
+    const operatorRows = SPACE_OPERATORS.map(o => `
+        <tr>
+            <td style="font-weight:600;color:var(--text)">${o.name}</td>
+            <td>${o.constellation}</td>
+            <td style="text-align:right;color:var(--orbital)">${o.totalGpus.toLocaleString()}</td>
+            <td>${o.gpuType.replace('NVIDIA ','').replace(' (rad-screened)','')}</td>
+            <td style="text-align:right">${o.estSats}</td>
+            <td style="text-align:right;color:var(--accent)">${o.marketSharePct}%</td>
+            <td>${o.timeline}</td>
+        </tr>
+    `).join('');
+
+    // Model bias analysis
+    const biasCards = SPACE_OPERATORS.map(o => {
+        const biasColor = o.biasType === 'open' ? 'var(--orbital)' :
+                          o.biasType === 'proprietary' ? 'var(--warning)' :
+                          o.biasType === 'premium' ? 'var(--purple, #a855f7)' : 'var(--accent)';
+        return `
+        <div style="margin-bottom:10px;padding:8px;background:var(--surface2);border-radius:6px;border-left:3px solid ${biasColor}">
+            <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">${o.name} <span style="color:${biasColor};font-size:10px;font-weight:400">${o.biasType.toUpperCase()}</span></div>
+            <div style="font-size:10px;color:var(--muted);margin-bottom:4px">${o.modelBias}</div>
+            <div style="font-size:10px;color:var(--text)">Models: ${o.preferredModels.join(', ')}</div>
+            <div style="font-size:10px;color:var(--muted)">GPUs: ${o.totalGpus.toLocaleString()} · Chip: ${o.chipNode} · Launch: $${o.launchCostPerKg}/kg</div>
+        </div>`;
+    }).join('');
+
+    return `
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Space Compute Fleet (Projected)</span>
+            <span class="card-badge" style="background:rgba(26,138,106,0.2);color:var(--orbital)">2027-2032</span>
+        </div>
+        <div class="metric-row"><span class="metric-label">Total space GPUs</span><span class="metric-value orbital">${totalSpaceGpus.toLocaleString()}</span></div>
+        <div class="metric-row"><span class="metric-label">Total satellites</span><span class="metric-value accent">${totalSpaceSats.toLocaleString()}</span></div>
+        <div class="metric-row"><span class="metric-label">Aggregate TFLOPS</span><span class="metric-value">${(totalSpaceTFLOPS / 1e6).toFixed(1)}M</span></div>
+        <div class="metric-row"><span class="metric-label">Fleet CAPEX (est.)</span><span class="metric-value warning">$${(totalSpaceSats * 20).toFixed(0)}B+</span></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">Space Compute Operators</span></div>
+        <table class="model-table">
+            <thead><tr><th>Operator</th><th>Constellation</th><th>GPUs</th><th>Chip</th><th>Sats</th><th>Share</th><th>Timeline</th></tr></thead>
+            <tbody>${operatorRows}</tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">Model Deployment Bias</span></div>
+        <div class="calc-block"><span class="comment">// Who runs what — and what it means for LLM market share</span>
+<span class="comment">// Operators choose models based on partnerships, cost, and strategy</span>
+
+GPU allocation by model type:
+  Open-weight (Llama, Mistral, DeepSeek):  <span class="highlight">${openPct}%</span>  (${openGpus.toLocaleString()} GPUs)
+  Proprietary ecosystem (AWS/Bedrock):     <span class="highlight">${propPct}%</span>  (${proprietaryGpus.toLocaleString()} GPUs)
+  Premium / safety-aligned (Anthropic):    <span class="highlight">${premPct}%</span>  (${premiumGpus.toLocaleString()} GPUs)
+  Neutral / marketplace:                   <span class="highlight">${neutPct}%</span>  (${neutralGpus.toLocaleString()} GPUs)</div>
+        ${biasCards}
+    </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">BOM Breakdown — ${cfg.shortName}</span></div>
+        <div class="metric-row"><span class="metric-label">Compute hardware</span><span class="metric-value">$${(computeHwCost/1e6).toFixed(1)}M <span style="color:var(--muted)">(${(computeHwCost/totalBOM*100).toFixed(0)}%)</span></span></div>
+        <div class="progress-bar" style="height:3px;margin-bottom:6px"><div class="progress-fill" style="width:${computeHwCost/totalBOM*100}%;background:var(--orbital)"></div></div>
+        <div class="metric-row"><span class="metric-label">Launch</span><span class="metric-value">$${(launchCost/1e6).toFixed(1)}M <span style="color:var(--muted)">(${(launchCost/totalBOM*100).toFixed(0)}%)</span></span></div>
+        <div class="progress-bar" style="height:3px;margin-bottom:6px"><div class="progress-fill" style="width:${launchCost/totalBOM*100}%;background:var(--accent)"></div></div>
+        <div class="metric-row"><span class="metric-label">Solar array</span><span class="metric-value">$${(solarCost/1e6).toFixed(1)}M <span style="color:var(--muted)">(${(solarCost/totalBOM*100).toFixed(0)}%)</span></span></div>
+        <div class="progress-bar" style="height:3px;margin-bottom:6px"><div class="progress-fill" style="width:${solarCost/totalBOM*100}%;background:#f0c040"></div></div>
+        <div class="metric-row"><span class="metric-label">Radiator</span><span class="metric-value">$${(radCost/1e6).toFixed(1)}M <span style="color:var(--muted)">(${(radCost/totalBOM*100).toFixed(0)}%)</span></span></div>
+        <div class="progress-bar" style="height:3px;margin-bottom:6px"><div class="progress-fill" style="width:${radCost/totalBOM*100}%;background:#5cb8e6"></div></div>
+    </div>
+
+    ${supplyChainHTML}
+    `;
+}
+
+// =====================================================================
+// FOUNDRY TAB
+// =====================================================================
+function renderFoundry(cfg, m) {
+    const nodes = FOUNDRY_DATA.nodes;
+
+    // Die economics for each node
+    const dieEcon = nodes.map(n => {
+        const dieAreaCm2 = n.gpuDieAreaMm2 / 100;
+        const baseYield = Math.exp(-n.defectDensityCm2 * dieAreaCm2); // Murphy's model (simplified)
+        const spaceYield = baseYield * n.radScreenYield;
+        const goodDiesPerWafer = n.diesPerWafer * spaceYield;
+        const costPerGoodDie = n.costPerWafer / goodDiesPerWafer;
+        const costPerTFLOPS = costPerGoodDie / (n.perfPerWatt * 4500); // rough TFLOPS/die baseline
+        return { ...n, baseYield, spaceYield, goodDiesPerWafer, costPerGoodDie, costPerTFLOPS };
+    });
+
+    // Wafer allocation projections
+    const projections = FOUNDRY_DATA.projYears.map((year, i) => {
+        const allocPct = FOUNDRY_DATA.spaceAllocPct * Math.pow(1 + FOUNDRY_DATA.spaceAllocGrowth, i);
+        const monthlyWafers = Math.floor(FOUNDRY_DATA.tsmcAdvancedMonthly * allocPct);
+        const annualWafers = monthlyWafers * 12;
+        // Use best available node for that year
+        const bestNode = dieEcon.filter(n => n.maturityYear <= year).sort((a, b) => b.perfPerWatt - a.perfPerWatt)[0] || dieEcon[0];
+        const annualGoodDies = Math.floor(annualWafers * bestNode.goodDiesPerWafer);
+        const demandIdx = FOUNDRY_DATA.demandK.years.indexOf(year);
+        const demandK = demandIdx >= 0 ? FOUNDRY_DATA.demandK.gpus[demandIdx] : 0;
+        const supplyK = annualGoodDies / 1000;
+        const gap = supplyK - demandK;
+        return { year, allocPct, monthlyWafers, annualWafers, bestNode: bestNode.name, annualGoodDies, supplyK, demandK, gap };
+    });
+
+    // Node comparison table
+    const nodeRows = dieEcon.map(n => {
+        const readinessColor = n.spaceReadiness === 'Production' ? 'var(--orbital)' :
+                               n.spaceReadiness === 'Qualification' ? 'var(--warning)' : 'var(--muted)';
+        return `<tr>
+            <td style="font-weight:600">${n.name}</td>
+            <td>${n.chipLabel}</td>
+            <td style="text-align:right">${n.densityMTr}</td>
+            <td style="text-align:right">${n.gpuDieAreaMm2}</td>
+            <td style="text-align:right">$${(n.costPerWafer/1000).toFixed(0)}k</td>
+            <td style="text-align:right">${(n.baseYield*100).toFixed(0)}%</td>
+            <td style="text-align:right;color:var(--warning)">${(n.radScreenYield*100).toFixed(0)}%</td>
+            <td style="text-align:right">${(n.spaceYield*100).toFixed(0)}%</td>
+            <td style="text-align:right;color:var(--orbital)">$${(n.costPerGoodDie/1000).toFixed(1)}k</td>
+            <td style="text-align:right">${n.seuRateRel.toFixed(2)}×</td>
+            <td style="color:${readinessColor}">${n.spaceReadiness}</td>
+        </tr>`;
+    }).join('');
+
+    // Demand vs supply projection
+    const projRows = projections.map(p => {
+        const gapColor = p.gap >= 0 ? 'var(--orbital)' : 'var(--error, #e05555)';
+        const gapLabel = p.gap >= 0 ? `+${p.gap.toFixed(0)}k surplus` : `${p.gap.toFixed(0)}k deficit`;
+        return `<tr>
+            <td style="font-weight:600">${p.year}</td>
+            <td>${p.bestNode}</td>
+            <td style="text-align:right">${(p.allocPct * 100).toFixed(2)}%</td>
+            <td style="text-align:right">${p.monthlyWafers.toLocaleString()}</td>
+            <td style="text-align:right;color:var(--orbital)">${p.supplyK.toFixed(0)}k</td>
+            <td style="text-align:right;color:var(--accent)">${p.demandK}k</td>
+            <td style="color:${gapColor}">${gapLabel}</td>
+        </tr>`;
+    }).join('');
+
+    // Demand curve ASCII bars
+    const maxDemand = Math.max(...FOUNDRY_DATA.demandK.gpus);
+    const demandBars = FOUNDRY_DATA.demandK.years.map((y, i) => {
+        const g = FOUNDRY_DATA.demandK.gpus[i];
+        const h = FOUNDRY_DATA.demandK.hbm[i];
+        const barLen = Math.round(g / maxDemand * 30);
+        const bar = '█'.repeat(barLen) + '░'.repeat(30 - barLen);
+        return `${y}  ${bar}  ${g}k GPUs  ${h}k HBM stacks`;
+    }).join('\n');
+
+    return `
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Process Node Comparison — Space-Grade</span>
+            <span class="card-badge" style="background:rgba(58,122,184,0.15);color:var(--accent)">TSMC</span>
+        </div>
+        <table class="model-table">
+            <thead><tr>
+                <th>Node</th><th>Chip</th><th>MTr/mm²</th><th>Die mm²</th><th>Wafer</th><th>Base Yld</th><th>Rad Screen</th><th>Space Yld</th><th>$/Die</th><th>SEU</th><th>Ready</th>
+            </tr></thead>
+            <tbody>${nodeRows}</tbody>
+        </table>
+        <div style="font-size:10px;color:var(--muted);margin-top:6px">
+            Space yield = base yield × rad-screening pass rate · SEU = single-event upset rate (relative) · GAA nodes have higher SEU susceptibility
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">Die Economics</span></div>
+        <div class="calc-block"><span class="comment">// Cost per space-grade good die</span>
+<span class="comment">// cost = wafer_price / (dies_per_wafer × base_yield × rad_screen_pass)</span>
+
+${dieEcon.map(n => `<b>${n.name}</b> (${n.chipLabel}):
+  Wafer: $${(n.costPerWafer/1000).toFixed(0)}k / (${n.diesPerWafer} dies × ${(n.baseYield*100).toFixed(0)}% yield × ${(n.radScreenYield*100).toFixed(0)}% rad-screen)
+  = $${(n.costPerWafer/1000).toFixed(0)}k / ${n.goodDiesPerWafer.toFixed(1)} good dies = <span class="highlight">$${(n.costPerGoodDie/1000).toFixed(1)}k per good die</span>
+  Perf/W advantage: ${n.perfPerWatt.toFixed(2)}× vs 3nm baseline
+`).join('\n')}
+<span class="comment">// 2nm vs 3nm tradeoff:</span>
+<span class="comment">// +30% perf/W but ${((dieEcon[1].costPerGoodDie / dieEcon[0].costPerGoodDie - 1) * 100).toFixed(0)}% more expensive per die</span>
+<span class="comment">// +35% higher SEU rate (GAA vs FinFET)</span>
+<span class="comment">// For space: 3nm may be better value until 2nm rad-hardening matures</span></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">Wafer Allocation & Supply vs Demand</span></div>
+        <table class="model-table">
+            <thead><tr>
+                <th>Year</th><th>Node</th><th>Alloc %</th><th>Wafers/mo</th><th>Supply</th><th>Demand</th><th>Gap</th>
+            </tr></thead>
+            <tbody>${projRows}</tbody>
+        </table>
+        <div style="font-size:10px;color:var(--muted);margin-top:6px">
+            Assumes TSMC advanced node capacity ~120k WPM · Space allocation starts at 0.3% and grows 50%/yr · Demand from all space compute operators
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">Space-Grade Chip Demand Curve</span></div>
+        <div class="calc-block" style="font-size:10px"><span class="comment">// Annual space-grade GPU + HBM demand (thousands)</span>
+${demandBars}
+</div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">HBM3E Space Supply Chain</span></div>
+        <div class="metric-row"><span class="metric-label">SK Hynix share</span><span class="metric-value">50% (primary)</span></div>
+        <div class="metric-row"><span class="metric-label">Samsung share</span><span class="metric-value">30% (alternate)</span></div>
+        <div class="metric-row"><span class="metric-label">Micron share</span><span class="metric-value">20% (emerging)</span></div>
+        <div class="metric-row"><span class="metric-label">Stacks per GPU</span><span class="metric-value accent">8 × HBM3E</span></div>
+        <div class="metric-row"><span class="metric-label">Space screening</span><span class="metric-value warning">+40% cost vs commercial</span></div>
+        <div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5">
+            HBM rad-hardening is less challenging than logic — memory cells are larger and more tolerant.
+            Main risk is single-event latchup (SEL) in the TSV interconnects, mitigated by current-limiting and power cycling.
+            Space-grade HBM3E passes 100 krad TID with &lt;5% performance degradation.
+        </div>
+    </div>
+    `;
+}
+
+// =====================================================================
+// MARKET TAB
+// =====================================================================
+
+// Designer state (persisted across re-renders)
+let designerState = { powerKw: 100, gpuCount: 48, altitudeKm: 625, launchCostKg: 800 };
+
+function computeDesignerLCOC(ds) {
+    const satLife = 5;
+    const utilization = 0.85;
+    const totalGpuHours = ds.gpuCount * satLife * 8760 * utilization;
+    const gpuHwCost = ds.gpuCount * 45000;
+    const solarM2 = ds.powerKw / (1361 * 0.20) * 1000;  // 20% eff silicon
+    const radM2 = ds.powerKw * 1000 / 420;  // ~420 W/m2 at 340K net
+    const massSolar = solarM2 * 1.5;
+    const massRad = radM2 * 4;
+    const massCompute = ds.gpuCount * 2.5;
+    const massStructure = 500;
+    const totalMass = massSolar + massRad + massCompute + massStructure;
+    const launchCost = totalMass * ds.launchCostKg;
+    const totalCapex = gpuHwCost + launchCost + 5e6; // 5M integration
+    const costPerGpuHr = totalCapex / totalGpuHours;
+    return { costPerGpuHr, totalCapex, totalMass, solarM2, radM2, launchCost, gpuHwCost, totalGpuHours };
+}
+
+function renderMarket(cfg, m) {
+    const t = computeTokenomics(cfg, m);
+    const orbitalMTok = t.costPerMTok;
+    const orbitalGpuHr = t.costPerGpuHour;
+
+    // Price disruption for each cloud provider
+    const disruption = CLOUD_PROVIDERS.map(p => {
+        const priceDelta = p.avgMTok - orbitalMTok;
+        const disruptPct = Math.max(0, priceDelta / p.avgMTok * 100);
+        // Revenue at risk with adoption curve (logistic)
+        const riskByYear = [2027, 2028, 2029, 2030, 2031, 2032].map(yr => {
+            const adoption = 1 / (1 + Math.exp(-(yr - 2029) * 1.2));  // S-curve centered 2029
+            const spaceShareOfMarket = adoption * 0.15; // max 15% of total compute market by 2032
+            const revAtRisk = p.gpuRev2025B * 1e9 * spaceShareOfMarket * (disruptPct / 100);
+            return { yr, adoption, spaceShareOfMarket, revAtRisk };
+        });
+        return { ...p, priceDelta, disruptPct, riskByYear };
+    });
+
+    // Cloud risk table
+    const riskRows = disruption.map(d => {
+        const riskColor = d.risk === 'Critical' ? 'var(--error, #e05555)' :
+                          d.risk === 'Very High' ? '#e07744' :
+                          d.risk === 'High' ? 'var(--warning)' :
+                          d.risk === 'Medium-High' ? '#ccaa44' : 'var(--orbital)';
+        const rev2030 = d.riskByYear.find(r => r.yr === 2030);
+        return `<tr>
+            <td style="font-weight:600;color:${d.color}">${d.name}</td>
+            <td style="text-align:right">$${d.gpuRev2025B.toFixed(1)}B</td>
+            <td style="text-align:right">$${d.avgMTok.toFixed(2)}</td>
+            <td style="text-align:right;color:var(--orbital)">$${orbitalMTok < 100 ? orbitalMTok.toFixed(2) : '∞'}</td>
+            <td style="text-align:right;color:${d.disruptPct > 30 ? 'var(--orbital)' : 'var(--text)'}">${d.disruptPct.toFixed(0)}%</td>
+            <td style="text-align:right;color:var(--warning)">${rev2030 ? '$'+(rev2030.revAtRisk/1e9).toFixed(2)+'B' : '-'}</td>
+            <td>${d.spaceHedge}</td>
+            <td style="color:${riskColor};font-weight:600">${d.risk}</td>
+        </tr>`;
+    }).join('');
+
+    // Revenue disruption timeline
+    const years = [2027, 2028, 2029, 2030, 2031, 2032];
+    const totalRevAtRiskByYear = years.map(yr => {
+        const total = disruption.reduce((s, d) => {
+            const ry = d.riskByYear.find(r => r.yr === yr);
+            return s + (ry ? ry.revAtRisk : 0);
+        }, 0);
+        return { yr, total };
+    });
+
+    // LLM provider impact
+    const totalSpaceGpus = SPACE_OPERATORS.reduce((s, o) => s + o.totalGpus, 0);
+    const llmImpact = LLM_PROVIDERS.map(p => {
+        // Calculate effective space GPU exposure
+        let spaceFriendlyGpus = 0;
+        SPACE_OPERATORS.forEach(o => {
+            if (o.preferredModels.some(m => m.toLowerCase().includes(p.name.toLowerCase()) ||
+                (p.name === 'Meta' && m.toLowerCase().includes('llama')) ||
+                (p.name === 'Mistral' && m.toLowerCase().includes('mistral')) ||
+                (p.name === 'DeepSeek' && m.toLowerCase().includes('deepseek')) ||
+                (p.name === 'Anthropic' && m.toLowerCase().includes('claude')) ||
+                (p.name === 'OpenAI' && m.toLowerCase().includes('gpt')) ||
+                (p.name === 'Google' && m.toLowerCase().includes('gemini')))) {
+                spaceFriendlyGpus += o.totalGpus;
+            }
+        });
+        const spaceExposurePct = (spaceFriendlyGpus / totalSpaceGpus * 100).toFixed(0);
+        return { ...p, spaceFriendlyGpus, spaceExposurePct };
+    });
+
+    const llmRows = llmImpact.map(p => {
+        const riskColor = p.riskFromBias.includes('Negative') ? 'var(--orbital)' :
+                          p.riskFromBias === 'Low' ? '#44bb66' :
+                          p.riskFromBias === 'Neutral' ? 'var(--accent)' : 'var(--warning)';
+        return `<tr>
+            <td style="font-weight:600">${p.name}</td>
+            <td>${p.flagship}</td>
+            <td style="text-align:right">${(p.share2025*100).toFixed(0)}%</td>
+            <td style="text-align:right;color:var(--orbital)">${p.spaceExposurePct}%</td>
+            <td style="font-size:10px">${p.spaceExposure}</td>
+            <td style="color:${riskColor};font-weight:600">${p.riskFromBias}</td>
+        </tr>`;
+    }).join('');
+
+    // Designer
+    const ds = designerState;
+    const dCalc = computeDesignerLCOC(ds);
+
+    return `
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Space vs Ground — Price Disruption</span>
+            <span class="card-badge" style="background:rgba(26,138,106,0.2);color:var(--orbital)">${cfg.shortName}</span>
+        </div>
+        <div class="metric-row"><span class="metric-label">Orbital $/GPU-hr</span><span class="metric-value orbital">$${orbitalGpuHr.toFixed(2)}</span></div>
+        <div class="metric-row"><span class="metric-label">Orbital $/M tokens</span><span class="metric-value orbital">$${orbitalMTok < 100 ? orbitalMTok.toFixed(2) : 'N/A'}</span></div>
+        <div style="height:8px"></div>
+        <div class="calc-block"><span class="comment">// Price floor effect: as orbital supply scales, ground prices must fall</span>
+<span class="comment">// Equilibrium: ground price → orbital LCOC + 30% margin premium</span>
+
+Current ground average:  $${(CLOUD_PROVIDERS.reduce((s,p)=>s+p.avgMTok*p.inferShare,0)/CLOUD_PROVIDERS.reduce((s,p)=>s+p.inferShare,0)).toFixed(2)} / M tokens
+Orbital cost (${cfg.shortName}):       $${orbitalMTok < 100 ? orbitalMTok.toFixed(2) : '∞'} / M tokens
+Implied price floor:     $${orbitalMTok < 100 ? (orbitalMTok * 1.3).toFixed(2) : '∞'} / M tokens (orbital + 30% margin)
+${orbitalMTok < 100 ? `Price compression:       ${((1 - orbitalMTok * 1.3 / 2.60) * 100).toFixed(0)}% reduction vs current ground avg` : 'Price compression:       N/A (orbital not yet competitive)'}</div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">Cloud Provider Risk Matrix</span></div>
+        <table class="model-table">
+            <thead><tr><th>Provider</th><th>GPU Rev</th><th>$/MTok</th><th>Orbital</th><th>Undercut</th><th>At Risk (2030)</th><th>Space Hedge</th><th>Risk</th></tr></thead>
+            <tbody>${riskRows}</tbody>
+        </table>
+        <div style="font-size:10px;color:var(--muted);margin-top:6px">
+            "At Risk" = revenue exposed to space compute price disruption in 2030 (adoption curve × price undercut × current revenue)
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">Revenue Disruption Timeline</span></div>
+        <div class="calc-block"><span class="comment">// Total cloud GPU revenue at risk from orbital compute</span>
+<span class="comment">// Adoption: logistic S-curve centered 2029, max 15% market penetration by 2032</span>
+
+${totalRevAtRiskByYear.map(r => {
+    const barLen = Math.min(30, Math.round(r.total / 1e9 * 5));
+    const bar = '█'.repeat(barLen) + '░'.repeat(30 - barLen);
+    return `${r.yr}  ${bar}  $${(r.total/1e9).toFixed(1)}B at risk`;
+}).join('\n')}</div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">LLM Provider Market Share Impact</span></div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:8px;line-height:1.5">
+            Space compute operators choose which models to deploy. This creates <b>deployment bias</b> —
+            open-weight models (Llama, Mistral) get disproportionate space GPU allocation because operators
+            avoid API fees. This shifts inference market share toward open-weight providers.
+        </div>
+        <table class="model-table">
+            <thead><tr><th>Provider</th><th>Flagship</th><th>Share</th><th>Space GPUs</th><th>Space Channel</th><th>Bias Risk</th></tr></thead>
+            <tbody>${llmRows}</tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><span class="card-title">Implications for Model Providers</span></div>
+        <div class="calc-block"><span class="comment">// What space compute deployment bias means</span>
+
+<b>Winners:</b>
+  Meta (Llama):    SpaceX deploys 8,000 GPUs running Llama → massive free distribution
+  Mistral:         Open-weight = zero marginal cost on space hardware
+  DeepSeek:        Indie operators prefer cost-optimized open models
+
+<b>At Risk:</b>
+  OpenAI:          GPT locked behind API → operators won't pay per-token on owned hardware
+  Google:          Gemini API pricing doesn't work for space operators owning GPUs
+  Anthropic:       Partially hedged via Blue Origin deal, but small GPU footprint
+
+<b>Disruption mechanism:</b>
+  1. Space operators buy GPUs → prefer open-weight models (no API fee)
+  2. Open models get ${((SPACE_OPERATORS.filter(o=>o.biasType==='open').reduce((s,o)=>s+o.totalGpus,0)/totalSpaceGpus*100)).toFixed(0)}% of space compute → more usage → more fine-tuning
+  3. Ground price floor drops as space supply scales
+  4. Proprietary API providers face margin compression + share loss
+  5. Equilibrium: open-weight dominates inference, proprietary retains training + R&D edge</div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Space Datacenter Designer</span>
+            <span class="card-badge" style="background:rgba(58,122,184,0.15);color:var(--accent)">INTERACTIVE</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+            <div>
+                <label style="font-size:10px;color:var(--muted)">Bus Power (kW)</label>
+                <input type="range" id="designer-power" min="10" max="500" value="${ds.powerKw}" style="width:100%" oninput="window._updateDesigner()">
+                <div style="font-size:11px;color:var(--text);text-align:center" id="designer-power-val">${ds.powerKw} kW</div>
+            </div>
+            <div>
+                <label style="font-size:10px;color:var(--muted)">GPU Count</label>
+                <input type="range" id="designer-gpus" min="4" max="256" step="4" value="${ds.gpuCount}" style="width:100%" oninput="window._updateDesigner()">
+                <div style="font-size:11px;color:var(--text);text-align:center" id="designer-gpus-val">${ds.gpuCount}</div>
+            </div>
+            <div>
+                <label style="font-size:10px;color:var(--muted)">Orbit Altitude (km)</label>
+                <input type="range" id="designer-alt" min="400" max="1200" step="25" value="${ds.altitudeKm}" style="width:100%" oninput="window._updateDesigner()">
+                <div style="font-size:11px;color:var(--text);text-align:center" id="designer-alt-val">${ds.altitudeKm} km</div>
+            </div>
+            <div>
+                <label style="font-size:10px;color:var(--muted)">Launch Cost ($/kg)</label>
+                <input type="range" id="designer-launch" min="200" max="10000" step="100" value="${ds.launchCostKg}" style="width:100%" oninput="window._updateDesigner()">
+                <div style="font-size:11px;color:var(--text);text-align:center" id="designer-launch-val">$${ds.launchCostKg}/kg</div>
+            </div>
+        </div>
+        <div id="designer-results">
+            <div class="metric-row"><span class="metric-label">LCOC ($/GPU-hr)</span><span class="metric-value orbital">$${dCalc.costPerGpuHr.toFixed(2)}</span></div>
+            <div class="metric-row"><span class="metric-label">Total CAPEX</span><span class="metric-value warning">$${(dCalc.totalCapex/1e6).toFixed(1)}M</span></div>
+            <div class="metric-row"><span class="metric-label">Dry mass</span><span class="metric-value">${(dCalc.totalMass/1000).toFixed(1)} t</span></div>
+            <div class="metric-row"><span class="metric-label">Solar array</span><span class="metric-value">${dCalc.solarM2.toFixed(0)} m²</span></div>
+            <div class="metric-row"><span class="metric-label">Radiator</span><span class="metric-value">${dCalc.radM2.toFixed(0)} m²</span></div>
+            <div class="metric-row"><span class="metric-label">GPU hardware</span><span class="metric-value">$${(dCalc.gpuHwCost/1e6).toFixed(1)}M</span></div>
+            <div class="metric-row"><span class="metric-label">Launch cost</span><span class="metric-value">$${(dCalc.launchCost/1e6).toFixed(1)}M</span></div>
+            <div class="metric-row"><span class="metric-label">Lifetime GPU-hours</span><span class="metric-value">${(dCalc.totalGpuHours/1e6).toFixed(1)}M</span></div>
+        </div>
+    </div>
+    `;
+}
+
+// Designer update handler (called from inline oninput)
+window._updateDesigner = function() {
+    const p = document.getElementById('designer-power');
+    const g = document.getElementById('designer-gpus');
+    const a = document.getElementById('designer-alt');
+    const l = document.getElementById('designer-launch');
+    if (!p || !g || !a || !l) return;
+    designerState = {
+        powerKw: parseInt(p.value),
+        gpuCount: parseInt(g.value),
+        altitudeKm: parseInt(a.value),
+        launchCostKg: parseInt(l.value),
+    };
+    document.getElementById('designer-power-val').textContent = designerState.powerKw + ' kW';
+    document.getElementById('designer-gpus-val').textContent = designerState.gpuCount;
+    document.getElementById('designer-alt-val').textContent = designerState.altitudeKm + ' km';
+    document.getElementById('designer-launch-val').textContent = '$' + designerState.launchCostKg + '/kg';
+    const dCalc = computeDesignerLCOC(designerState);
+    document.getElementById('designer-results').innerHTML = `
+        <div class="metric-row"><span class="metric-label">LCOC ($/GPU-hr)</span><span class="metric-value orbital">$${dCalc.costPerGpuHr.toFixed(2)}</span></div>
+        <div class="metric-row"><span class="metric-label">Total CAPEX</span><span class="metric-value warning">$${(dCalc.totalCapex/1e6).toFixed(1)}M</span></div>
+        <div class="metric-row"><span class="metric-label">Dry mass</span><span class="metric-value">${(dCalc.totalMass/1000).toFixed(1)} t</span></div>
+        <div class="metric-row"><span class="metric-label">Solar array</span><span class="metric-value">${dCalc.solarM2.toFixed(0)} m²</span></div>
+        <div class="metric-row"><span class="metric-label">Radiator</span><span class="metric-value">${dCalc.radM2.toFixed(0)} m²</span></div>
+        <div class="metric-row"><span class="metric-label">GPU hardware</span><span class="metric-value">$${(dCalc.gpuHwCost/1e6).toFixed(1)}M</span></div>
+        <div class="metric-row"><span class="metric-label">Launch cost</span><span class="metric-value">$${(dCalc.launchCost/1e6).toFixed(1)}M</span></div>
+        <div class="metric-row"><span class="metric-label">Lifetime GPU-hours</span><span class="metric-value">${(dCalc.totalGpuHours/1e6).toFixed(1)}M</span></div>
+    `;
+};
 
 // =====================================================================
 // KPI BAR
@@ -5308,6 +6083,9 @@ function switchConfig(key) {
     document.getElementById('tab-models').innerHTML = renderModels(cfg, m) + renderTokenomics(cfg, m);
     document.getElementById('tab-physics').innerHTML = renderPhysics(cfg, m);
     document.getElementById('tab-cluster').innerHTML = renderCluster(cfg, m);
+    document.getElementById('tab-industry').innerHTML = renderIndustry(cfg, m);
+    document.getElementById('tab-foundry').innerHTML = renderFoundry(cfg, m);
+    document.getElementById('tab-market').innerHTML = renderMarket(cfg, m);
     // Reset camera
     // Auto-frame camera to fit model bounding box
     const bbox = new THREE.Box3().setFromObject(stationGroup);
